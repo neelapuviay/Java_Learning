@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>08 · JVM Memory Areas &amp; Data Layout — Inside the JVM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/jvm-theme.css">
+  <style>
+    /* ================================================================
+       STAGE 08 SPECIALIZED STYLES: 5 JVM RUNTIME MEMORY AREAS
+    ================================================================ */
+    
+    /* Memory Area Box Hierarchy */
+    .mem-area-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 14px;
+      margin-bottom: 14px;
+      transition: all 0.25s ease;
+      position: relative;
+    }
+    .mem-area-card:hover {
+      border-color: var(--border-highlight);
+    }
+    .mem-area-card.active-area {
+      border-color: var(--verdant);
+      box-shadow: 0 0 16px -4px rgba(52, 211, 153, 0.25);
+    }
+    .mem-area-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .mem-area-title {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mem-tag {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .tag-shared {
+      background: rgba(167, 139, 250, 0.15);
+      color: var(--violet);
+      border: 1px solid rgba(167, 139, 250, 0.3);
+    }
+    .tag-private {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--steel);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .tag-native {
+      background: rgba(251, 146, 60, 0.15);
+      color: var(--ember);
+      border: 1px solid rgba(251, 146, 60, 0.3);
+    }
+    .tag-managed {
+      background: rgba(52, 211, 153, 0.15);
+      color: var(--verdant);
+      border: 1px solid rgba(52, 211, 153, 0.3);
+    }
+
+    /* Sub-compartments */
+    .sub-compartment {
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
+      background: var(--panel-inset);
+      padding: 9px 11px;
+      margin-bottom: 8px;
+      transition: all 0.2s ease;
+    }
+    .sub-compartment:last-child {
+      margin-bottom: 0;
+    }
+    .sub-compartment.lit {
+      border-color: var(--verdant);
+      background: rgba(52, 211, 153, 0.06);
+    }
+    .sub-title {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--text-faint);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sub-title .sub-flag {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      font-weight: normal;
+    }
+
+    /* Chips inside memory slots */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--panel-raised);
+      color: var(--text);
+      animation: chipPop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      margin: 2px;
+      word-break: break-all;
+    }
+    @keyframes chipPop {
+      0% { transform: scale(0.85); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .chip.meta {
+      background: rgba(167, 139, 250, 0.15);
+      border-color: var(--violet);
+      color: var(--violet);
+    }
+    .chip.obj {
+      background: rgba(52, 211, 153, 0.14);
+      border-color: var(--verdant);
+      color: var(--verdant);
+    }
+    .chip.ref {
+      background: rgba(56, 189, 248, 0.14);
+      border-color: var(--steel);
+      color: var(--steel);
+    }
+    .chip.str {
+      background: rgba(251, 191, 36, 0.15);
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+    .chip.prim {
+      background: rgba(34, 211, 238, 0.14);
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+    .chip.native {
+      background: rgba(251, 146, 60, 0.15);
+      border-color: var(--ember);
+      color: var(--ember);
+    }
+    .chip.dead {
+      border-color: var(--danger) !important;
+      color: var(--danger) !important;
+      background: var(--danger-bg) !important;
+      text-decoration: line-through;
+      opacity: 0.65;
+    }
+
+    /* Stack Frame Anatomy */
+    .frame-box {
+      border: 1px solid var(--steel);
+      border-radius: 6px;
+      background: var(--steel-bg);
+      padding: 8px 10px;
+      margin-top: 6px;
+    }
+    .frame-box-header {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--steel);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .slot-row {
+      display: grid;
+      grid-template-columns: 65px 1fr;
+      gap: 6px;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+    }
+    .slot-row:last-child {
+      border-bottom: none;
+    }
+    .slot-label {
+      color: var(--text-faint);
+      font-weight: 600;
+    }
+
+    /* Operand Stack visualizer */
+    .op-stack-shelf {
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 3px;
+      min-height: 44px;
+      background: var(--panel-inset);
+      border: 1px dashed var(--border);
+      border-radius: 4px;
+      padding: 4px 6px;
+      justify-content: flex-start;
+    }
+    .op-item {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      background: var(--panel-raised);
+      border: 1px solid var(--steel);
+      color: var(--steel);
+      border-radius: 3px;
+      text-align: center;
+      animation: chipPop 0.2s ease;
+    }
+
+    /* Step controller controls */
+    .ctrl-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .scrubber-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      margin-top: 10px;
+    }
+    .step-slider {
+      flex: 1;
+      accent-color: var(--verdant);
+      cursor: pointer;
+    }
+
+    /* Code Walk Line styling */
+    .cw-line {
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.6;
+      transition: all 0.15s ease;
+      display: flex;
+      gap: 10px;
+    }
+    .cw-line:hover {
+      background: var(--panel-raised);
+      color: #ffffff;
+    }
+    .cw-line.on {
+      background: rgba(56, 189, 248, 0.2);
+      border-left: 3px solid var(--steel);
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .cw-line.done {
+      color: var(--text-faint);
+    }
+    .cw-line-num {
+      color: var(--text-faint);
+      user-select: none;
+      min-width: 20px;
+      text-align: right;
+      font-size: 0.75rem;
+    }
+
+    /* Object Layout visualizer */
+    .obj-layout-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      margin-top: 8px;
+    }
+    .obj-layout-table th {
+      background: var(--panel-raised);
+      color: var(--text-faint);
+      padding: 5px 8px;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+    .obj-layout-table td {
+      padding: 5px 8px;
+      border: 1px solid var(--border-soft);
+      color: var(--text);
+    }
+    .obj-layout-table tr.header-row td {
+      background: rgba(167, 139, 250, 0.08);
+      color: var(--violet);
+    }
+    .obj-layout-table tr.field-row td {
+      background: rgba(52, 211, 153, 0.08);
+      color: var(--verdant);
+    }
+    .obj-layout-table tr.pad-row td {
+      background: rgba(148, 163, 184, 0.08);
+      color: var(--text-faint);
+    }
+
+    /* Deep dive tabs */
+    .mem-tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    .mem-tab-btn {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mem-tab-btn:hover {
+      background: var(--panel-raised);
+      color: var(--text);
+    }
+    .mem-tab-btn.active {
+      background: var(--panel-raised);
+      border-color: var(--verdant);
+      color: var(--verdant);
+    }
+    .mem-tab-content {
+      display: none;
+      animation: fadeIn 0.2s ease;
+    }
+    .mem-tab-content.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="stage-container">
+  <header class="stage-head">
+    <span class="stage-num-badge">STAGE 08</span>
+    <h1>JVM Memory Areas &amp; Data Layout — Where Every Byte Lives</h1>
+    <span class="stage-tag">heap, stack, metaspace, pc &amp; native</span>
+  </header>
+
+  <p class="stage-desc">
+    Every variable, object, method frame, and constant belongs to one of the <b>5 fundamental JVM Runtime Data Areas</b>. Use the interactive step debugger below to walk through Java execution instruction-by-instruction and inspect exactly where each byte is placed.
+  </p>
+
+  <div class="mental">
+    <span class="lbl">Mental model — hold this picture</span>
+    <p>Think of an office building. Each worker has a <b>private desk</b> — small, private, tidied instantly when they leave. That is the <b>Thread Stack</b> (with local variables and operand stack) and the <b>PC Register</b> (the page number they are reading). No other worker can reach into it.</p>
+    <p>In the middle of the building is a <b>shared warehouse</b>. Anything too big for a desk goes there. That is the <b>Heap</b> (Eden, Survivor, Old Gen, and the String Constant Pool), cleaned periodically by the Garbage Collector.</p>
+    <p>In the basement are the <b>architect blueprints</b> (<b>Metaspace</b>: class metadata, method bytecode, field layouts, and the runtime constant pool). Each blueprint has a managed-heap counterpart: a <code>java.lang.Class</code> mirror that carries HotSpot's static field values. In the back room is the <b>machine workshop</b> (<b>CodeCache</b>: JIT-compiled native machine code) and the <b>loading dock outside the building</b> (<b>Native Memory &amp; Direct Buffers</b>).</p>
+    <p>The golden production rule: <b><code>-Xmx</code> sizes the warehouse only.</b> Metaspace, CodeCache, Thread Stacks, and Direct Buffers are all outside it — which is why containers get OOM-killed (exit 137) while the heap graph looks perfectly calm.</p>
+  </div>
+
+  <!-- Interactive Debugger Controls -->
+  <div class="panel" style="margin-bottom:20px; padding:18px 20px;">
+    <div class="ctrl-bar">
+      <div class="btn-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-ghost" id="memPrev" type="button" title="Previous Step">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Prev Step
+        </button>
+        <button class="btn btn-primary" id="memPlay" type="button">
+          <svg id="playIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 3l14 9-14 9V3z"/></svg>
+          <span id="playText">Play Walk</span>
+        </button>
+        <button class="btn btn-primary" id="memNext" type="button" title="Next Step">
+          Next Step
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <button class="btn btn-ghost" id="memReset" type="button" title="Reset to Start">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>
+          Reset
+        </button>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:12px; font-family:var(--font-mono); font-size:0.78rem;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="color:var(--text-faint);">Speed:</span>
+          <select id="stepSpeed" style="background:var(--panel-raised); border:1px solid var(--border); color:var(--text); font-family:var(--font-mono); font-size:0.75rem; padding:4px 8px; border-radius:4px; outline:none;">
+            <option value="2000">1.0x (Normal)</option>
+            <option value="3200">0.5x (Slow)</option>
+            <option value="1000">2.0x (Fast)</option>
+          </select>
+        </div>
+        <div style="background:var(--panel-raised); border:1px solid var(--border); padding:4px 10px; border-radius:4px; color:var(--verdant); font-weight:700;" id="stepCounterBadge">
+          Step 0 / 12
+        </div>
+      </div>
+    </div>
+
+    <!-- Scrubber Progress Bar -->
+    <div class="scrubber-wrap">
+      <span style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-faint);">START</span>
+      <input type="range" min="0" max="12" value="0" class="step-slider" id="stepSlider" aria-label="Step slider">
+      <span style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-faint);">END</span>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <!-- Left Column: Source Code Walk & Bytecode Narration -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>OrderProcessing.java</span>
+        <span style="color:var(--steel); font-family:var(--font-mono); font-size:0.75rem;">Interactive Debugger</span>
+      </div>
+
+      <!-- Code lines container -->
+      <div id="codeWalk" style="background:var(--panel-inset); border:1px solid var(--border-soft); border-radius:8px; padding:10px; margin-bottom:12px;"></div>
+
+      <!-- Execution Status / Narration Card -->
+      <div id="memStatusCard" style="background:var(--panel-raised); border:1px solid var(--border); border-radius:8px; padding:14px; line-height:1.6;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-family:var(--font-mono); font-size:0.74rem; font-weight:700; color:var(--verdant); text-transform:uppercase;" id="statusStepTitle">
+            Initialization
+          </span>
+          <span style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-faint);" id="statusBci">
+            PC: 0x0000 · bci: 0
+          </span>
+        </div>
+        <div id="memStatusText" style="font-size:0.88rem; color:var(--text);">
+          Click <b>Next Step</b> or <b>Play Walk</b> to begin stepping through the JVM memory allocation flow.
+        </div>
+        <div id="bytecodeMini" style="margin-top:10px; padding:8px 10px; background:var(--panel-inset); border:1px solid var(--border-soft); border-radius:6px; font-family:var(--font-mono); font-size:0.75rem; color:var(--steel);">
+          Bytecode: <span id="bcInst">Waiting for execution...</span>
+        </div>
+      </div>
+
+      <!-- Live Object Anatomy Card -->
+      <div class="panel" style="margin-top:14px; padding:14px; background:var(--panel-raised);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span style="font-family:var(--font-mono); font-size:0.75rem; font-weight:700; color:var(--text);">
+            LIVE HEAP OBJECT ANATOMY (Order Instance)
+          </span>
+          <span style="font-family:var(--font-mono); font-size:0.7rem; color:var(--verdant); font-weight:600;">
+            Total: 24 Bytes (64-bit + CompressedOOPs)
+          </span>
+        </div>
+        <table class="obj-layout-table">
+          <thead>
+            <tr>
+              <th>Offset</th>
+              <th>Size</th>
+              <th>Component</th>
+              <th>Contents / Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="header-row">
+              <td>0..7</td>
+              <td>8 B</td>
+              <td>Mark Word</td>
+              <td>Identity hashcode, GC age (0), bias lock bits</td>
+            </tr>
+            <tr class="header-row">
+              <td>8..11</td>
+              <td>4 B</td>
+              <td>Klass Word</td>
+              <td>Compressed OOP pointer &rarr; Metaspace Order.class</td>
+            </tr>
+            <tr class="field-row">
+              <td>12..15</td>
+              <td>4 B</td>
+              <td>int id</td>
+              <td id="objFieldId">101 (primitive field value)</td>
+            </tr>
+            <tr class="field-row">
+              <td>16..19</td>
+              <td>4 B</td>
+              <td>String code</td>
+              <td id="objFieldCode">ref &rarr; "PAID" (StringTable on Heap)</td>
+            </tr>
+            <tr class="pad-row">
+              <td>20..23</td>
+              <td>4 B</td>
+              <td>Padding</td>
+              <td>Alignment to 8-byte boundary</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Right Column: The 5 JVM Runtime Memory Areas -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>JVM Runtime Memory Architecture</span>
+        <span style="color:var(--text-faint); font-family:var(--font-mono); font-size:0.74rem;">5 Core Memory Regions</span>
+      </div>
+
+      <!-- AREA 1: METASPACE (Method Area) -->
+      <div class="mem-area-card" id="cardMeta">
+        <div class="mem-area-header">
+          <div class="mem-area-title" style="color:var(--violet);">
+            <span style="background:var(--violet); color:#080b11; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:0.7rem;">1</span>
+            METASPACE (Method Area)
+          </div>
+          <div style="display:flex; gap:6px;">
+            <span class="mem-tag tag-shared">Shared</span>
+            <span class="mem-tag tag-native">Native Memory</span>
+            <span class="mem-tag" style="background:var(--panel-raised); color:var(--text-faint); border:1px solid var(--border);">-XX:MaxMetaspaceSize</span>
+          </div>
+        </div>
+
+        <div class="sub-compartment" id="scConstPool">
+          <div class="sub-title">
+            <span>Runtime Constant Pool</span>
+            <span class="sub-flag">#Symbolic References</span>
+          </div>
+          <div id="slConstPool" style="display:flex; gap:4px; flex-wrap:wrap;"></div>
+        </div>
+
+        <div class="sub-compartment" id="scKlassMeta">
+          <div class="sub-title">
+            <span>Klass Metadata &amp; Method Bytecode</span>
+            <span class="sub-flag">Order.class &middot; vtable &middot; bytecodes</span>
+          </div>
+          <div id="slKlassMeta" style="display:flex; gap:4px; flex-wrap:wrap;"></div>
+        </div>
+
+      </div>
+
+      <!-- AREA 2: JAVA MANAGED HEAP (-Xmx) -->
+      <div class="mem-area-card" id="cardHeap">
+        <div class="mem-area-header">
+          <div class="mem-area-title" style="color:var(--verdant);">
+            <span style="background:var(--verdant); color:#080b11; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:0.7rem;">2</span>
+            MANAGED JAVA HEAP (-Xmx)
+          </div>
+          <div style="display:flex; gap:6px;">
+            <span class="mem-tag tag-shared">Shared</span>
+            <span class="mem-tag tag-managed">GC Managed</span>
+            <span class="mem-tag" style="background:var(--panel-raised); color:var(--text-faint); border:1px solid var(--border);">-Xms / -Xmx</span>
+          </div>
+        </div>
+
+        <div class="sub-compartment" id="scStatics" style="margin-bottom:8px;">
+          <div class="sub-title">
+            <span>Class Mirror &amp; Static Field Values</span>
+            <span class="sub-flag">java.lang.Class on heap</span>
+          </div>
+          <div id="slStatics" style="display:flex; gap:4px; flex-wrap:wrap;"></div>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:8px;">
+          <!-- Eden & Survivor -->
+          <div class="sub-compartment" id="scEden">
+            <div class="sub-title">
+              <span>Young Gen &middot; Eden &amp; TLAB</span>
+              <span class="sub-flag">New allocations</span>
+            </div>
+            <div id="slEden" style="display:flex; gap:4px; flex-wrap:wrap; min-height:28px;"></div>
+          </div>
+          <div class="sub-compartment" id="scSurvivor">
+            <div class="sub-title">
+              <span>Survivor (S0 / S1)</span>
+              <span class="sub-flag">Minor GC survivors</span>
+            </div>
+            <div id="slSurvivor" style="display:flex; gap:4px; flex-wrap:wrap; min-height:28px;"></div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <!-- Old Gen & String Pool -->
+          <div class="sub-compartment" id="scOld">
+            <div class="sub-title">
+              <span>Old / Tenured Gen</span>
+              <span class="sub-flag">Long-lived &amp; Humongous</span>
+            </div>
+            <div id="slOld" style="display:flex; gap:4px; flex-wrap:wrap; min-height:28px;"></div>
+          </div>
+          <div class="sub-compartment" id="scStringPool">
+            <div class="sub-title">
+              <span>String Constant Pool</span>
+              <span class="sub-flag">StringTable (on Heap since Java 7)</span>
+            </div>
+            <div id="slStringPool" style="display:flex; gap:4px; flex-wrap:wrap; min-height:28px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AREA 3: PROGRAM COUNTER (PC) REGISTER -->
+      <div class="mem-area-card" id="cardPC">
+        <div class="mem-area-header">
+          <div class="mem-area-title" style="color:var(--cyan);">
+            <span style="background:var(--cyan); color:#080b11; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:0.7rem;">3</span>
+            PROGRAM COUNTER (PC) REGISTER
+          </div>
+          <div style="display:flex; gap:6px;">
+            <span class="mem-tag tag-private">Per-Thread</span>
+            <span class="mem-tag tag-private">Thread-Private</span>
+          </div>
+        </div>
+        <div class="sub-compartment" id="scPC">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-family:var(--font-mono); font-size:0.78rem; color:var(--text);" id="pcThreadLabel">
+              Thread-1 [main] &middot; RUNNABLE
+            </span>
+            <span style="font-family:var(--font-mono); font-size:0.78rem; font-weight:700; color:var(--cyan);" id="pcValueDisplay">
+              bci: 0 &rarr; process()
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AREA 4: JVM THREAD STACK (-Xss) -->
+      <div class="mem-area-card" id="cardStack">
+        <div class="mem-area-header">
+          <div class="mem-area-title" style="color:var(--steel);">
+            <span style="background:var(--steel); color:#080b11; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:0.7rem;">4</span>
+            JVM THREAD STACK
+          </div>
+          <div style="display:flex; gap:6px;">
+            <span class="mem-tag tag-private">Per-Thread</span>
+            <span class="mem-tag tag-private">Thread-Private</span>
+            <span class="mem-tag" style="background:var(--panel-raised); color:var(--text-faint); border:1px solid var(--border);">-Xss1m</span>
+          </div>
+        </div>
+
+        <div class="frame-box" id="frameBox">
+          <div class="frame-box-header">
+            <span>Stack Frame: process(int qty)</span>
+            <span id="frameDepth">Depth: 1</span>
+          </div>
+
+          <div class="grid-2">
+            <!-- Local Variables Array -->
+            <div>
+              <div style="font-family:var(--font-mono); font-size:0.68rem; font-weight:700; color:var(--text-faint); text-transform:uppercase; margin-bottom:4px;">
+                Local Variable Array (LVA)
+              </div>
+              <div id="slLocals" style="background:var(--panel-inset); border:1px solid var(--border-soft); border-radius:4px; padding:4px 8px;">
+                <div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-faint);">[Frame not initialized]</div>
+              </div>
+            </div>
+
+            <!-- Operand Stack -->
+            <div>
+              <div style="font-family:var(--font-mono); font-size:0.68rem; font-weight:700; color:var(--text-faint); text-transform:uppercase; margin-bottom:4px;">
+                Operand Stack (OS Push/Pop)
+              </div>
+              <div class="op-stack-shelf" id="slOpStack">
+                <div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-faint); text-align:center;">[empty]</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AREA 5: NATIVE MEMORY & NATIVE METHOD STACK -->
+      <div class="mem-area-card" id="cardNative">
+        <div class="mem-area-header">
+          <div class="mem-area-title" style="color:var(--ember);">
+            <span style="background:var(--ember); color:#080b11; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:0.7rem;">5</span>
+            NATIVE MEMORY &amp; C-STACK
+          </div>
+          <div style="display:flex; gap:6px;">
+            <span class="mem-tag tag-native">Off-Heap Native</span>
+            <span class="mem-tag" style="background:var(--panel-raised); color:var(--text-faint); border:1px solid var(--border);">-XX:MaxDirectMemorySize</span>
+          </div>
+        </div>
+
+        <div class="grid-3">
+          <div class="sub-compartment" id="scCodeCache">
+            <div class="sub-title">
+              <span>CodeCache</span>
+              <span class="sub-flag">JIT nmethods</span>
+            </div>
+            <div id="slCodeCache" style="display:flex; gap:4px; flex-wrap:wrap; min-height:28px;"></div>
+          </div>
+          <div class="sub-compartment" id="scDirectBuf">
+            <div class="sub-title">
+              <span>Direct Buffer</span>
+              <span class="sub-flag">Off-Heap I/O</span>
+            </div>
+            <div id="slDirectBuf" style="display:flex; gap:4px; flex-wrap:wrap; min-height:28px;"></div>
+          </div>
+          <div class="sub-compartment" id="scNativeStack">
+            <div class="sub-title">
+              <span>Native C-Stack</span>
+              <span class="sub-flag">JNI Frames</span>
+            </div>
+            <div id="slNativeStack" style="display:flex; gap:4px; flex-wrap:wrap; min-height:28px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive 5-Area Deep Dive Explorer Tabs -->
+  <h3 class="sub">
+    <span class="kicker">In-Depth Architecture Explorer</span>
+    Explore the Inner Anatomy of All 5 JVM Memory Areas
+  </h3>
+
+  <div class="panel" style="margin-bottom:28px;">
+    <div class="mem-tabs">
+      <button class="mem-tab-btn active" data-tab="tab1" type="button">
+        <span style="color:var(--violet); font-weight:700;">1</span> Metaspace &amp; Constant Pool
+      </button>
+      <button class="mem-tab-btn" data-tab="tab2" type="button">
+        <span style="color:var(--verdant); font-weight:700;">2</span> Java Managed Heap &amp; Object Layout
+      </button>
+      <button class="mem-tab-btn" data-tab="tab3" type="button">
+        <span style="color:var(--cyan); font-weight:700;">3</span> PC Register &amp; Bytecode Index
+      </button>
+      <button class="mem-tab-btn" data-tab="tab4" type="button">
+        <span style="color:var(--steel); font-weight:700;">4</span> Thread Stack &amp; Frame Anatomy
+      </button>
+      <button class="mem-tab-btn" data-tab="tab5" type="button">
+        <span style="color:var(--ember); font-weight:700;">5</span> Native Memory &amp; Direct Buffers
+      </button>
+    </div>
+
+    <!-- Tab 1: Metaspace -->
+    <div class="mem-tab-content active" id="tab1">
+      <div class="prose">
+        <h4>Area 1: Metaspace (Native Method Area)</h4>
+        <p>
+          Metaspace holds class metadata, method bytecode, field definitions and offsets, and the <b>Runtime Constant Pool</b>. Introduced in Java 8 to replace PermGen, Metaspace resides entirely in <b>native off-heap memory</b> rather than the contiguous Java heap. HotSpot stores static field <i>values</i> with the corresponding on-heap <code>java.lang.Class</code> mirror.
+        </p>
+        <ul>
+          <li><b>Runtime Constant Pool:</b> A per-class table of symbolic references (#1 = Methodref, #2 = Fieldref, #3 = ClassName, #4 = StringLiteral). When bytecode executes instructions like <code>invokevirtual #18</code>, the JVM looks up the resolved target method here.</li>
+          <li><b>Klass Metadata &amp; Method Bytecode:</b> The internal HotSpot C++ <code>InstanceKlass</code> structure defining class inheritance, method tables (vtables/itables), field offsets, and the raw bytecode arrays for all methods.</li>
+          <li><b>Static Fields:</b> Static variables belong to the defining class rather than its instances. HotSpot stores their values with the heap-resident class mirror; reference values are traversed from the class-loader/class root set while that class remains live. They are not permanent: clearing the field or unloading the defining class can release the referenced object.</li>
+          <li><b>PermGen vs. Metaspace:</b> PermGen had a fixed maximum size (<code>-XX:MaxPermSize</code>) inside the heap. Metaspace grows dynamically by default. Always cap it with <code>-XX:MaxMetaspaceSize</code> to prevent unconstrained ClassLoader leaks from consuming all host RAM!</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Tab 2: Heap & Object Layout -->
+    <div class="mem-tab-content" id="tab2">
+      <div class="prose">
+        <h4>Area 2: Managed Java Heap (-Xmx)</h4>
+        <p>
+          The Heap is the shared warehouse where <b>all object instances and arrays</b> live. It is managed automatically by the Garbage Collector and sized by <code>-Xms</code> (initial) and <code>-Xmx</code> (maximum).
+        </p>
+        <ul>
+              <li><b>Young Generation (Eden + Survivor S0/S1):</b> Most ordinary new objects are allocated in Eden via fast <b>Thread-Local Allocation Buffers (TLABs)</b>. Surviving objects are copied between S0 and S1 during Minor GCs, incrementing their aging bits.</li>
+          <li><b>Old Generation (Tenured):</b> Holds long-lived objects that survived multiple GC threshold cycles (default 15 in CMS/Parallel, 15 or dynamic in G1) as well as <b>Humongous Objects</b> (large arrays exceeding 50% of a G1 region).</li>
+          <li><b>String Constant Pool (StringTable):</b> Since Java 7, interned Strings live <b>on the Heap</b> (moved out of PermGen). It is implemented as an internal hashtable tuned via <code>-XX:StringTableSize</code>. Interned strings can be collected when no longer referenced.</li>
+          <li><b>64-Bit Object Header Anatomy:</b> Every object carries a 12-byte header with Compressed OOPs:
+            <ul>
+              <li><b>8-byte Mark Word:</b> Stores hash code, GC generation age (4 bits), lock state bits (biased, thin, fat monitor), and GC forwarding pointers.</li>
+              <li><b>4-byte Klass Word:</b> Compressed class pointer referencing the class metadata in Metaspace.</li>
+              <li><b>Instance Data &amp; Padding:</b> Field values followed by alignment padding to an 8-byte boundary.</li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Tab 3: PC Register -->
+    <div class="mem-tab-content" id="tab3">
+      <div class="prose">
+        <h4>Area 3: Program Counter (PC) Register</h4>
+        <p>
+          The PC Register is a lightweight, strictly <b>thread-private</b> register created when a thread starts.
+        </p>
+        <ul>
+          <li><b>Instruction Pointer:</b> If the thread is currently executing a Java method, the PC register contains the address or <b>Bytecode Index (bci)</b> of the JVM instruction currently being executed (e.g., <code>bci 0</code>, <code>bci 4</code>, <code>bci 12</code>).</li>
+          <li><b>Native Method Behavior:</b> If the thread is currently executing a native method (via JNI or C++ runtime stub), the JVM PC register value is <b>undefined (null)</b> because native code executes directly on the physical CPU's hardware register (e.g., RIP on x86_64 or PC on ARM64).</li>
+          <li><b>Concurrency Safety:</b> Because each thread has its own private PC register, threads can switch, pause, and resume execution independently without interfering with other threads' instruction pointers.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Tab 4: Thread Stack -->
+    <div class="mem-tab-content" id="tab4">
+      <div class="prose">
+        <h4>Area 4: JVM Thread Stack (-Xss)</h4>
+        <p>
+          Every Java thread has a private stack sized by <code>-Xss</code> (often around 1 MB, but platform and JDK dependent). Whenever a method is called, a new <b>Stack Frame</b> is pushed. When the method returns, the frame is popped in O(1) time without GC overhead.
+        </p>
+        <ul>
+          <li><b>Local Variable Array (LVA):</b> Numbered slots containing parameters and declared local variables. In instance methods, Slot 0 is always <code>this</code>. In static methods, Slot 0 is the first argument. Primitives (<code>int</code>, <code>float</code>, <code>boolean</code>) live directly in the slot; object variables hold 4-byte reference pointers to heap instances.</li>
+          <li><b>Operand Stack (OS):</b> The working scratchpad for the virtual stack machine. Arithmetic and method invocation bytecodes push arguments onto the operand stack, perform operations, and pop results back to local variable slots.</li>
+          <li><b>Frame Data / Dynamic Linking:</b> Holds a reference to the Runtime Constant Pool for the method's class to support runtime method dispatch and exception handling dispatch tables.</li>
+          <li><b>Thread Concurrency Note:</b> A local variable slot is strictly thread-private and cannot itself race. An object referenced by that local can still be shared and raced on through another thread's reference.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Tab 5: Native Memory -->
+    <div class="mem-tab-content" id="tab5">
+      <div class="prose">
+        <h4>Area 5: Native Memory &amp; Native Method Stack</h4>
+        <p>
+          Native Memory encompasses all process memory allocated outside the managed Java heap (<code>-Xmx</code>).
+        </p>
+        <ul>
+          <li><b>Native Method Stack (C-Stack):</b> The C/C++ execution stack used when Java calls into native C libraries via the Java Native Interface (JNI).</li>
+          <li><b>Direct Off-Heap Buffers:</b> Memory allocated via <code>ByteBuffer.allocateDirect()</code> or Netty's pooled byte buffers. These reside in OS native memory for zero-copy socket and disk I/O. Sized with <code>-XX:MaxDirectMemorySize</code>.</li>
+          <li><b>CodeCache:</b> Native memory allocated for storing JIT-compiled machine code (C1 Tier 3 and C2 Tier 4 <code>nmethod</code> compiled blocks) and interpreter dispatch stubs. Sized with <code>-XX:ReservedCodeCacheSize</code>.</li>
+          <li><b>Native Memory Tracking (NMT):</b> Monitor all off-heap usage categories using <code>-XX:NativeMemoryTracking=summary</code> and query at runtime with <code>jcmd &lt;pid&gt; VM.native_memory summary</code>.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Failure Mode Simulators: SOE & OOM -->
+  <h3 class="sub">
+    <span class="kicker">Memory Exhaustion Mechanics</span>
+    Failure Mode Simulators: StackOverflowError vs. OutOfMemoryError
+  </h3>
+
+  <div class="grid-2">
+    <!-- StackOverflowError Simulator -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>StackOverflowError (SOE)</span>
+        <button class="btn btn-danger btn-sm" id="soePlay" type="button">Trigger Deep Recursion</button>
+      </div>
+      <p style="font-size:0.86rem; color:var(--text-dim); margin-bottom:12px;">
+        Frames exceed the thread stack limit (configured via <code>-Xss1m</code>). Notice that heap memory is completely untouched.
+      </p>
+      <div class="metric bad" style="margin-bottom:10px; display:inline-block;">
+        <span class="m-lbl">Recursion Depth:</span>
+        <span class="m-val" id="soeDepth">0</span>
+      </div>
+      <div id="soePile" style="background:var(--panel-inset); border:1px solid var(--border-soft); border-radius:6px; padding:10px; height:130px; overflow-y:auto; margin-bottom:10px;"></div>
+      <div id="soeStatus" style="font-size:0.84rem; color:var(--text); line-height:1.5;"></div>
+    </div>
+
+    <!-- OutOfMemoryError Simulator -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>OutOfMemoryError: Java Heap Space</span>
+        <div class="btn-row">
+          <button class="btn btn-danger btn-sm" id="oomKeep" type="button">Retain References (OOM)</button>
+          <button class="btn btn-primary btn-sm" id="oomDrop" type="button">Drop References (Clean GC)</button>
+        </div>
+      </div>
+      <p style="font-size:0.86rem; color:var(--text-dim); margin-bottom:12px;">
+        Allocation rate is identical in both cases. <b>Retention</b> of live references across collections is what causes OOM.
+      </p>
+      <div style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-faint); margin-bottom:6px;">
+        Heap Usage: <b id="oomLive" style="color:var(--text);">0 MB</b> / 64 MB (Total Allocated: <span id="oomAlloc">0 MB</span>)
+      </div>
+      <div style="height:14px; background:var(--panel-inset); border:1px solid var(--border-soft); border-radius:7px; overflow:hidden; margin-bottom:12px;">
+        <div id="oomBar" style="height:100%; width:0%; background:var(--verdant); transition:width 0.2s;"></div>
+      </div>
+      <div id="oomStatus" style="font-size:0.84rem; color:var(--text); line-height:1.5;"></div>
+    </div>
+  </div>
+
+  <h3 class="sub">
+    <span class="kicker">Read this alongside the memory map</span>
+    The runtime data areas, and who can see them
+  </h3>
+  <div class="prose">
+    <p>The JVM specification divides memory into <b>runtime data areas</b>, and the single most useful way to organise them in your head is <b>per-thread versus shared</b>, because that division is what determines whether you can have a concurrency bug at all.</p>
+
+    <h4>Per-thread — created with the thread, destroyed with it</h4>
+    <ul>
+      <li><b>JVM stack</b> — the frames: locals, operand stack, constant-pool reference. Sized by <code>-Xss</code>. Exhausting it gives <code>StackOverflowError</code>.</li>
+      <li><b>PC register</b> — the address of the instruction currently executing (undefined while in a native method).</li>
+      <li><b>Native method stack</b> — the C stack used when Java calls into JNI.</li>
+    </ul>
+    <p>Because these areas are private, <b>the local slots themselves cannot race</b>. The object reached through a local reference can still be shared. Data races involve shared state, which in Java means heap-resident object state or class-level static values.</p>
+
+    <h4>Shared by every thread</h4>
+    <ul>
+      <li><b>Heap</b> — all objects and arrays, including each class's <code>java.lang.Class</code> mirror and HotSpot's static field values. Sized by <code>-Xms</code>/<code>-Xmx</code>. Managed by the GC (Stage&nbsp;09). Exhausting it gives <code>OutOfMemoryError: Java heap space</code>.</li>
+      <li><b>Metaspace</b> (the "method area" in specification language) — class metadata, method bytecode, field layouts, and the runtime constant pool. Native memory, outside <code>-Xmx</code>.</li>
+      <li><b>Code cache</b> — native code produced by C1 and C2, plus the interpreter's own generated stubs. Native memory.</li>
+      <li><b>String constant pool</b> — interned strings. Since Java&nbsp;7 it lives <b>on the heap</b> (it was in PermGen before), which is why interned strings are now collectable and why <code>-XX:StringTableSize</code> tunes a hash table, not a memory region.</li>
+    </ul>
+
+    <h4>Metaspace, and why PermGen had to go</h4>
+    <p>Before Java&nbsp;8, class metadata lived in <b>PermGen</b>, a fixed-size region <i>inside</i> the Java heap. Class metadata therefore competed with your objects for space, and needed a <code>-XX:MaxPermSize</code> that was impossible to size correctly — the classic symptom being <code>OutOfMemoryError: PermGen space</code> after a few hot redeploys.</p>
+    <p><b>Metaspace lives in native memory and grows on demand</b>, so the default is effectively unlimited. But it can still leak, because metaspace is freed <b>per class loader</b>: one leaked <code>ClassLoader</code> keeps every class it ever defined alive forever. Cap it with <code>-XX:MaxMetaspaceSize</code> so a leak <b>fails fast instead of eating the machine</b> — an uncapped leak degrades the whole host, while a capped one produces a clean, diagnosable error.</p>
+
+    <h4>What an object actually costs</h4>
+    <p>An object is not just its fields. On a 64-bit HotSpot with compressed oops (the default below a 32&nbsp;GB heap), every object carries a <b>12-byte header</b> — an 8-byte mark word (identity hash, lock state, GC age) plus a 4-byte class pointer — and is padded to an 8-byte boundary. Arrays add 4 more bytes for the length.</p>
+    <p>The consequences are practical: an <code>Integer</code> costs 16 bytes to hold 4 bytes of data; a <code>Long[1000]</code> is a thousand pointers to a thousand boxed objects scattered across the heap, versus <code>long[1000]</code> which is one contiguous 8&nbsp;KB block. <b>This is why boxing in hot data structures is expensive twice over</b> — in footprint and in cache locality. It is also why crossing the ~32&nbsp;GB heap boundary can <i>increase</i> effective memory use: compressed oops switch off and every reference doubles to 8 bytes.</p>
+
+    <h4>Off-heap: the memory nobody puts on the dashboard</h4>
+    <p>Total process memory is <b>heap + Metaspace + code cache + thread stacks + direct buffers + GC data structures + the JVM's own native allocations + whatever native libraries allocate</b>. On a 200-thread server with 1&nbsp;MB stacks that is 200&nbsp;MB before a single object exists. Netty, NIO and most high-performance I/O libraries allocate <code>DirectByteBuffer</code>s outside the heap — fast, because the OS can read and write them without copying, and invisible to every heap-based tool.</p>
+    <p>The tool that makes this visible is <b>Native Memory Tracking</b>: start with <code>-XX:NativeMemoryTracking=summary</code> and query with <code>jcmd &lt;pid&gt; VM.native_memory summary</code>. It breaks the process down by category — Java heap, class, thread, code, GC, internal — and it is the only way to answer "the heap is 2&nbsp;GB, so why is RSS 6&nbsp;GB?"</p>
+
+    <h4>Sizing for containers</h4>
+    <p>Setting <code>-Xmx</code> equal to the container limit is the single most common production memory mistake, because it leaves nothing for everything above. Modern JVMs are container-aware and respect cgroup limits, so prefer <b><code>-XX:MaxRAMPercentage</code></b> (typically 50–75%) over a fixed <code>-Xmx</code> — the JVM then scales correctly when the limit changes, and reserves headroom for the non-heap regions by construction.</p>
+  </div>
+
+  <div class="factgrid">
+    <div>OOM: Java heap space</div><div>Live objects exceed <code>-Xmx</code>. Either genuinely too small, or a <b>retention leak</b>. Always take a heap dump: <code>-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/…</code>.</div>
+    <div>OOM: Metaspace</div><div>Class metadata exhausted. Almost always a <b>ClassLoader leak</b> — redeploys, dynamic proxies, generated classes, scripting engines.</div>
+    <div>OOM: Direct buffer memory</div><div><code>DirectByteBuffer</code> exhaustion. They are freed only when a <code>Cleaner</code> runs after the Java wrapper is collected — so under low heap pressure, direct memory can exhaust while the heap is calm. Bound it with <code>-XX:MaxDirectMemorySize</code>.</div>
+    <div>OOM: unable to create<br>new native thread</div><div>The OS refused a thread. Usually a thread leak or stacks sized too large — <b>not</b> a heap problem, and raising <code>-Xmx</code> makes it worse by leaving less address space.</div>
+    <div>OOM: GC overhead<br>limit exceeded</div><div>More than 98% of time in GC recovering less than 2% of heap. The heap is not <i>quite</i> full, so it is technically still running — practically it is dead, and the real cause is retention.</div>
+    <div>StackOverflowError</div><div>Frames exceeded <code>-Xss</code> on one thread. The heap is untouched. Deep or unbounded recursion.</div>
+    <div>killed (exit 137)</div><div>Not a JVM error at all — the <b>kernel</b> OOM-killer. Total process RSS exceeded the container limit. Heap graphs look fine because the growth was off-heap.</div>
+  </div>
+
+  <h3 class="sub">
+    <span class="kicker">Interview drill · stage 08</span>
+    Questions they actually ask about JVM memory
+  </h3>
+
+  <details class="qa">
+    <summary>Walk me through every memory region in the JVM and say which are shared.</summary>
+    <div class="ans">
+      <p>Answer in the two-column shape — it demonstrates you understand <i>why</i> the division exists rather than reciting a list.</p>
+      <p><b>Per thread:</b> JVM stack (frames: locals, operand stack), PC register, native method stack. Created and destroyed with the thread; never shared; therefore never a source of data races.</p>
+      <p><b>Shared:</b> heap (all objects, arrays, class mirrors, and HotSpot static field values), Metaspace (class metadata, method bytecode, field layouts, runtime constant pool), code cache (JIT output), string constant pool (on the heap since Java&nbsp;7).</p>
+      <p>Then the sentence that lands: "<b>Metaspace replaced PermGen in Java&nbsp;8 and is native memory outside <code>-Xmx</code></b> — which is why heap tuning does not prevent Metaspace OOMs, and why total process memory is always larger than the heap."</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>What is the difference between StackOverflowError and OutOfMemoryError?</summary>
+    <div class="ans">
+      <p>Different regions, different causes, different fixes — and both are <code>Error</code>s rather than <code>Exception</code>s because neither is meaningfully recoverable.</p>
+      <p><b><code>StackOverflowError</code></b>: one thread's frames exceeded its <code>-Xss</code> stack. Caused by deep or infinite recursion. The heap is entirely unaffected. Fixed by converting recursion to iteration with an explicit heap-based stack.</p>
+      <p><b><code>OutOfMemoryError</code></b>: some memory pool could not satisfy an allocation. <b>Always read the message after the colon</b> — "Java heap space", "Metaspace", "Direct buffer memory" and "unable to create new native thread" are four unrelated problems that share a class name, and the message is the entire diagnosis.</p>
+      <p>Nuance worth adding: catching <code>OutOfMemoryError</code> is almost always wrong, because the allocation that fails next may be inside your handler — but <code>StackOverflowError</code> is occasionally caught legitimately at a request boundary, since unwinding the stack genuinely does free the resource.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · A Kubernetes pod with a 4&nbsp;GB limit is OOM-killed (exit 137) repeatedly. Heap usage never exceeds 1.5&nbsp;GB and there is no <code>OutOfMemoryError</code> in the logs. Find it.</summary>
+    <div class="ans">
+      <p>The absence of a Java <code>OutOfMemoryError</code> is the whole clue: <b>the JVM never ran out of heap — the kernel ran out of container.</b> Something outside <code>-Xmx</code> is growing.</p>
+      <p><b>Step 1 — make the invisible visible.</b> Restart with <code>-XX:NativeMemoryTracking=summary</code> and take a baseline, then <code>jcmd &lt;pid&gt; VM.native_memory summary.diff</code> periodically. The category that grows <i>is</i> the answer, and this usually takes minutes rather than days.</p>
+      <p><b>Step 2 — the usual suspects, by category:</b></p>
+      <ul>
+        <li><b>Thread</b> — a thread leak. 1&nbsp;MB stack each; an unbounded executor or a leaked pool per request adds up fast. Check <code>jcmd Thread.print | grep -c tid</code> over time.</li>
+        <li><b>Class</b> — Metaspace growth from a ClassLoader leak (Stage&nbsp;02) or heavy proxy/lambda generation.</li>
+        <li><b>Code</b> — a large code cache, occasionally inflated by recompilation churn.</li>
+        <li><b>Internal / Other</b> — direct byte buffers. Netty-based stacks are the classic case; check <code>BufferPoolMXBean</code> or Netty's own leak detector, and set <code>-XX:MaxDirectMemorySize</code> so it fails loudly instead of silently.</li>
+        <li><b>Not in NMT at all</b> — a native library's own <code>malloc</code>: a JDBC driver, a compression or crypto library, a JNI integration. Diagnose with <code>jemalloc</code>/<code>jeprof</code> profiling or <code>pmap</code> deltas.</li>
+        <li><b>glibc arena growth</b> — a genuine and under-known cause on multi-threaded Linux workloads. Test with <code>MALLOC_ARENA_MAX=2</code>.</li>
+      </ul>
+      <p><b>Step 3 — size it properly regardless.</b> Replace a fixed <code>-Xmx</code> with <code>-XX:MaxRAMPercentage=60</code> and explicitly cap the other pools (<code>MaxMetaspaceSize</code>, <code>MaxDirectMemorySize</code>, <code>ReservedCodeCacheSize</code>, thread count). <b>Bounded pools turn a mysterious kill into a specific, actionable Java error</b> — which is worth doing even before you know the cause.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · Heap grows steadily over days until OOM. Restarting fixes it for a week. You have a heap dump. What do you do with it?</summary>
+    <div class="ans">
+      <p><b>This is a retention leak, and the heap dump contains the answer — the skill is asking it the right question.</b> Java leaks are always "unintended reachability": the GC is correctly refusing to collect objects you can still reach.</p>
+      <p><b>The method, in order:</b></p>
+      <ul>
+        <li>Open the dump (Eclipse MAT, VisualVM, JFR's heap statistics) and run a <b>dominator tree</b> analysis. Do not look at object counts — look at <b>retained size</b>, which tells you how much memory would be freed if that object went away.</li>
+        <li>Take the largest dominator and ask for its <b>path to GC root</b>. That path is the bug. It ends at a static field, a thread, a ThreadLocal, or a JNI reference — and it names the exact line responsible.</li>
+        <li>Compare <b>two dumps</b> taken hours apart if the first is ambiguous. The delta is far more informative than either dump alone.</li>
+      </ul>
+      <p><b>The classic four causes</b>, all of which are "working as designed":</p>
+      <ul>
+        <li>A <code>static</code> collection that only ever grows — a cache with no eviction policy is the number one Java leak, full stop.</li>
+        <li>Listeners or callbacks registered and never removed.</li>
+        <li><code>ThreadLocal</code> values on a <b>pooled</b> thread that outlives the request — the thread never dies, so the value never clears.</li>
+        <li><b>ClassLoader leaks</b>, where one lingering reference keeps an entire redeployed application's classes alive in Metaspace.</li>
+      </ul>
+      <p><b>Two traps to avoid:</b> <code>WeakHashMap</code> does not help if the <i>value</i> holds a strong reference back to the key — an extremely common mistake. And "just increase <code>-Xmx</code>" converts a weekly outage into a monthly one while making each heap dump harder to analyse.</p>
+      <p><b>Make it easier next time:</b> ship with <code>-XX:+HeapDumpOnOutOfMemoryError</code> and a writable <code>HeapDumpPath</code> on a volume that survives pod restarts. A leak you cannot dump is a leak you cannot fix.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · Someone proposes moving a hot cache to <code>DirectByteBuffer</code> "to avoid GC pressure." Good idea?</summary>
+    <div class="ans">
+      <p>Sometimes — but ask what problem is being solved, because off-heap trades a well-tooled problem for a badly-tooled one.</p>
+      <p><b>Genuine wins:</b> very large caches (tens of GB) where the GC's cost scales with live-set size; zero-copy I/O, where the OS can read and write the buffer directly without a bounce through the heap; and data that is naturally byte-shaped, where you would otherwise pay object-header overhead per entry.</p>
+      <p><b>Real costs:</b></p>
+      <ul>
+        <li><b>Deallocation is not deterministic.</b> A <code>DirectByteBuffer</code>'s native memory is freed by a <code>Cleaner</code> that runs only after the small Java wrapper object is collected. Under low heap pressure the GC has no reason to run, so <b>you can exhaust native memory while the heap is nearly empty</b>.</li>
+        <li><b>No tooling.</b> Heap dumps show you nothing. You are back to NMT and native profilers.</li>
+        <li><b>Serialization cost.</b> Objects must be encoded into and decoded out of bytes, which often erases the saving unless the data is already byte-shaped.</li>
+      </ul>
+      <p><b>Measure first.</b> If GC pause time is genuinely the problem, a modern low-pause collector (ZGC, Shenandoah — Stage&nbsp;09) usually solves it with no code change at all, and that should be the first experiment. If the real problem is an unbounded cache, the fix is an eviction policy, not a different memory region.</p>
+      <p>If you do go off-heap, prefer a library that manages lifetime explicitly (Chronicle, Netty's pooled allocator, or the JDK's Foreign Function &amp; Memory API with an <code>Arena</code>) over raw <code>DirectByteBuffer</code>, and always set <code>-XX:MaxDirectMemorySize</code>.</p>
+    </div>
+  </details>
+
+  <div class="trap">
+    <span class="lbl">Common Interview Trap</span>
+    <span class="wrong">"-Xmx4g means the JVM uses at most 4&nbsp;GB."</span>
+    <span class="right">It caps the Java heap only.</span>
+    Total process memory is heap + Metaspace + code cache + thread stacks + direct buffers + GC data structures + the JVM's own native allocations. This is the single most common reason a container is OOM-killed by the kernel while heap graphs look perfectly healthy — and why <code>-XX:MaxRAMPercentage</code> is the better flag in a container.
+  </div>
+
+  <!-- Page Navigation Footer -->
+  <footer class="page-nav-footer">
+    <a href="07-native-and-deopt.html" class="nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Prev: 07 · Native &amp; Deopt
+    </a>
+    <a href="09-garbage-collection.html" class="nav-btn next">
+      Next: 09 · Garbage Collection
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+  </footer>
+</div>
+
+<script src="js/jvm-common.js"></script>
+<script>
+/* ================================================================
+   INTERACTIVE 5-AREA JVM MEMORY SIMULATOR ENGINE
+================================================================ */
+
+const CODE_STEPS = [
+  {
+    lineNum: 1,
+    code: 'class Order {',
+    title: 'Class Loading & Metaspace Preparation',
+    bci: 'bci: -- · VM ClassLoader',
+    bcInst: 'ldc #Order · JVM internal Link & Prep',
+    activeArea: 'cardMeta',
+    pcText: 'VM bootstrap / ClassLoader',
+    note: 'Loading <code>Order.class</code> allocates its <b>Klass metadata</b>, <b>method bytecode</b>, and <b>Runtime Constant Pool</b> in <b>Metaspace</b> (native off-heap memory outside <code>-Xmx</code>). The reflection mirror <code>Class&lt;Order&gt;</code> is placed in the Java heap.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode', '&lt;init&gt;() bytecode'],
+      statics: [],
+      eden: [],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)'],
+      stringPool: [],
+      pc: 'idle',
+      locals: [],
+      opStack: [],
+      codeCache: [],
+      directBuf: [],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'null'
+    }
+  },
+  {
+    lineNum: 2,
+    code: '    static int counter = 0;',
+    title: 'Static Field Values in the Class Mirror',
+    bci: 'bci: -- · &lt;clinit&gt; prep',
+    bcInst: 'iconst_0 · putstatic #2 &lt;Order.counter&gt;',
+    activeArea: 'cardHeap',
+    pcText: '&lt;clinit&gt; static initialization',
+    note: 'A <b>static field is not inside any class instance</b>. HotSpot stores its value with the heap-resident <code>Class&lt;Order&gt;</code> mirror; preparation supplies the default <code>0</code>. A static reference keeps its target reachable while the field and defining class remain live.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode', '&lt;init&gt;() bytecode'],
+      statics: ['static counter = 0 (int)'],
+      eden: [],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)'],
+      stringPool: [],
+      pc: 'idle',
+      locals: [],
+      opStack: [],
+      codeCache: [],
+      directBuf: [],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'null'
+    }
+  },
+  {
+    lineNum: 3,
+    code: '    int id = 101;  String code;',
+    title: 'Instance Field Metadata Definitions',
+    bci: 'bci: -- · Class Verification',
+    bcInst: 'layout: id@12 (4B), code@16 (4B)',
+    activeArea: 'cardMeta',
+    pcText: 'Field offset definitions mapped',
+    note: 'Instance field <b>definitions</b> (offsets: <code>id@12</code>, <code>code@16</code>) are registered in Metaspace. Field <b>values</b> do not exist in memory until an actual instance is created on the heap.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode', 'layout: id@12, code@16'],
+      statics: ['static counter = 0 (int)'],
+      eden: [],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)'],
+      stringPool: [],
+      pc: 'idle',
+      locals: [],
+      opStack: [],
+      codeCache: [],
+      directBuf: [],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'null'
+    }
+  },
+  {
+    lineNum: 4,
+    code: 'void process(int qty) {',
+    title: 'Method Invocation & Stack Frame Push',
+    bci: 'bci: 0 · Thread-1 [main]',
+    bcInst: 'invokevirtual #process (args: this, qty=42)',
+    activeArea: 'cardStack',
+    pcText: 'bci 0: iload_1 &rarr; process(int)',
+    note: 'Calling <code>process(42)</code> pushes a thread-private <b>Stack Frame</b> onto the calling thread stack (sized by <code>-Xss1m</code>). The <b>PC Register</b> points to bytecode offset <code>bci: 0</code>.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode'],
+      statics: ['static counter = 0 (int)'],
+      eden: [],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)'],
+      stringPool: [],
+      pc: 'bci 0: iload_1 (qty)',
+      locals: [
+        { slot: 0, name: 'this', val: 'ref &rarr; caller', type: 'ref' },
+        { slot: 1, name: 'qty', val: '42 (int)', type: 'prim' }
+      ],
+      opStack: [],
+      codeCache: [],
+      directBuf: [],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'null'
+    }
+  },
+  {
+    lineNum: 5,
+    code: '    int n = qty * 2;',
+    title: 'Primitive Evaluation on Operand Stack',
+    bci: 'bci: 4 · istore_2',
+    bcInst: 'iload_1 [42] &middot; iconst_2 &middot; imul [84] &middot; istore_2',
+    activeArea: 'cardStack',
+    pcText: 'bci 4: istore_2 (n = 84)',
+    note: 'The <b>Operand Stack</b> pushes 42 and 2, pops them to perform <code>imul</code>, and stores <code>84</code> into <b>Local Variable Slot 2 (n)</b>. Zero heap involvement; purely stack-allocated.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode'],
+      statics: ['static counter = 0 (int)'],
+      eden: [],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)'],
+      stringPool: [],
+      pc: 'bci 4: istore_2',
+      locals: [
+        { slot: 0, name: 'this', val: 'ref &rarr; caller', type: 'ref' },
+        { slot: 1, name: 'qty', val: '42 (int)', type: 'prim' },
+        { slot: 2, name: 'n', val: '84 (int)', type: 'prim' }
+      ],
+      opStack: ['84 (computed)'],
+      codeCache: [],
+      directBuf: [],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'null'
+    }
+  },
+  {
+    lineNum: 6,
+    code: '    Order o = new Order();',
+    title: 'Heap Allocation & Reference Pointer',
+    bci: 'bci: 12 · astore_3',
+    bcInst: 'new #Order &middot; invokespecial #&lt;init&gt; &middot; astore_3',
+    activeArea: 'cardHeap',
+    pcText: 'bci 12: astore_3 (o &rarr; Order@71a04)',
+    note: '<b>Two distinct entities:</b> The 24-byte object instance is allocated on the <b>Heap (Eden space inside TLAB)</b>. The 4-byte reference pointer <code>o</code> is stored in <b>Stack Frame Slot 3</b>.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode'],
+      statics: ['static counter = 0 (int)'],
+      eden: ['Order@71a04 (24 B)'],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)'],
+      stringPool: [],
+      pc: 'bci 12: astore_3',
+      locals: [
+        { slot: 0, name: 'this', val: 'ref &rarr; caller', type: 'ref' },
+        { slot: 1, name: 'qty', val: '42 (int)', type: 'prim' },
+        { slot: 2, name: 'n', val: '84 (int)', type: 'prim' },
+        { slot: 3, name: 'o', val: 'ref &rarr; Order@71a04', type: 'ref' }
+      ],
+      opStack: [],
+      codeCache: [],
+      directBuf: [],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'null'
+    }
+  },
+  {
+    lineNum: 7,
+    code: '    o.code = "PAID";',
+    title: 'String Constant Pool Interning',
+    bci: 'bci: 16 · putfield #code',
+    bcInst: 'aload_3 &middot; ldc #4 ("PAID") &middot; putfield #code',
+    activeArea: 'cardHeap',
+    pcText: 'bci 16: putfield #code',
+    note: 'The string literal <code>"PAID"</code> is interned in the <b>String Constant Pool</b> (residing on the <b>Heap</b> since Java 7). <code>o.code</code> on the heap points to this interned literal.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode'],
+      statics: ['static counter = 0 (int)'],
+      eden: ['Order@71a04 (24 B)'],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)'],
+      stringPool: ['"PAID" (interned StringTable)'],
+      pc: 'bci 16: putfield #code',
+      locals: [
+        { slot: 0, name: 'this', val: 'ref &rarr; caller', type: 'ref' },
+        { slot: 1, name: 'qty', val: '42 (int)', type: 'prim' },
+        { slot: 2, name: 'n', val: '84 (int)', type: 'prim' },
+        { slot: 3, name: 'o', val: 'ref &rarr; Order@71a04', type: 'ref' }
+      ],
+      opStack: [],
+      codeCache: [],
+      directBuf: [],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'ref &rarr; "PAID"'
+    }
+  },
+  {
+    lineNum: 8,
+    code: '    String s = new String("PAID");',
+    title: 'Heap Object vs. String Constant Pool',
+    bci: 'bci: 22 · astore 4',
+    bcInst: 'new #String &middot; ldc #4 &middot; invokespecial &middot; astore 4',
+    activeArea: 'cardHeap',
+    pcText: 'bci 22: astore 4 (s &rarr; String@71a1c)',
+    note: '<code>new String("PAID")</code> creates a <b>new distinct String object</b> on Eden heap. <code>s == o.code</code> evaluates to <code>false</code> (different addresses) while <code>s.equals(o.code)</code> is <code>true</code>.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode'],
+      statics: ['static counter = 0 (int)'],
+      eden: ['Order@71a04 (24 B)', 'String@71a1c (new instance)'],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)'],
+      stringPool: ['"PAID" (interned StringTable)'],
+      pc: 'bci 22: astore 4',
+      locals: [
+        { slot: 0, name: 'this', val: 'ref &rarr; caller', type: 'ref' },
+        { slot: 1, name: 'qty', val: '42 (int)', type: 'prim' },
+        { slot: 2, name: 'n', val: '84 (int)', type: 'prim' },
+        { slot: 3, name: 'o', val: 'ref &rarr; Order@71a04', type: 'ref' },
+        { slot: 4, name: 's', val: 'ref &rarr; String@71a1c', type: 'ref' }
+      ],
+      opStack: [],
+      codeCache: [],
+      directBuf: [],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'ref &rarr; "PAID"'
+    }
+  },
+  {
+    lineNum: 9,
+    code: '    last = o;              // static GC root',
+    title: 'Anchoring Through the Class Mirror',
+    bci: 'bci: 25 · putstatic #last',
+    bcInst: 'aload_3 &middot; putstatic #3 &lt;Order.last&gt;',
+    activeArea: 'cardHeap',
+    pcText: 'bci 25: putstatic #last',
+    note: 'Assigning to the static field makes <code>Order@71a04</code> reachable through the heap-resident <code>Class&lt;Order&gt;</code> mirror. It survives collections until the field is cleared, replaced, or the defining class becomes unloadable.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode'],
+      statics: ['static counter = 0 (int)', 'static last &rarr; Order@71a04 (GC Root)'],
+      eden: ['Order@71a04 (24 B)', 'String@71a1c (new instance)'],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)'],
+      stringPool: ['"PAID" (interned StringTable)'],
+      pc: 'bci 25: putstatic #last',
+      locals: [
+        { slot: 0, name: 'this', val: 'ref &rarr; caller', type: 'ref' },
+        { slot: 1, name: 'qty', val: '42 (int)', type: 'prim' },
+        { slot: 2, name: 'n', val: '84 (int)', type: 'prim' },
+        { slot: 3, name: 'o', val: 'ref &rarr; Order@71a04', type: 'ref' },
+        { slot: 4, name: 's', val: 'ref &rarr; String@71a1c', type: 'ref' }
+      ],
+      opStack: [],
+      codeCache: [],
+      directBuf: [],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'ref &rarr; "PAID"'
+    }
+  },
+  {
+    lineNum: 10,
+    code: '    byte[] big = new byte[12_000_000];',
+    title: 'Humongous Allocation Directly in Old Gen',
+    bci: 'bci: 29 · astore 5',
+    bcInst: 'ldc #12000000 &middot; newarray byte &middot; astore 5',
+    activeArea: 'cardHeap',
+    pcText: 'bci 29: astore 5 (big &rarr; byte[12M])',
+    note: 'Large arrays (humongous objects exceeding 50% region size) bypass Eden entirely and are allocated directly in <b>Old Generation</b> to avoid expensive GC copy overhead.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode'],
+      statics: ['static counter = 0 (int)', 'static last &rarr; Order@71a04 (GC Root)'],
+      eden: ['Order@71a04 (24 B)', 'String@71a1c (new instance)'],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)', 'byte[12M] Humongous (Old Gen)'],
+      stringPool: ['"PAID" (interned StringTable)'],
+      pc: 'bci 29: astore 5',
+      locals: [
+        { slot: 0, name: 'this', val: 'ref &rarr; caller', type: 'ref' },
+        { slot: 1, name: 'qty', val: '42 (int)', type: 'prim' },
+        { slot: 2, name: 'n', val: '84 (int)', type: 'prim' },
+        { slot: 3, name: 'o', val: 'ref &rarr; Order@71a04', type: 'ref' },
+        { slot: 4, name: 's', val: 'ref &rarr; String@71a1c', type: 'ref' },
+        { slot: 5, name: 'big', val: 'ref &rarr; byte[12M]', type: 'ref' }
+      ],
+      opStack: [],
+      codeCache: [],
+      directBuf: [],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'ref &rarr; "PAID"'
+    }
+  },
+  {
+    lineNum: 11,
+    code: '    buf = ByteBuffer.allocateDirect(1 << 20);',
+    title: 'Native Off-Heap Direct Buffer Allocation',
+    bci: 'bci: 34 · astore 6',
+    bcInst: 'invokestatic #allocateDirect &middot; astore 6',
+    activeArea: 'cardNative',
+    pcText: 'bci 34: astore 6 (buf &rarr; DirectByteBuffer)',
+    note: 'The <code>DirectByteBuffer</code> wrapper object resides on the Java heap, but the raw <b>1 MB memory buffer is allocated in Native Memory outside <code>-Xmx</code></b>. JNI C-stack is invoked during allocation.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode'],
+      statics: ['static counter = 0 (int)', 'static last &rarr; Order@71a04 (GC Root)'],
+      eden: ['Order@71a04 (24 B)', 'String@71a1c (new instance)', 'DirectByteBuffer wrapper (Heap)'],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)', 'byte[12M] Humongous (Old Gen)'],
+      stringPool: ['"PAID" (interned StringTable)'],
+      pc: 'bci 34: astore 6',
+      locals: [
+        { slot: 0, name: 'this', val: 'ref &rarr; caller', type: 'ref' },
+        { slot: 1, name: 'qty', val: '42 (int)', type: 'prim' },
+        { slot: 2, name: 'n', val: '84 (int)', type: 'prim' },
+        { slot: 3, name: 'o', val: 'ref &rarr; Order@71a04', type: 'ref' },
+        { slot: 4, name: 's', val: 'ref &rarr; String@71a1c', type: 'ref' },
+        { slot: 5, name: 'big', val: 'ref &rarr; byte[12M]', type: 'ref' },
+        { slot: 6, name: 'buf', val: 'ref &rarr; DirectBuffer', type: 'ref' }
+      ],
+      opStack: [],
+      codeCache: [],
+      directBuf: ['1 MB Direct Off-Heap Buffer (Native)'],
+      nativeStack: ['JNI: Bits.copyMemory0()'],
+      fieldId: '101',
+      fieldCode: 'ref &rarr; "PAID"'
+    }
+  },
+  {
+    lineNum: 12,
+    code: '}   // method returns',
+    title: 'Stack Frame Pop & Garbage Reachability',
+    bci: 'bci: 38 · return',
+    bcInst: 'return · Stack Frame popped &middot; Locals cleared',
+    activeArea: 'cardStack',
+    pcText: 'return &rarr; Caller resumed',
+    note: 'The <code>process()</code> stack frame is destroyed. Local variable slots vanish. <code>String@71a1c</code> and <code>byte[12M]</code> lose their reference pointers and become <b>dead garbage</b>. <code>Order@71a04</code> remains alive because the class mirror still holds the static <code>last</code> reference.',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode'],
+      statics: ['static counter = 0 (int)', 'static last &rarr; Order@71a04 (GC Root ALIVE)'],
+      eden: ['Order@71a04 (ALIVE)', 'String@71a1c (DEAD GARBAGE)', 'DirectByteBuffer wrapper (DEAD)'],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)', 'byte[12M] (DEAD GARBAGE)'],
+      stringPool: ['"PAID" (interned StringTable)'],
+      pc: 'Caller execution (main)',
+      locals: [],
+      opStack: [],
+      codeCache: [],
+      directBuf: ['1 MB Buffer (Pending Cleaner GC)'],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'ref &rarr; "PAID"'
+    }
+  },
+  {
+    lineNum: 13,
+    code: '// …10,000 invocations later (JIT Tier 4)',
+    title: 'JIT Compilation into Native CodeCache',
+    bci: 'bci: -- · JIT C2 Compiler',
+    bcInst: 'C2 Compile: process(int) &rarr; Optimized x86_64 machine code',
+    activeArea: 'cardNative',
+    pcText: 'Native execution in CodeCache',
+    note: 'Once the method invocation counter passes the hot threshold (10,000 calls), HotSpot\'s C2 JIT compiler generates optimized native machine code and stores it in the <b>CodeCache</b> (native memory tuned with <code>-XX:ReservedCodeCacheSize</code>).',
+    state: {
+      constPool: ['#1: Methodref &lt;init&gt;', '#2: Fieldref counter', '#3: Fieldref last', '#4: String "PAID"', '#5: Class Order'],
+      klassMeta: ['Order.class metadata (24B)', 'process(int) bytecode'],
+      statics: ['static counter = 0 (int)', 'static last &rarr; Order@71a04 (GC Root ALIVE)'],
+      eden: ['Order@71a04 (ALIVE)'],
+      survivor: [],
+      old: ['Class&lt;Order&gt; mirror (Heap)'],
+      stringPool: ['"PAID" (interned StringTable)'],
+      pc: 'Native CodeCache (0x7F00AA10)',
+      locals: [],
+      opStack: [],
+      codeCache: ['process() C2 nmethod (Native ASM)'],
+      directBuf: [],
+      nativeStack: [],
+      fieldId: '101',
+      fieldCode: 'ref &rarr; "PAID"'
+    }
+  }
+];
+
+let currentStep = 0;
+let isPlaying = false;
+let playTimer = null;
+
+function renderCodeWalkLines() {
+  const cw = $('codeWalk');
+  cw.innerHTML = CODE_STEPS.map((s, idx) => `
+    <div class="cw-line ${idx === currentStep ? 'on' : (idx < currentStep ? 'done' : '')}" data-step="${idx}">
+      <span class="cw-line-num">${s.lineNum}</span>
+      <span>${esc(s.code)}</span>
+    </div>
+  `).join('');
+
+  cw.querySelectorAll('.cw-line').forEach(el => {
+    el.addEventListener('click', () => {
+      pauseWalk();
+      goToStep(parseInt(el.dataset.step, 10));
+    });
+  });
+}
+
+function updateUI() {
+  const step = CODE_STEPS[currentStep];
+
+  // Update code highlight
+  document.querySelectorAll('.cw-line').forEach((el, idx) => {
+    el.className = 'cw-line' + (idx === currentStep ? ' on' : (idx < currentStep ? ' done' : ''));
+  });
+
+  // Update Status & Bytecode Narration
+  $('statusStepTitle').textContent = step.title;
+  $('statusBci').textContent = step.bci;
+  $('memStatusText').innerHTML = step.note;
+  $('bcInst').textContent = step.bcInst;
+  $('stepCounterBadge').textContent = `Step ${currentStep} / ${CODE_STEPS.length - 1}`;
+  $('stepSlider').value = currentStep;
+
+  // Update Button States
+  $('memPrev').disabled = currentStep === 0;
+  $('memNext').disabled = currentStep === CODE_STEPS.length - 1;
+
+  // Highlight Active Memory Area
+  document.querySelectorAll('.mem-area-card').forEach(c => c.classList.remove('active-area'));
+  if ($(step.activeArea)) {
+    $(step.activeArea).classList.add('active-area');
+  }
+
+  // 1. Update Metaspace
+  renderChips('slConstPool', step.state.constPool, 'meta');
+  renderChips('slKlassMeta', step.state.klassMeta, 'meta');
+  renderChips('slStatics', step.state.statics, 'meta');
+
+  // 2. Update Heap
+  renderChips('slEden', step.state.eden, 'obj');
+  renderChips('slSurvivor', step.state.survivor, 'obj');
+  renderChips('slOld', step.state.old, 'obj');
+  renderChips('slStringPool', step.state.stringPool, 'str');
+
+  // 3. Update PC Register
+  $('pcValueDisplay').textContent = step.pcText;
+
+  // 4. Update Stack Frame
+  renderLocals('slLocals', step.state.locals);
+  renderOpStack('slOpStack', step.state.opStack);
+  $('frameDepth').textContent = step.state.locals.length > 0 ? 'Depth: 1 (process)' : 'Depth: 0 (idle)';
+
+  // 5. Update Native Memory
+  renderChips('slCodeCache', step.state.codeCache, 'native');
+  renderChips('slDirectBuf', step.state.directBuf, 'native');
+  renderChips('slNativeStack', step.state.nativeStack, 'native');
+
+  // Update Object Layout Live Table
+  $('objFieldId').textContent = step.state.fieldId;
+  $('objFieldCode').textContent = step.state.fieldCode;
+}
+
+function renderChips(containerId, items, cls) {
+  const container = $(containerId);
+  if (!container) return;
+  if (!items || items.length === 0) {
+    container.innerHTML = '<span style="font-family:var(--font-mono); font-size:0.68rem; color:var(--text-faint);">[empty]</span>';
+    return;
+  }
+  container.innerHTML = items.map(it => {
+    const isDead = it.includes('DEAD');
+    return `<span class="chip ${cls} ${isDead ? 'dead' : ''}">${esc(it)}</span>`;
+  }).join('');
+}
+
+function renderLocals(containerId, locals) {
+  const container = $(containerId);
+  if (!container) return;
+  if (!locals || locals.length === 0) {
+    container.innerHTML = '<div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-faint);">[Frame not initialized / popped]</div>';
+    return;
+  }
+  container.innerHTML = locals.map(l => `
+    <div class="slot-row">
+      <span class="slot-label">Slot ${l.slot} (${l.name}):</span>
+      <span class="chip ${l.type}">${esc(l.val)}</span>
+    </div>
+  `).join('');
+}
+
+function renderOpStack(containerId, items) {
+  const container = $(containerId);
+  if (!container) return;
+  if (!items || items.length === 0) {
+    container.innerHTML = '<div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-faint); text-align:center;">[empty]</div>';
+    return;
+  }
+  container.innerHTML = items.map(it => `<div class="op-item">${esc(it)}</div>`).join('');
+}
+
+function goToStep(stepIndex) {
+  currentStep = Math.max(0, Math.min(CODE_STEPS.length - 1, stepIndex));
+  updateUI();
+}
+
+function nextStep() {
+  if (currentStep < CODE_STEPS.length - 1) {
+    goToStep(currentStep + 1);
+  } else {
+    pauseWalk();
+  }
+}
+
+function prevStep() {
+  if (currentStep > 0) {
+    goToStep(currentStep - 1);
+  }
+}
+
+function resetWalk() {
+  pauseWalk();
+  goToStep(0);
+}
+
+function playWalk() {
+  if (isPlaying) {
+    pauseWalk();
+    return;
+  }
+  if (currentStep >= CODE_STEPS.length - 1) {
+    goToStep(0);
+  }
+  isPlaying = true;
+  $('playText').textContent = 'Pause';
+  $('playIcon').innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+  
+  const speed = parseInt($('stepSpeed').value, 10) || 2000;
+  playTimer = setInterval(() => {
+    if (currentStep < CODE_STEPS.length - 1) {
+      goToStep(currentStep + 1);
+    } else {
+      pauseWalk();
+    }
+  }, speed);
+}
+
+function pauseWalk() {
+  isPlaying = false;
+  clearInterval(playTimer);
+  playTimer = null;
+  $('playText').textContent = 'Play Walk';
+  $('playIcon').innerHTML = '<path d="M5 3l14 9-14 9V3z"/>';
+}
+
+// Event Listeners for Controls
+$('memNext').addEventListener('click', () => { pauseWalk(); nextStep(); });
+$('memPrev').addEventListener('click', () => { pauseWalk(); prevStep(); });
+$('memPlay').addEventListener('click', playWalk);
+$('memReset').addEventListener('click', resetWalk);
+
+$('stepSlider').addEventListener('input', (e) => {
+  pauseWalk();
+  goToStep(parseInt(e.target.value, 10));
+});
+
+$('stepSpeed').addEventListener('change', () => {
+  if (isPlaying) {
+    pauseWalk();
+    playWalk();
+  }
+});
+
+// Deep Dive Tabs Event Handling
+document.querySelectorAll('.mem-tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mem-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.mem-tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    const tabId = btn.dataset.tab;
+    if ($(tabId)) $(tabId).classList.add('active');
+  });
+});
+
+/* ================================================================
+   FAILURE MODE SIMULATORS: SOE & OOM
+================================================================ */
+
+/* SOE Simulator */
+const soeSeq = Seq();
+function playSOE() {
+  soeSeq.cancel();
+  $('soePile').innerHTML = '';
+  $('soeDepth').textContent = '0';
+  const steps = [];
+  for (let i = 0; i < 16; i++) {
+    steps.push([ i === 0 ? 80 : 70, () => {
+      const f = document.createElement('div');
+      f.className = 'spframe';
+      f.textContent = `frame #${(i + 1) * 1000} · process() [locals: n, qty]`;
+      $('soePile').appendChild(f);
+      $('soeDepth').textContent = ((i + 1) * 1000).toLocaleString();
+      $('soeStatus').textContent = `Pushing frames: Thread stack filling toward -Xss limit.`;
+      $('soePile').scrollTop = $('soePile').scrollHeight;
+    }]);
+  }
+  steps.push([120, () => {
+    const f = document.createElement('div');
+    f.className = 'spframe over';
+    f.textContent = '✗ java.lang.StackOverflowError: Stack boundary exceeded';
+    $('soePile').appendChild(f);
+    $('soeStatus').innerHTML = '<b>StackOverflowError:</b> Recursion depth exhausted <code>-Xss1m</code> thread stack boundary. Heap space was completely unaffected.';
+    $('soePile').scrollTop = $('soePile').scrollHeight;
+  }]);
+  soeSeq.run(steps);
+}
+
+/* OOM Simulator */
+const oomSeq = Seq();
+function playOOM(keep) {
+  oomSeq.cancel();
+  let alloc = 0, live = 0, gcs = 0;
+  const CAP = 64;
+  const steps = [];
+  for (let i = 0; i < 20; i++) {
+    steps.push([ i === 0 ? 90 : 140, () => {
+      alloc += 4;
+      if (keep) {
+        live += 4;
+        $('oomStatus').textContent = `Allocated ${alloc} MB. References held in static collection → uncollectable.`;
+      } else {
+        live += 4;
+        if (live >= 24) {
+          gcs++;
+          live = 4;
+          $('oomStatus').textContent = `Allocated ${alloc} MB. Minor/Major GC #${gcs} reclaimed dead arrays instantly.`;
+        }
+      }
+      $('oomAlloc').textContent = alloc + ' MB';
+      $('oomLive').textContent = live + ' MB';
+      const pct = Math.min(100, (live / CAP) * 100);
+      $('oomBar').style.width = pct + '%';
+      $('oomBar').style.background = pct > 85 ? 'var(--danger)' : 'var(--verdant)';
+      if (keep && live >= CAP) {
+        $('oomStatus').innerHTML = '<b>java.lang.OutOfMemoryError: Java heap space:</b> 64 MB heap exhausted. Garbage collector cannot reclaim reachable objects.';
+        oomSeq.cancel();
+      }
+    }]);
+  }
+  steps.push([180, () => {
+    if (!keep) {
+      $('oomStatus').innerHTML = `<b>Success:</b> Allocated ${alloc} MB with ${gcs} GC cycles without pressure. Allocation is cheap — retention is the cause of OOM.`;
+    }
+  }]);
+  oomSeq.run(steps);
+}
+
+$('soePlay').addEventListener('click', playSOE);
+$('oomKeep').addEventListener('click', () => playOOM(true));
+$('oomDrop').addEventListener('click', () => playOOM(false));
+
+// Initialize Code Walk
+renderCodeWalkLines();
+goToStep(0);
+</script>
+</body>
+</html>

@@ -1,0 +1,310 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "One Java Program, Inside the JVM",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "src/htmlDocuments/jvm/jvm-internals-guided-tour.html",
+    "viewBox": [720, 900],
+    "views": [
+      {
+        "id": "build_load",
+        "label": "1. Build and load",
+        "focus": ["source_program", "class_file", "class_lifecycle", "metaspace"],
+        "note": "Follow source code into a verified, linked, and initialized runtime class."
+      },
+      {
+        "id": "static_instance",
+        "label": "2. Static vs instance",
+        "focus": ["class_lifecycle", "metaspace", "heap_state", "thread_memory"],
+        "note": "Separate class metadata, static values, object fields, and local references."
+      },
+      {
+        "id": "execute_compile",
+        "label": "3. Interpret and compile",
+        "focus": ["interpreter", "tiered_jit", "c1_compiler", "c2_compiler", "native_code"],
+        "note": "Watch profiling promote hot bytecode from interpretation to optimized machine code."
+      },
+      {
+        "id": "memory_gc",
+        "label": "4. Memory and GC",
+        "focus": ["thread_memory", "heap_state", "metaspace", "native_code", "garbage_collector"],
+        "note": "See what is thread-local, what is shared, and what garbage collection can reclaim."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "build", "label": "Source and class file" },
+    { "id": "class_runtime", "label": "Class loading and metadata" },
+    { "id": "execution", "label": "Execution engine" },
+    { "id": "compilers", "label": "Tiered JIT compilers" },
+    { "id": "thread_memory_lane", "label": "Per-thread runtime memory" },
+    { "id": "shared_memory", "label": "Shared heap and GC" }
+  ],
+  "phases": [
+    { "id": "compile_phase", "label": "Compile", "fromCol": 0, "toCol": 1 },
+    { "id": "prepare_phase", "label": "Load and prepare", "fromCol": 2, "toCol": 2, "variant": "emphasis" },
+    { "id": "run_phase", "label": "Run, profile, optimize", "fromCol": 3, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": [
+    "source_program",
+    "class_file",
+    "class_lifecycle",
+    "interpreter",
+    "tiered_jit",
+    "native_code"
+  ],
+  "nodes": [
+    {
+      "id": "source_program",
+      "lane": "build",
+      "col": 0,
+      "type": "frontend",
+      "label": "JvmTour.java",
+      "sublabel": "static + instances",
+      "tag": "source"
+    },
+    {
+      "id": "class_file",
+      "lane": "build",
+      "col": 1,
+      "type": "database",
+      "label": "JvmTour.class",
+      "sublabel": "bytecode + constants",
+      "tag": "javac output"
+    },
+    {
+      "id": "class_lifecycle",
+      "lane": "class_runtime",
+      "col": 2,
+      "type": "security",
+      "label": "Load + Link",
+      "sublabel": "verify + prepare",
+      "tag": "then <clinit>",
+      "width": 112
+    },
+    {
+      "id": "metaspace",
+      "lane": "class_runtime",
+      "col": 4,
+      "type": "cloud",
+      "label": "Metaspace",
+      "sublabel": "class metadata",
+      "tag": "native memory"
+    },
+    {
+      "id": "interpreter",
+      "lane": "execution",
+      "col": 2,
+      "type": "backend",
+      "label": "Interpreter",
+      "sublabel": "runs main bytecode",
+      "tag": "profiles calls",
+      "width": 108
+    },
+    {
+      "id": "tiered_jit",
+      "lane": "execution",
+      "col": 4,
+      "type": "messagebus",
+      "label": "Tiered JIT",
+      "sublabel": "hotness levels",
+      "tag": "0 -> C1 -> C2"
+    },
+    {
+      "id": "native_code",
+      "lane": "execution",
+      "col": 5,
+      "type": "backend",
+      "label": "Code Cache",
+      "sublabel": "machine code",
+      "tag": "CPU executes"
+    },
+    {
+      "id": "c1_compiler",
+      "lane": "compilers",
+      "col": 4,
+      "type": "backend",
+      "label": "C1 Compiler",
+      "sublabel": "quick compile",
+      "tag": "light optimize"
+    },
+    {
+      "id": "c2_compiler",
+      "lane": "compilers",
+      "col": 5,
+      "type": "backend",
+      "label": "C2 Compiler",
+      "sublabel": "deep optimize",
+      "tag": "speculative"
+    },
+    {
+      "id": "thread_memory",
+      "lane": "thread_memory_lane",
+      "col": 3,
+      "type": "external",
+      "label": "Thread",
+      "sublabel": "PC + frames",
+      "tag": "stacks",
+      "width": 54
+    },
+    {
+      "id": "heap_state",
+      "lane": "shared_memory",
+      "col": 2,
+      "type": "database",
+      "label": "Heap",
+      "sublabel": "objects + arrays",
+      "tag": "mirror + statics",
+      "width": 70
+    },
+    {
+      "id": "garbage_collector",
+      "lane": "shared_memory",
+      "col": 5,
+      "type": "cloud",
+      "label": "GC",
+      "sublabel": "trace + reclaim",
+      "tag": "G1 / ZGC / etc.",
+      "width": 90
+    }
+  ],
+  "edges": [
+    {
+      "id": "compile_source",
+      "from": "source_program",
+      "to": "class_file",
+      "role": "main",
+      "variant": "default"
+    },
+    {
+      "id": "load_class",
+      "from": "class_file",
+      "to": "class_lifecycle",
+      "role": "main",
+      "variant": "emphasis"
+    },
+    {
+      "id": "begin_execution",
+      "from": "class_lifecycle",
+      "to": "interpreter",
+      "role": "main",
+      "variant": "default"
+    },
+    {
+      "id": "profile_hot_code",
+      "from": "interpreter",
+      "to": "tiered_jit",
+      "label": "hot profiles",
+      "role": "main",
+      "variant": "emphasis"
+    },
+    {
+      "id": "run_native_code",
+      "from": "tiered_jit",
+      "to": "native_code",
+      "role": "main",
+      "variant": "emphasis"
+    },
+    {
+      "id": "store_metadata",
+      "from": "class_lifecycle",
+      "to": "metaspace",
+      "label": "metadata",
+      "role": "branch",
+      "variant": "dashed"
+    },
+    {
+      "id": "allocate_objects",
+      "from": "interpreter",
+      "to": "heap_state",
+      "role": "branch",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    },
+    {
+      "id": "push_frames",
+      "from": "interpreter",
+      "to": "thread_memory",
+      "role": "branch",
+      "variant": "default"
+    },
+    {
+      "id": "select_c1",
+      "from": "tiered_jit",
+      "to": "c1_compiler",
+      "role": "branch",
+      "variant": "default"
+    },
+    {
+      "id": "promote_to_c2",
+      "from": "c1_compiler",
+      "to": "c2_compiler",
+      "role": "branch",
+      "variant": "emphasis"
+    },
+    {
+      "id": "install_c2_code",
+      "from": "c2_compiler",
+      "to": "native_code",
+      "role": "return",
+      "variant": "emphasis"
+    },
+    {
+      "id": "find_garbage",
+      "from": "heap_state",
+      "to": "garbage_collector",
+      "role": "async",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "The program followed in every stage",
+      "items": [
+        "class JvmTour { static int created = 0; final int id; }",
+        "JvmTour(int id) { this.id = id; created++; }",
+        "int work() { return id * 2; }",
+        "main creates many JvmTour objects and repeatedly calls work()",
+        "The loop makes work() hot enough to demonstrate tiered JIT compilation"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Static, instance, local: do not mix them up",
+      "items": [
+        "Metaspace: class shape, method metadata, bytecode, runtime constant pool",
+        "Heap Class mirror: the static field value JvmTour.created",
+        "Heap instance: each object's id field and object header",
+        "Stack frame: parameters, local variables, operand stack, return data",
+        "A local reference is in a frame; the referenced object remains on the heap"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Execution becomes faster as evidence grows",
+      "items": [
+        "Interpreter starts immediately and records branch, call, and type profiles",
+        "C1 produces useful machine code quickly; higher tiers retain profiling",
+        "C2 spends more time on inlining, escape analysis, and speculative optimization",
+        "OSR can enter compiled code inside a running hot loop",
+        "A failed assumption triggers deoptimization back to reconstructed interpreter frames"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "What garbage collection actually controls",
+      "items": [
+        "Roots include active frame references, JNI handles, and live class static references",
+        "Young, mixed, or full cycles depend on collector and allocation pressure",
+        "Safepoints coordinate operations that need a consistent JVM view",
+        "GC reclaims unreachable heap objects; stack frames disappear when calls return",
+        "Class unloading can reclaim Metaspace only after its defining loader becomes unreachable"
+      ]
+    }
+  ]
+}

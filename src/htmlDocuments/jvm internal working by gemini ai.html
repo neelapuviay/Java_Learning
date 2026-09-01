@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>JVM Bytecode Execution Visualizer</title>
+<style>
+  :root {
+    --bg-dark: #1e1e2e;
+    --card-bg: #282a36;
+    --accent: #50fa7b;
+    --cyan: #8be9fd;
+    --yellow: #f1fa8c;
+    --pink: #ff79c6;
+    --purple: #bd93f9;
+    --text: #f8f8f2;
+    --border: #44475a;
+  }
+  * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; }
+  body { background: var(--bg-dark); color: var(--text); margin: 0; padding: 20px; }
+  h1 { text-align: center; margin-bottom: 5px; font-size: 24px; color: var(--cyan); }
+  p.sub { text-align: center; color: #a0a0a0; margin-top: 0; font-size: 14px; }
+  
+  .controls {
+    display: flex; justify-content: center; align-items: center; gap: 12px;
+    background: var(--card-bg); padding: 12px; border-radius: 8px; margin-bottom: 20px;
+    border: 1px solid var(--border);
+  }
+  button {
+    background: var(--purple); color: #1e1e2e; border: none; padding: 8px 16px;
+    font-weight: bold; border-radius: 4px; cursor: pointer; transition: 0.2s;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.2); }
+  button:disabled { background: #555; cursor: not-allowed; color: #888; }
+  .step-display { font-weight: bold; font-size: 16px; color: var(--yellow); }
+
+  .status-box {
+    background: #191a21; border-left: 5px solid var(--cyan); padding: 12px 16px;
+    border-radius: 4px; margin-bottom: 20px; font-size: 15px; min-height: 48px;
+    display: flex; align-items: center;
+  }
+
+  .grid-container {
+    display: grid;
+    grid-template-columns: 1.2fr 1.5fr 1.3fr;
+    grid-gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .panel {
+    background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; display: flex; flex-direction: column;
+  }
+  .panel h3 { margin-top: 0; font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 6px; color: var(--pink); }
+
+  /* Bytecode List */
+  .code-line {
+    padding: 6px 10px; border-radius: 4px; font-family: monospace; font-size: 13px;
+    margin-bottom: 4px; display: flex; justify-content: space-between;
+  }
+  .code-line.active {
+    background: #44475a; border-left: 4px solid var(--accent); font-weight: bold; color: var(--accent);
+  }
+  .pc-badge {
+    background: var(--pink); color: #1e1e2e; padding: 1px 6px; border-radius: 3px;
+    font-weight: bold; font-size: 11px;
+  }
+
+  /* Memory Tables */
+  .mem-section { margin-bottom: 15px; }
+  .mem-title { font-size: 13px; font-weight: bold; color: var(--yellow); margin-bottom: 6px; }
+  .table { width: 100%; border-collapse: collapse; font-size: 13px; font-family: monospace; }
+  .table th, .table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+  .table th { background: #191a21; color: var(--cyan); }
+  .highlight-row { background: rgba(80, 250, 123, 0.15); }
+
+  /* Stack visualizer */
+  .stack-visual {
+    display: flex; flex-direction: column-reverse; gap: 4px; min-height: 80px;
+    background: #191a21; border: 1px dashed var(--border); border-radius: 4px; padding: 6px;
+  }
+  .stack-item {
+    background: var(--cyan); color: #1e1e2e; font-weight: bold; text-align: center;
+    padding: 6px; border-radius: 3px; font-size: 12px; font-family: monospace;
+    animation: fadeIn 0.3s ease;
+  }
+
+  /* Heap cards */
+  .heap-card {
+    background: #191a21; border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 12px; margin-bottom: 8px; font-family: monospace; font-size: 12px;
+  }
+  .heap-addr { color: var(--yellow); font-weight: bold; }
+  .heap-type { color: var(--purple); font-weight: bold; }
+
+  /* Console */
+  .console {
+    background: #000; color: #a6e22e; font-family: monospace; padding: 12px;
+    border-radius: 6px; min-height: 50px; font-size: 14px; border: 1px solid #333;
+  }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<h1>JVM Bytecode Execution Visualizer</h1>
+<p class="sub">Executing: <code>String msg = "Hello World"; System.out.println(msg);</code></p>
+
+<div class="controls">
+  <button id="prevBtn" onclick="prevStep()">◀ Previous Step</button>
+  <button id="nextBtn" onclick="nextStep()">Next Step ▶</button>
+  <button onclick="resetVisualizer()">⟲ Reset</button>
+  <span class="step-display" id="stepIndicator">Step 0 / 6</span>
+</div>
+
+<div class="status-box" id="statusMessage">
+  JVM initialized. Initial stack frame for <code>main(String[] args)</code> created. PC points to address 0.
+</div>
+
+<div class="grid-container">
+  
+  <!-- PANEL 1: Bytecode & Program Counter -->
+  <div class="panel">
+    <h3>Bytecode (Code Cache)</h3>
+    <div style="margin-bottom: 10px;">
+      <span style="font-size: 12px; color: var(--yellow);">Current PC: </span>
+      <span class="pc-badge" id="pcBadge">0</span>
+    </div>
+    <div id="bytecodeContainer"></div>
+  </div>
+
+  <!-- PANEL 2: Thread Stack -->
+  <div class="panel">
+    <h3>Thread Stack (Main Thread)</h3>
+    
+    <div class="mem-section">
+      <div class="mem-title">Stack Frame: <code>main(String[] args)</code></div>
+      <div style="font-size: 12px; color: #aaa; margin-bottom: 4px;">Local Variables Array:</div>
+      <table class="table" id="localVarsTable">
+        <thead><tr><th>Slot</th><th>Name</th><th>Value (Reference)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="mem-section">
+      <div style="font-size: 12px; color: #aaa; margin-bottom: 4px;">Operand Stack (Evaluation Scratchpad):</div>
+      <div class="stack-visual" id="operandStack"></div>
+    </div>
+  </div>
+
+  <!-- PANEL 3: Metaspace & Java Heap -->
+  <div class="panel">
+    <h3>Metaspace & Heap</h3>
+
+    <div class="mem-section">
+      <div class="mem-title">Metaspace: Constant Pool (Main.class)</div>
+      <table class="table" id="constantPoolTable">
+        <thead><tr><th>#Index</th><th>Entry</th></tr></thead>
+        <tbody>
+          <tr id="cp1"><td>#1</td><td>Fieldref: System.out</td></tr>
+          <tr id="cp2"><td>#2</td><td>String: "Hello World"</td></tr>
+          <tr id="cp3"><td>#3</td><td>Methodref: println()</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mem-section">
+      <div class="mem-title">Java Heap Space (Objects)</div>
+      <div id="heapContainer"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="panel">
+  <h3>Operating System Terminal (Standard Output)</h3>
+  <div class="console" id="consoleOutput">&gt; _</div>
+</div>
+
+<script>
+const bytecode = [
+  { pc: 0, text: "0: ldc #2", desc: "Constant pool entry #2 resolved. String reference 0x5001 pushed to Operand Stack." },
+  { pc: 2, text: "2: astore_1", desc: "Reference 0x5001 popped from Operand Stack and stored into Local Variable Slot 1 ('msg')." },
+  { pc: 3, text: "3: getstatic #1", desc: "Static field PrintStream (System.out @ 0x7777) resolved and pushed to Operand Stack." },
+  { pc: 6, text: "6: aload_1", desc: "Local Variable Slot 1 ('msg' @ 0x5001) read and pushed onto Operand Stack." },
+  { pc: 7, text: "7: invokevirtual #3", desc: "Both operands popped. JVM invokes PrintStream.println(msg). Characters routed to OS stdout." },
+  { pc: 10, text: "10: return", desc: "Method execution finished. main() stack frame deallocated from Thread Stack." }
+];
+
+const steps = [
+  {
+    step: 0,
+    pc: 0,
+    activeBytecode: 0,
+    locals: [{ slot: 0, name: "args", val: "0x1000 (String[])" }, { slot: 1, name: "msg", val: "<unassigned>" }],
+    stack: [],
+    highlightCP: null,
+    heap: [
+      { addr: "0x5001", type: "java.lang.String", val: '"Hello World"' },
+      { addr: "0x7777", type: "java.io.PrintStream", val: 'System.out' },
+      { addr: "0x1000", type: "String[0]", val: 'args array' }
+    ],
+    console: "> _",
+    status: "Initial State: Bytecode loaded in Metaspace. Main Thread stack frame created. PC points to 0."
+  },
+  {
+    step: 1,
+    pc: 2,
+    activeBytecode: 0,
+    locals: [{ slot: 0, name: "args", val: "0x1000 (String[])" }, { slot: 1, name: "msg", val: "<unassigned>" }],
+    stack: ["0x5001 (Ref to 'Hello World')"],
+    highlightCP: "cp2",
+    heap: [
+      { addr: "0x5001", type: "java.lang.String", val: '"Hello World"' },
+      { addr: "0x7777", type: "java.io.PrintStream", val: 'System.out' },
+      { addr: "0x1000", type: "String[0]", val: 'args array' }
+    ],
+    console: "> _",
+    status: "[PC=0: ldc #2] -> Metaspace Constant Pool #2 read. Address 0x5001 pushed to Operand Stack."
+  },
+  {
+    step: 2,
+    pc: 3,
+    activeBytecode: 1,
+    locals: [{ slot: 0, name: "args", val: "0x1000 (String[])" }, { slot: 1, name: "msg", val: "0x5001 (Ref)" }],
+    stack: [],
+    highlightCP: null,
+    heap: [
+      { addr: "0x5001", type: "java.lang.String", val: '"Hello World"' },
+      { addr: "0x7777", type: "java.io.PrintStream", val: 'System.out' },
+      { addr: "0x1000", type: "String[0]", val: 'args array' }
+    ],
+    console: "> _",
+    status: "[PC=2: astore_1] -> Popped 0x5001 from Operand Stack. Stored into Local Variable Slot 1 ('msg')."
+  },
+  {
+    step: 3,
+    pc: 6,
+    activeBytecode: 2,
+    locals: [{ slot: 0, name: "args", val: "0x1000 (String[])" }, { slot: 1, name: "msg", val: "0x5001 (Ref)" }],
+    stack: ["0x7777 (Ref to System.out)"],
+    highlightCP: "cp1",
+    heap: [
+      { addr: "0x5001", type: "java.lang.String", val: '"Hello World"' },
+      { addr: "0x7777", type: "java.io.PrintStream", val: 'System.out' },
+      { addr: "0x1000", type: "String[0]", val: 'args array' }
+    ],
+    console: "> _",
+    status: "[PC=3: getstatic #1] -> Metaspace resolved System.out. Pushed 0x7777 to Operand Stack."
+  },
+  {
+    step: 4,
+    pc: 7,
+    activeBytecode: 3,
+    locals: [{ slot: 0, name: "args", val: "0x1000 (String[])" }, { slot: 1, name: "msg", val: "0x5001 (Ref)" }],
+    stack: ["0x7777 (System.out)", "0x5001 (msg)"],
+    highlightCP: null,
+    heap: [
+      { addr: "0x5001", type: "java.lang.String", val: '"Hello World"' },
+      { addr: "0x7777", type: "java.io.PrintStream", val: 'System.out' },
+      { addr: "0x1000", type: "String[0]", val: 'args array' }
+    ],
+    console: "> _",
+    status: "[PC=6: aload_1] -> Read Local Slot 1 (0x5001) and pushed it on top of Operand Stack."
+  },
+  {
+    step: 5,
+    pc: 10,
+    activeBytecode: 4,
+    locals: [{ slot: 0, name: "args", val: "0x1000 (String[])" }, { slot: 1, name: "msg", val: "0x5001 (Ref)" }],
+    stack: [],
+    highlightCP: "cp3",
+    heap: [
+      { addr: "0x5001", type: "java.lang.String", val: '"Hello World"' },
+      { addr: "0x7777", type: "java.io.PrintStream", val: 'System.out' },
+      { addr: "0x1000", type: "String[0]", val: 'args array' }
+    ],
+    console: "> Hello World",
+    status: "[PC=7: invokevirtual #3] -> Popped operands. Executed println(). Output printed to console."
+  },
+  {
+    step: 6,
+    pc: "-",
+    activeBytecode: 5,
+    locals: [],
+    stack: [],
+    highlightCP: null,
+    heap: [
+      { addr: "0x5001", type: "java.lang.String", val: '"Hello World"' },
+      { addr: "0x7777", type: "java.io.PrintStream", val: 'System.out' }
+    ],
+    console: "> Hello World\n[Process completed with exit code 0]",
+    status: "[PC=10: return] -> main() stack frame popped. Execution completed. JVM shuts down."
+  }
+];
+
+let currentStep = 0;
+
+function render() {
+  const s = steps[currentStep];
+
+  document.getElementById("stepIndicator").innerText = `Step ${s.step} / ${steps.length - 1}`;
+  document.getElementById("statusMessage").innerHTML = s.status;
+  document.getElementById("pcBadge").innerText = s.pc;
+  document.getElementById("prevBtn").disabled = currentStep === 0;
+  document.getElementById("nextBtn").disabled = currentStep === steps.length - 1;
+
+  // Render Bytecode
+  const bcContainer = document.getElementById("bytecodeContainer");
+  bcContainer.innerHTML = "";
+  bytecode.forEach((b, idx) => {
+    const div = document.createElement("div");
+    div.className = "code-line" + (idx === s.activeBytecode ? " active" : "");
+    div.innerHTML = `<span>${b.text}</span>`;
+    bcContainer.appendChild(div);
+  });
+
+  // Render Locals
+  const localsTbody = document.querySelector("#localVarsTable tbody");
+  localsTbody.innerHTML = "";
+  if (s.locals.length === 0) {
+    localsTbody.innerHTML = "<tr><td colspan='3' style='text-align:center;color:#888;'>[Stack Frame Deallocated]</td></tr>";
+  } else {
+    s.locals.forEach(l => {
+      const row = document.createElement("tr");
+      if (l.val.includes("0x5001") && s.step === 2) row.className = "highlight-row";
+      row.innerHTML = `<td>${l.slot}</td><td>${l.name}</td><td>${l.val}</td>`;
+      localsTbody.appendChild(row);
+    });
+  }
+
+  // Render Operand Stack
+  const stackDiv = document.getElementById("operandStack");
+  stackDiv.innerHTML = "";
+  if (s.stack.length === 0) {
+    stackDiv.innerHTML = "<div style='text-align:center; color:#666; font-size:11px; padding:10px;'>[Empty Stack]</div>";
+  } else {
+    s.stack.forEach(item => {
+      const el = document.createElement("div");
+      el.className = "stack-item";
+      el.innerText = item;
+      stackDiv.appendChild(el);
+    });
+  }
+
+  // Constant Pool Highlights
+  ["cp1", "cp2", "cp3"].forEach(id => {
+    document.getElementById(id).classList.remove("highlight-row");
+  });
+  if (s.highlightCP) {
+    document.getElementById(s.highlightCP).classList.add("highlight-row");
+  }
+
+  // Render Heap
+  const heapDiv = document.getElementById("heapContainer");
+  heapDiv.innerHTML = "";
+  s.heap.forEach(obj => {
+    const card = document.createElement("div");
+    card.className = "heap-card";
+    card.innerHTML = `<span class="heap-addr">${obj.addr}</span> | <span class="heap-type">${obj.type}</span><br>Value: ${obj.val}`;
+    heapDiv.appendChild(card);
+  });
+
+  // Render Console
+  document.getElementById("consoleOutput").innerText = s.console;
+}
+
+function nextStep() {
+  if (currentStep < steps.length - 1) {
+    currentStep++;
+    render();
+  }
+}
+
+function prevStep() {
+  if (currentStep > 0) {
+    currentStep--;
+    render();
+  }
+}
+
+function resetVisualizer() {
+  currentStep = 0;
+  render();
+}
+
+render();
+</script>
+
+</body>
+</html>

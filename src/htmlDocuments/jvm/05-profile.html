@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>05 · Profiling &amp; Tier Counters — Inside the JVM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/jvm-theme.css">
+</head>
+<body>
+
+<div class="stage-container">
+  <header class="stage-head">
+    <span class="stage-num-badge">STAGE 05</span>
+    <h1>Profiling &amp; Tiered Compilation Counters — How HotSpot Spots Hot Code</h1>
+    <span class="stage-tag">telemetry &amp; threshold engine</span>
+  </header>
+
+  <p class="stage-desc">
+    HotSpot does not compile code immediately. It attaches lightweight profiling counters to every method entry and loop back-edge. As counters accumulate execution "heat", the method crosses thresholds and triggers asynchronous background compilation by <b>C1 (Client)</b> and subsequently <b>C2 (Server)</b> compilers.
+  </p>
+
+
+  <div class="mental">
+    <span class="lbl">Mental model — hold this picture</span>
+    <p>A factory floor manager cannot rebuild every workstation, so she carries a tally counter. Every time a worker performs a task, she clicks. Most tasks get two or three clicks and are forgotten. A handful get clicked thousands of times — and <b>those</b> get the custom jig built for them, because only there will the investment pay back.</p>
+    <p>Crucially, she does not just count. While counting she also <i>notices things</i>: this station always receives the same part; that inspection never fails; this queue is always exactly eight items long. When the jig is finally built, it is built <b>around those observations</b> — and it comes with a tripwire, so that if a different part ever shows up, the jig is thrown away rather than producing a wrong result.</p>
+    <p>The counters are HotSpot's invocation and back-edge counters. The observations are the <b>profile</b>. The tripwire is deoptimization (Stage&nbsp;07). <b>An ahead-of-time compiler has the jig-building skill but never gets to watch the floor</b> — that difference is the entire argument for JIT.</p>
+  </div>
+  <!-- Interactive Controls Bar -->
+  <div class="panel" style="margin-bottom:20px; padding:18px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div class="btn-row">
+        <button class="btn btn-primary" id="c4Warm" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 5l7 7-7 7M4 5l7 7-7 7"/></svg>
+          Warm up (+500 iters)
+        </button>
+        <button class="btn btn-amber" id="c4ToC1" type="button">
+          Run to Tier 3 (C1)
+        </button>
+        <button class="btn btn-steel" id="c4ToC2" type="button">
+          Run to Tier 4 (C2)
+        </button>
+        <button class="btn btn-ghost" id="c4Reset" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>
+          Reset
+        </button>
+      </div>
+
+      <div style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-faint);">
+        Current Tier: <span id="c4TierLabel" style="color:var(--steel); font-weight:700;">Tier 0 · Interpreter</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <!-- Telemetry Gauge -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>Method Heat Gauge</span>
+        <span>Telemetry Meter</span>
+      </div>
+      <div class="gauge-box">
+        <div style="font-family:var(--font-mono); font-size:2.2rem; font-weight:700; color:var(--text);" id="gaugeReadout">
+          0
+        </div>
+        <div style="font-size:0.85rem; color:var(--text-dim); margin-top:4px;" id="gaugeCaption">
+          heat toward C1 · 0 / 1,200
+        </div>
+        <div class="gauge-track">
+          <div class="gauge-fill" id="gaugeFill"></div>
+        </div>
+      </div>
+
+      <!-- Tier Node States -->
+      <div class="tier-nodes">
+        <div class="tier-node tier-active-0" id="tierNode0">
+          <div style="font-size:0.7rem; text-transform:uppercase; margin-bottom:4px;">Tier 0</div>
+          <div>Interpreter</div>
+        </div>
+        <div class="tier-node" id="tierNode1">
+          <div style="font-size:0.7rem; text-transform:uppercase; margin-bottom:4px;">Tier 3</div>
+          <div>C1 + Profile</div>
+        </div>
+        <div class="tier-node" id="tierNode2">
+          <div style="font-size:0.7rem; text-transform:uppercase; margin-bottom:4px;">Tier 4</div>
+          <div>C2 Native</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Threshold Tuning & Live Counters -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>Compilation Thresholds</span>
+        <span>HotSpot Flags</span>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:18px;">
+        <div class="metric">
+          <div class="m-lbl">Invocations</div>
+          <div class="m-val" id="invocationCount" style="color:var(--steel);">0</div>
+        </div>
+        <div class="metric">
+          <div class="m-lbl">Loop Backedges</div>
+          <div class="m-val" id="backedgeCount" style="color:var(--amber);">0</div>
+        </div>
+      </div>
+
+      <div style="font-family:var(--font-mono); font-size:0.8rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span>-XX:Tier3InvocationThreshold</span>
+          <input type="number" id="c1ThresholdInput" value="1200" style="width:80px; background:var(--panel-inset); border:1px solid var(--border); color:var(--text); padding:4px 8px; border-radius:4px; font-family:var(--font-mono); text-align:right;">
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span>-XX:Tier4InvocationThreshold</span>
+          <input type="number" id="c2ThresholdInput" value="7000" style="width:80px; background:var(--panel-inset); border:1px solid var(--border); color:var(--text); padding:4px 8px; border-radius:4px; font-family:var(--font-mono); text-align:right;">
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span>Total Iterations Target</span>
+          <input type="number" id="totalIterationsInput" value="15000" style="width:80px; background:var(--panel-inset); border:1px solid var(--border); color:var(--text); padding:4px 8px; border-radius:4px; font-family:var(--font-mono); text-align:right;">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="plain amber" id="osrNote" style="margin-top:20px;">
+    <span class="lbl">Standard Recompilation vs On-Stack Replacement (OSR)</span>
+    <code>accumulate()</code> is an independent method call, so once it crosses thresholds, the next method invocation dispatches to the newly compiled machine code in the CodeCache. If the work had stayed in a continuous long-running loop inside <code>main()</code>, the invocation counter would never trigger — requiring HotSpot to swap compiled code into the live running loop frame mid-execution (OSR).
+  </div>
+
+
+  <h3 class="sub">
+    <span class="kicker">Read this while turning the counters</span>
+    How HotSpot decides what is worth compiling
+  </h3>
+  <div class="prose">
+    <p>The JIT <b>watches how the code is being executed</b>. It tracks which methods are frequently called and keeps a count for each one. When a count crosses a threshold, that method is compiled and <b>its machine code is saved in the Code Cache, so the JIT never has to compile it again</b>. That is the whole loop, and everything below is detail on it.</p>
+
+    <h4>Two counters, because there are two ways to be hot</h4>
+    <p>Each method carries an <b>invocation counter</b> (incremented on entry) and a <b>back-edge counter</b> (incremented every time control jumps backwards — i.e. every loop iteration). Two counters exist because there are two genuinely different shapes of hot code:</p>
+    <ul>
+      <li>A small method called a million times — caught by the invocation counter, and the next call simply dispatches to the compiled version.</li>
+      <li>A method called <b>once</b> that loops a million times — the invocation counter stays at 1 forever. Only the back-edge counter notices. Compiled code then has to be installed into a frame that is already executing, which is <b>On-Stack Replacement</b>.</li>
+    </ul>
+    <p>HotSpot actually triggers on a combination (roughly: invocations, or invocations&nbsp;+&nbsp;back-edges against a higher bar), and the thresholds are scaled dynamically by how busy the compiler queues are — a method will be compiled at a lower count when the compiler is idle. This is why the numbers you set in the panel are guidance, not a contract.</p>
+
+    <h4>The tiers, and why there are five of them</h4>
+    <p>Tiered compilation exists because the two compilers have opposite strengths. <b>C1 compiles fast and optimizes lightly; C2 compiles slowly and optimizes aggressively.</b> Rather than choosing, HotSpot uses both:</p>
+    <ul>
+      <li><b>Tier 0 — Interpreter.</b> Everything starts here. Slow, but instant to start and it gathers the initial profile.</li>
+      <li><b>Tier 3 — C1 with full profiling.</b> The normal second step. Roughly 5–10× faster than interpreted, while still collecting the rich telemetry C2 will need. You pay a profiling overhead here <i>on purpose</i>.</li>
+      <li><b>Tier 4 — C2.</b> Peak native code, no profiling overhead, built on the data Tier&nbsp;3 gathered.</li>
+      <li><b>Tier 1 — C1, no profiling.</b> For trivial methods (a getter) where C2 could never do better. Compiled once and left alone.</li>
+      <li><b>Tier 2 — C1, limited profiling.</b> A pressure-relief path used when the C2 queue is long.</li>
+    </ul>
+    <p>The important insight is that <b>Tier 3 is deliberately slower than it could be</b>. It carries instrumentation it does not need for itself, purely so that Tier&nbsp;4 can be excellent. Warm-up is the price of that, and speculative optimization is what it buys.</p>
+
+    <h4>What is in the profile</h4>
+    <p>Counters are only the trigger. The data that makes C2 worth waiting for is:</p>
+    <ul>
+      <li><b>Receiver type profiles</b> at each virtual call site — "this <code>List</code> has been an <code>ArrayList</code> 100% of 40,000 times." That single fact enables inlining a virtual call, which unlocks nearly every other optimization.</li>
+      <li><b>Branch frequencies</b> — "this null check has never been true", "this exception branch has never been taken". Cold paths get moved out of line or replaced with an uncommon trap.</li>
+      <li><b>Loop trip counts</b> — how far to unroll, whether vectorizing pays.</li>
+      <li><b>Type and null-ness of values</b>, enabling checks to be hoisted or removed entirely.</li>
+    </ul>
+    <p>None of this is knowable statically. This is exactly the "true strength of the JIT approach": speculative optimizations grounded in observed behaviour, which vendors have measured at <b>up to 50% performance gains</b> over what the same compiler could do without a profile.</p>
+
+    <h4>Compilation is asynchronous — and that shapes what you measure</h4>
+    <p>Crossing a threshold does not pause your thread. It <b>enqueues</b> a compilation request; background compiler threads do the work; the application keeps running at its current tier and only picks up the compiled code once it is installed. A busy queue therefore means methods stay slow for longer, which is why the first seconds after a deploy are the worst seconds — thousands of methods cross their thresholds simultaneously and contend for the same handful of compiler threads.</p>
+    <p>The practical consequence: <b>the JVM's performance at time T tells you almost nothing about its performance at time T+30s.</b> Any measurement that does not discard warm-up is measuring the compiler, not the application.</p>
+  </div>
+
+  <div class="factgrid">
+    <div>-XX:+PrintCompilation</div><div>One line per compilation: method, tier, size, and flags like <code>%</code> (OSR), <code>s</code> (synchronized), <code>!</code> (has exception handlers), <code>made not entrant</code> (deoptimized). The single most informative flag for understanding warm-up.</div>
+    <div>-XX:+UnlockDiagnosticVMOptions<br>-XX:+PrintInlining</div><div>Shows every inlining decision and, more usefully, every <b>refusal</b> with its reason (<code>too big</code>, <code>not inlineable</code>, <code>callee is too large</code>).</div>
+    <div>-XX:TieredStopAtLevel=1</div><div>C1 only. Fast to warm up, ~2–3× slower at peak. Genuinely correct for short-lived CLI tools and batch jobs that never reach steady state.</div>
+    <div>-XX:-TieredCompilation</div><div>C2 only, no C1 stepping stone. Slower warm-up, occasionally better peak. Rarely the right answer today.</div>
+    <div>-XX:CICompilerCount</div><div>Number of background compiler threads. Worth bounding on small containers where compiler threads steal CPU from request handling during the startup storm.</div>
+    <div>ReservedCodeCacheSize</div><div>If the code cache fills, <b>the JIT switches off entirely</b> and everything reverts to interpreted speed — a silent, catastrophic throughput collapse. Watch for <code>CodeCache is full. Compiler has been disabled.</code></div>
+  </div>
+
+  <h3 class="sub">
+    <span class="kicker">Interview drill · stage 05</span>
+    Questions they actually ask about profiling &amp; tiered compilation
+  </h3>
+
+  <details class="qa">
+    <summary>What is tiered compilation and why not just always use C2?</summary>
+    <div class="ans">
+      <p>Tiered compilation runs the interpreter, C1 and C2 as a <b>ladder</b>, promoting each method as it proves itself worth more investment.</p>
+      <p>Always-C2 fails on both ends. <b>Compilation is expensive</b> — C2 can take milliseconds per method and there are thousands of methods, so startup would crawl. And <b>C2 needs a profile to be good</b>; compiling immediately means compiling blind, and a blind C2 is not much better than C1 while costing far more.</p>
+      <p>The elegant part is that C1 solves both problems at once: it makes the code fast <i>enough</i> quickly, and it collects the profiling data that makes the eventual C2 compilation excellent. <b>Tier 3 pays a tax so Tier 4 can be exceptional.</b></p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>What is On-Stack Replacement and when does it matter?</summary>
+    <div class="ans">
+      <p>OSR is HotSpot swapping compiled code into a method invocation that is <b>already executing</b>. It exists for the case where the invocation counter can never help: a long-running loop inside a method that is called once.</p>
+      <p>Mechanically, the compiler produces a special OSR entry point that accepts the current interpreter state — the locals and operand stack as they are <i>right now</i>, at a specific bytecode index — reconstructs them into the compiled frame's register layout, and jumps in mid-loop.</p>
+      <p><b>Where it matters in practice:</b> naïve benchmarks. Putting your hot loop directly in <code>main()</code> measures OSR-compiled code, which is typically <i>worse</i> than normally-compiled code — the compiler has less freedom because it must accept an arbitrary entry state, and loop-invariant hoisting is constrained. This is one of several reasons JMH puts the work in a separate method.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · Your service is fast in load tests but the first 60&nbsp;seconds after every deploy show 10× worse p99, causing alerts on every rollout. What is happening and what do you actually do?</summary>
+    <div class="ans">
+      <p><b>This is warm-up, and it is not a bug.</b> Three costs are stacking in those 60 seconds: thousands of classes being loaded, verified and initialised (Stage&nbsp;03); every method executing at Tier&nbsp;0 or Tier&nbsp;3; and the compiler queue saturated so promotions arrive late. On top of that, the CPU spent compiling is CPU not spent serving.</p>
+      <p><b>Confirm before acting</b> — <code>-XX:+PrintCompilation</code> plus a timestamped request-latency log, or JFR's Compilation and Class Loading events. Verify the tail actually tracks compilation activity rather than, say, a cold connection pool or an empty cache.</p>
+      <p><b>Fixes, ordered by leverage:</b></p>
+      <ul>
+        <li><b>Warm the instance before it takes traffic.</b> A readiness probe that only passes after N synthetic requests over the real endpoints. Cheap, boring, and by far the most effective thing on this list.</li>
+        <li><b>Roll out more slowly</b> — smaller batches, or a load-balancer slow-start ramp, so a cold instance never receives full share.</li>
+        <li><b>AppCDS</b> to eliminate most of the class-loading portion.</li>
+        <li><b>Give the JVM more CPU at startup</b> than at steady state (Kubernetes startup probes plus a generous limit) so compiler threads are not competing with request threads.</li>
+        <li><b>Adjust the alert.</b> If a 60-second warm-up is inherent, alerting on p99 during a known deploy window is a monitoring bug, not a JVM one.</li>
+        <li>If the process is genuinely short-lived, this is the case for <b>AOT / native image</b> — full speed from instruction one, at the cost of the speculative optimizations discussed in Stage&nbsp;06.</li>
+      </ul>
+      <p><b>What not to do:</b> raise thresholds so things compile "sooner". Lower thresholds mean compiling on a thinner profile, producing worse code and more deoptimization — you usually make steady state worse to make warm-up marginally better.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · A long-running service is fine for days, then throughput collapses ~5× with no GC change, no traffic change, and no errors. What do you check first?</summary>
+    <div class="ans">
+      <p><b>Check the code cache.</b> The signature — sudden, permanent, no GC involvement, no exceptions — matches <code>CodeCache is full. Compiler has been disabled.</code> almost uniquely. Once the code cache fills, HotSpot stops compiling and, on older JDKs, may not recover even after methods are flushed. Everything drifts back toward interpreted speed as compiled methods are evicted.</p>
+      <p><b>How to confirm:</b> <code>jcmd &lt;pid&gt; VM.native_memory summary</code> or <code>Compiler.codecache</code>; JMX <code>MemoryPoolMXBean</code> for the <code>CodeHeap</code> pools; or just grep the log — the JVM prints a warning when it happens.</p>
+      <p><b>Why it fills:</b> genuinely large applications (thousands of compiled methods); heavy use of dynamically generated classes (proxies, ORMs, scripting, lambdas at scale); and — the sneaky one — <b>deoptimization churn</b>, where methods are repeatedly compiled, invalidated and recompiled, leaving zombie code behind.</p>
+      <p><b>Fixes:</b> raise <code>-XX:ReservedCodeCacheSize</code> (default 240&nbsp;MB with tiered compilation; 512&nbsp;MB is a reasonable large-app value); ensure <code>-XX:+UseCodeCacheFlushing</code> is on; and treat repeated flushing as a symptom to investigate rather than a setting to raise forever. If the underlying cause is a megamorphic call site causing recompilation storms, fix that instead (Stage&nbsp;06/07).</p>
+      <p><b>Monitor it</b> like you monitor heap. Code cache utilisation belongs on the same dashboard — it is one of the few JVM resources that fails silently.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · A colleague sets <code>-XX:CompileThreshold=100</code> "so the JIT kicks in sooner." What breaks?</summary>
+    <div class="ans">
+      <p>Several things, and the interesting part is that they are not obvious.</p>
+      <ul>
+        <li><b><code>CompileThreshold</code> is ignored under tiered compilation</b> (the default since Java&nbsp;8). The relevant knobs are <code>Tier3InvocationThreshold</code>, <code>Tier4InvocationThreshold</code> and friends. So the first effect is <i>nothing at all</i> — and the colleague concludes it "helped", which is worse than it failing.</li>
+        <li>If they do lower the tiered thresholds: methods get compiled on a <b>thin profile</b>. A call site seen 100 times may look monomorphic and be megamorphic at 100,000. C2 speculates, the speculation fails, the method deoptimizes and recompiles — costing more than it saved and polluting the code cache.</li>
+        <li><b>More methods get compiled overall</b>, including ones that would never have become hot, consuming compiler CPU and code cache for no benefit.</li>
+      </ul>
+      <p>The general principle to state: <b>HotSpot's thresholds are already adaptive</b> — they scale with compiler queue length and with the method's size and shape. Hand-setting them replaces a feedback loop with a constant. Reach for them only with a measurement showing a specific method compiling too late, and even then prefer <code>-XX:CompileCommand</code> targeted at that one method over a global change.</p>
+    </div>
+  </details>
+
+  <div class="trap">
+    <span class="lbl">Common Interview Trap</span>
+    <span class="wrong">"The JIT compiles a method after it has been called 10,000 times."</span>
+    <span class="right">There is no single magic number, and there is more than one counter.</span>
+    Tiered compilation uses separate invocation and back-edge counters with different thresholds per tier, <b>scaled dynamically by compiler queue pressure</b> and influenced by method size. A method may be compiled after a few hundred calls when the compiler is idle, or after far more when it is busy — and a method called exactly once can be compiled anyway, via OSR, if it loops enough. Quote the mechanism, never the constant.
+  </div>
+  <!-- Page Navigation Footer -->
+  <footer class="page-nav-footer">
+    <a href="04-interpret.html" class="nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Prev: 04 · Interpret
+    </a>
+    <a href="06-jit-c1-c2.html" class="nav-btn next">
+      Next: 06 · JIT Compilers: C1 &amp; C2
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+  </footer>
+</div>
+
+<script src="js/jvm-common.js"></script>
+<script>
+const state = {
+  tier: 0,
+  iteration: 0,
+  invocations: 0,
+  backedges: 0,
+  c1Threshold: 1200,
+  c2Threshold: 7000,
+  totalIterations: 15000
+};
+
+const gaugeFill = $('gaugeFill');
+const gaugeReadout = $('gaugeReadout');
+const gaugeCaption = $('gaugeCaption');
+const invocationCount = $('invocationCount');
+const backedgeCount = $('backedgeCount');
+const tierNode0 = $('tierNode0');
+const tierNode1 = $('tierNode1');
+const tierNode2 = $('tierNode2');
+const c4TierLabel = $('c4TierLabel');
+
+const c1ThresholdInput = $('c1ThresholdInput');
+const c2ThresholdInput = $('c2ThresholdInput');
+const totalIterationsInput = $('totalIterationsInput');
+
+function advance(n) {
+  let k = 0;
+  while (k < n && state.iteration < state.totalIterations) {
+    state.iteration++;
+    state.invocations++;
+    state.backedges++;
+    k++;
+  }
+  checkTier();
+  render();
+}
+
+function checkTier() {
+  if (state.tier === 0 && state.invocations >= state.c1Threshold) {
+    state.tier = 1;
+  }
+  if (state.tier <= 1 && state.invocations >= state.c2Threshold) {
+    state.tier = 2;
+  }
+}
+
+function runToTier(t) {
+  let guard = 0;
+  while (state.tier < t && state.iteration < state.totalIterations && guard < 500000) {
+    state.iteration++;
+    state.invocations++;
+    state.backedges++;
+    checkTier();
+    guard++;
+  }
+  render();
+}
+
+function resetAll() {
+  state.tier = 0;
+  state.iteration = 0;
+  state.invocations = 0;
+  state.backedges = 0;
+  render();
+}
+
+function render() {
+  invocationCount.textContent = state.invocations.toLocaleString();
+  backedgeCount.textContent = state.backedges.toLocaleString();
+  gaugeReadout.textContent = state.invocations.toLocaleString();
+
+  let pct, cap, cryst = false;
+  if (state.tier === 0) {
+    pct = Math.min(100, (state.invocations / state.c1Threshold) * 100);
+    cap = `heat toward C1 · ${state.invocations.toLocaleString()} / ${state.c1Threshold.toLocaleString()}`;
+  } else if (state.tier === 1) {
+    pct = Math.min(100, (state.invocations / state.c2Threshold) * 100);
+    cap = `heat toward C2 · ${state.invocations.toLocaleString()} / ${state.c2Threshold.toLocaleString()}`;
+  } else {
+    pct = 100;
+    cap = 'fully optimized — Tier 4 C2 Native Code';
+    cryst = true;
+  }
+
+  gaugeFill.style.width = Math.max(3, pct) + '%';
+  gaugeFill.classList.toggle('crystallized', cryst);
+  gaugeCaption.textContent = cap;
+
+  tierNode0.className = 'tier-node' + (state.tier === 0 ? ' tier-active-0' : '');
+  tierNode1.className = 'tier-node' + (state.tier >= 1 ? ' tier-active-1' : '');
+  tierNode2.className = 'tier-node' + (state.tier === 2 ? ' tier-active-2' : '');
+
+  const tTxt = state.tier === 0 ? 'Tier 0 · Interpreter' : state.tier === 1 ? 'Tier 3 · C1 + Full Profile' : 'Tier 4 · C2 Peak Native';
+  c4TierLabel.textContent = tTxt;
+  c4TierLabel.style.color = state.tier === 0 ? 'var(--steel)' : state.tier === 1 ? 'var(--amber)' : 'var(--verdant)';
+}
+
+$('c4Warm').addEventListener('click', () => advance(500));
+$('c4ToC1').addEventListener('click', () => runToTier(1));
+$('c4ToC2').addEventListener('click', () => runToTier(2));
+$('c4Reset').addEventListener('click', resetAll);
+
+c1ThresholdInput.addEventListener('change', () => {
+  state.c1Threshold = Number(c1ThresholdInput.value) || 1200;
+  resetAll();
+});
+c2ThresholdInput.addEventListener('change', () => {
+  state.c2Threshold = Number(c2ThresholdInput.value) || 7000;
+  resetAll();
+});
+totalIterationsInput.addEventListener('change', () => {
+  state.totalIterations = Number(totalIterationsInput.value) || 15000;
+  resetAll();
+});
+
+render();
+</script>
+</body>
+</html>

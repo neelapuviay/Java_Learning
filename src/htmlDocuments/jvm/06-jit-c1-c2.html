@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 · JIT Compilers: C1 &amp; C2 — Inside the JVM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/jvm-theme.css">
+  <style>
+    .opt-box { margin-bottom: 24px; padding: 22px; }
+  </style>
+</head>
+<body>
+
+<div class="stage-container">
+  <header class="stage-head">
+    <span class="stage-num-badge">STAGE 06</span>
+    <h1>JIT Compilers — C1 (Client), C2 (Server) &amp; The Optimization Engine</h1>
+    <span class="stage-tag">tier 3 &amp; tier 4 native code</span>
+  </header>
+
+  <p class="stage-desc">
+    HotSpot contains two distinct JIT compilers: <b>C1</b> (fast compilation, light optimizations, instruments profiling counters) and <b>C2</b> (heavy SSA graph optimizations, aggressive speculations, peak native speed). Explore each interactive optimization model below to see how bytecode transforms into high-performance machine code.
+  </p>
+
+
+  <div class="mental">
+    <span class="lbl">Mental model — hold this picture</span>
+    <p>Two translators are available for a long meeting. The first is fast and literal: she starts translating within seconds, sentence by sentence, and she is <b>good enough</b> immediately. The second is a specialist: he insists on listening to twenty minutes of the discussion first, and only then produces a translation that is dramatically better — because he now knows the jargon, the speakers' habits, and which topics actually matter.</p>
+    <p>You do not choose between them. You <b>use both</b>: the fast translator covers the opening while the specialist listens, and then you switch. That is <b>C1 then C2</b>, and the twenty minutes of listening is the profile.</p>
+    <p>The third option — <b>AOT</b> — is a translator who prepared from the agenda alone, before anyone spoke. Ready instantly, never wrong, and permanently unable to exploit anything that only became apparent once the meeting started. That trade is the entire AOT-versus-JIT argument, and neither side wins universally.</p>
+  </div>
+  <!-- 5.1 Why a JIT -->
+  <div class="panel opt-box">
+    <div class="panel-head">
+      <span>5.1 · The Core Trade-Off: Ahead-Of-Time vs. Interpreter vs. JIT</span>
+      <button class="btn btn-primary btn-sm" id="whyJitPlay" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+        Play Comparison Race
+      </button>
+    </div>
+    <p style="font-size:0.9rem; color:var(--text-dim); margin-bottom:14px;">
+      Why didn't Java choose purely static AOT compilation (like C++) or pure interpretation (like early Python)? Watch how each strategy performs from build time to warm steady state:
+    </p>
+
+    <div style="display:grid; grid-template-columns:100px 1fr; gap:12px; align-items:center; margin-bottom:8px;">
+      <span style="font-family:var(--font-mono); font-size:0.8rem; font-weight:700; color:var(--steel);">AOT (C++)</span>
+      <div>
+        <span class="pchip" data-l="aot">Source</span>
+        <span class="pchip" data-l="aot">Heavy AOT Build</span>
+        <span class="pchip" data-l="aot">Native Start</span>
+        <span class="pchip" data-l="aot">Static Native (10k)</span>
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns:100px 1fr; gap:12px; align-items:center; margin-bottom:8px;">
+      <span style="font-family:var(--font-mono); font-size:0.8rem; font-weight:700; color:var(--amber);">Interpreter</span>
+      <div>
+        <span class="pchip" data-l="int">Source</span>
+        <span class="pchip" data-l="int">Zero Build</span>
+        <span class="pchip" data-l="int">Interpreting</span>
+        <span class="pchip" data-l="int">Still Interpreting</span>
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns:100px 1fr; gap:12px; align-items:center; margin-bottom:14px;">
+      <span style="font-family:var(--font-mono); font-size:0.8rem; font-weight:700; color:var(--verdant);">JIT (Java)</span>
+      <div>
+        <span class="pchip" data-l="jit">Source</span>
+        <span class="pchip" data-l="jit">javac Bytecode</span>
+        <span class="pchip" data-l="jit">Tier 0 Profiling</span>
+        <span class="pchip" data-l="jit">Tier 4 Speculative Native</span>
+      </div>
+    </div>
+
+    <div id="whyJitStatus" style="font-family:var(--font-mono); font-size:0.84rem; color:var(--text); margin-bottom:12px;"></div>
+    <div class="grid-3" style="font-size:0.82rem;">
+      <div id="verdictAot" style="background:var(--panel-inset); padding:10px; border-radius:6px; border:1px solid var(--border-soft);"></div>
+      <div id="verdictInterp" style="background:var(--panel-inset); padding:10px; border-radius:6px; border:1px solid var(--border-soft);"></div>
+      <div id="verdictJit" style="background:var(--panel-inset); padding:10px; border-radius:6px; border:1px solid var(--border-soft);"></div>
+    </div>
+  </div>
+
+
+  <h3 class="sub">
+    <span class="kicker">Read this alongside 5.1</span>
+    Ahead-of-Time vs Interpreter vs JIT — what is really being traded
+  </h3>
+  <div class="prose">
+    <p><b>AOT</b> compiles your Java to native code for a specific platform before the program ever runs — GraalVM Native Image is the mainstream implementation. The advantage is immediate and real: <b>the application starts at full speed with the native code created ahead</b>, with no warm-up and a much smaller memory footprint. For a CLI tool, a serverless function, or anything that lives for two seconds, this is simply the right answer.</p>
+    <p><b>JIT</b> takes the opposite bet. The JVM executes bytecode, identifies frequently-used methods — the <b>hotspots</b> — and compiles them into native code using two compilers: <b>C1</b> (fast compile, low optimization) and <b>C2</b> (slow compile, high optimization). The disadvantage is unavoidable: <b>at startup the virtual machine executes the slow bytecode during a "warm-up time" until it identifies the hotspots and reaches fully optimized native code.</b></p>
+
+    <h4>The question that makes the difference click</h4>
+    <p>If all the code is compiled before running it, how could AOT possibly perform <i>worse</i> than JIT-compiled code? <b>Here lies the true strength of the JIT approach.</b></p>
+    <p>An ahead-of-time compiler must produce code that is correct for <b>every possible execution</b>. A JIT only has to produce code that is correct for <b>the execution actually happening</b> — and it can install a guard so that if reality changes, the code is thrown away rather than being wrong. That asymmetry lets the JIT do things AOT structurally cannot:</p>
+    <ul>
+      <li><b>Devirtualize and inline through interfaces.</b> The profile says this call site has only ever seen <code>ArrayList</code>. The JIT compiles a direct call, guarded by a type check. AOT must emit a full virtual dispatch, because a different implementation might exist.</li>
+      <li><b>Delete code that is never reached.</b> A branch never taken in practice becomes an uncommon trap, not a branch. AOT must compile both sides.</li>
+      <li><b>Exploit the actual CPU.</b> The JIT knows whether this machine has AVX-512 or NEON. AOT must target a baseline that runs everywhere.</li>
+      <li><b>Optimize across configuration.</b> Feature flags, dependency-injected implementations and reflective wiring resolve to constants at runtime; the JIT constant-folds through them.</li>
+    </ul>
+    <p>These <b>speculative optimizations</b> are not marginal. Vendors have measured them producing <b>up to 50% performance gains</b> over the same code compiled without a profile. The price is that every speculation needs a safety net — which is Stage&nbsp;07.</p>
+
+    <div class="factgrid">
+      <div>choose AOT when</div><div>Process lifetime is short (CLI, lambda, batch job); memory is tight; startup latency is the product requirement; you can accept closed-world assumptions and limited reflection.</div>
+      <div>choose JIT when</div><div>The process runs for minutes to months; peak throughput matters more than the first second; you rely on dynamic loading, proxies, agents, or heavy reflection.</div>
+      <div>the honest middle</div><div>Long-running services: JIT wins on steady-state throughput. Short-lived processes: AOT wins outright. Everything else is a measurement question, not a doctrine question.</div>
+    </div>
+  </div>
+  <!-- 5.2 Compiler Factory -->
+  <div class="panel opt-box">
+    <div class="panel-head">
+      <span>5.2 · The HotSpot Compiler Factory: C1 vs. C2 Pipeline Effort</span>
+      <button class="btn btn-primary btn-sm" id="facPlay" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+        Play Factory Compilation
+      </button>
+    </div>
+    <p style="font-size:0.9rem; color:var(--text-dim); margin-bottom:14px;">
+      C1 compiles in ~1 ms with a linear pass to eliminate interpreter overhead. C2 spends 20–50× longer running full SSA graph optimization:
+    </p>
+
+    <div class="grid-2">
+      <div>
+        <div style="font-family:var(--font-mono); font-size:0.75rem; font-weight:700; color:var(--amber); margin-bottom:8px;">
+          C1 (CLIENT) PIPELINE · ~1 ms
+        </div>
+        <div class="station" data-f="c1">HIR Construction &amp; Inlining</div>
+        <div class="station" data-f="c1">Local Value Numbering</div>
+        <div class="station" data-f="c1">LIR Translation</div>
+        <div class="station" data-f="c1">Linear Scan Register Allocator</div>
+        <div class="station" data-f="c1">Native Code &amp; Profiling Counters Emission</div>
+        <div class="fac-out" id="facC1Out">waiting…</div>
+        <div style="font-family:var(--font-mono); font-size:0.76rem; color:var(--text-faint); margin-top:6px;">
+          Time: <span id="facC1Clock" style="color:var(--amber); font-weight:700;">0.0 ms</span> · Speed: <span id="facC1Speed" style="color:var(--text);">—</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-family:var(--font-mono); font-size:0.75rem; font-weight:700; color:var(--verdant); margin-bottom:8px;">
+          C2 (SERVER) PIPELINE · ~25–50 ms
+        </div>
+        <div class="station" data-f="c2">Sea-of-Nodes Ideal Graph Parser</div>
+        <div class="station" data-f="c2">Global Value Numbering (GVN)</div>
+        <div class="station" data-f="c2">Speculative Inlining (BIMORPHIC / PROFILE)</div>
+        <div class="station" data-f="c2">Escape Analysis &amp; Scalar Replacement</div>
+        <div class="station" data-f="c2">Loop Optimization (Unroll, Peel, Vectorize)</div>
+        <div class="station" data-f="c2">Global Code Motion &amp; Scheduler</div>
+        <div class="station" data-f="c2">Chaitin Graph Coloring Register Allocator</div>
+        <div class="station" data-f="c2">Peephole Optimization &amp; Code Emission</div>
+        <div class="station" data-f="c2">Safepoint Deoptimization Map Recording</div>
+        <div class="fac-out" id="facC2Out">waiting…</div>
+        <div style="font-family:var(--font-mono); font-size:0.76rem; color:var(--text-faint); margin-top:6px;">
+          Time: <span id="facC2Clock" style="color:var(--verdant); font-weight:700;">0.0 ms</span> · Speed: <span id="facC2Speed" style="color:var(--text);">—</span> · Effort: <span id="facRatio" style="color:var(--verdant); font-weight:700;">—</span>
+        </div>
+      </div>
+    </div>
+    <div id="facStatus" style="font-family:var(--font-mono); font-size:0.84rem; color:var(--text); margin-top:14px;"></div>
+  </div>
+
+  <!-- 5.3 Tier Ladder Paths -->
+  <div class="panel opt-box">
+    <div class="panel-head">
+      <span>5.3 · Tiered Compilation Transition Ladder</span>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" id="tierPlay" type="button">Common Path</button>
+        <button class="btn btn-sm" id="tierTrivial" type="button">Trivial Getter</button>
+        <button class="btn btn-danger btn-sm" id="tierDeoptPath" type="button">Deopt Fallback</button>
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1.3fr; gap:16px; align-items:center;">
+      <div>
+        <div class="lrow" data-t="4"><span>Tier 4 · C2 Native (Peak)</span><span class="chip obj">Top Speed</span></div>
+        <div class="lrow" data-t="3"><span>Tier 3 · C1 Full Profiling</span><span class="chip ref">Telemetry</span></div>
+        <div class="lrow" data-t="2"><span>Tier 2 · C1 Basic Profile</span><span class="chip prim">Rare</span></div>
+        <div class="lrow" data-t="1"><span>Tier 1 · C1 No Profiling</span><span class="chip meta">Trivial</span></div>
+        <div class="lrow" data-t="0"><span>Tier 0 · Interpreter</span><span class="chip str">Start</span></div>
+      </div>
+      <div style="background:var(--panel-inset); border:1px solid var(--border); border-radius:8px; padding:16px; min-height:120px;">
+        <div id="tierStatus" style="font-family:var(--font-mono); font-size:0.86rem; color:var(--text); line-height:1.6;">
+          Select a transition path above to inspect how methods traverse HotSpot compilation tiers.
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <h3 class="sub">
+    <span class="kicker">Read this alongside 5.2 and 5.3</span>
+    What C1 and C2 each actually do
+  </h3>
+  <div class="prose">
+    <p>Both compilers turn bytecode into machine code. The difference is <b>how much analysis they are willing to pay for</b>, and the station lists above are literally their pipelines.</p>
+
+    <h4>C1 — optimize for compile speed</h4>
+    <p>C1 builds a high-level IR, does a modest set of local optimizations (local value numbering, simple inlining of small methods, basic constant propagation), lowers to a low-level IR, and allocates registers with <b>linear scan</b> — an algorithm chosen precisely because it is fast, not because it is optimal. Compilation takes microseconds to low milliseconds. The result is typically <b>5–10× faster than interpretation</b>. When running at Tier&nbsp;3 it additionally emits profiling counters into the generated code, so the machine keeps learning while running faster.</p>
+
+    <h4>C2 — optimize for the code that comes out</h4>
+    <p>C2 parses into a <b>sea-of-nodes</b> graph in which data dependencies and control dependencies are represented uniformly and instructions are <i>not</i> committed to an order. That freedom is the point: global value numbering can collapse identical computations anywhere in the method; global code motion can sink work into the branch that needs it and hoist loop-invariant work out; and the scheduler only fixes an order at the very end, once every optimization has had its say. Register allocation uses <b>graph colouring</b> — much slower than linear scan, and much better.</p>
+    <p>C2's aggressive passes — speculative inlining, escape analysis, loop transformations, vectorization — are all downstream of one thing: <b>the profile</b>. And every speculation it makes is recorded in a <b>dependency map</b> and a <b>deoptimization map</b> at each safepoint, so the assumption can be invalidated later.</p>
+
+    <h4>The compilation itself never blocks your code</h4>
+    <p>Look at panel 5.4. When a method crosses a threshold, a task is <b>enqueued</b>; background compiler threads do the work; the application thread continues at its current tier and picks up the new code only once it is installed. Nothing stops the world for compilation. The visible cost is indirect — compiler threads consume CPU, and a long queue delays promotion.</p>
+    <p>This also explains a common confusion: <b>the same method can exist in several compiled forms at once</b> — a Tier&nbsp;3 version currently executing, a Tier&nbsp;4 version being installed, and an older invalidated version still on some thread's stack until that frame returns.</p>
+  </div>
+  <!-- 5.4 Background Compilation Queue -->
+  <div class="panel opt-box">
+    <div class="panel-head">
+      <span>5.4 · Non-Blocking Asynchronous Compilation Queue</span>
+      <button class="btn btn-primary btn-sm" id="queuePlay" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+        Play Compilation Queue
+      </button>
+    </div>
+    <div class="grid-3" style="margin-bottom:12px;">
+      <div>
+        <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-faint); margin-bottom:6px; font-weight:700;">APPLICATION THREAD (YOUR CODE)</div>
+        <div class="appthread" id="qApp">running accumulate() — interpreted</div>
+        <div style="font-size:0.74rem; font-family:var(--font-mono); color:var(--text-faint); margin-top:6px;" id="qAppNote">never pauses for compilation</div>
+      </div>
+      <div>
+        <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-faint); margin-bottom:6px; font-weight:700;">COMPILATION TASK QUEUE</div>
+        <div id="qTasks" style="background:var(--panel-inset); padding:10px; border-radius:6px; min-height:50px;"><div style="color:var(--text-faint); font-size:0.76rem;">empty</div></div>
+      </div>
+      <div>
+        <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-faint); margin-bottom:6px; font-weight:700;">COMPILER WORKER THREADS</div>
+        <div id="qWorkers" style="background:var(--panel-inset); padding:10px; border-radius:6px; min-height:50px;"><div style="color:var(--text-faint); font-size:0.76rem;">idle</div></div>
+      </div>
+    </div>
+    <div id="queueStatus" style="font-family:var(--font-mono); font-size:0.84rem; color:var(--text);"></div>
+  </div>
+
+  <!-- 5.5 Sea-of-Nodes IR Graph -->
+  <div class="panel opt-box">
+    <div class="panel-head">
+      <span>5.5 · Sea-of-Nodes IR Optimization Graph</span>
+      <button class="btn btn-primary btn-sm" id="irPlay" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+        Play 5 Optimization Passes
+      </button>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <span id="irPhase" style="font-family:var(--font-mono); font-size:0.86rem; color:var(--verdant); font-weight:700;">Pass 1/5 · Bytecode → Sea of Nodes</span>
+      <div style="font-family:var(--font-mono); font-size:0.76rem; color:var(--text-faint);">
+        Nodes: <b id="irNodes" style="color:var(--text);">9</b> · Removed: <b id="irRemoved" style="color:var(--danger);">0</b> · Machine Instr: <b id="irInstr" style="color:var(--verdant);">—</b>
+      </div>
+    </div>
+    <div style="background:var(--panel-inset); border:1px solid var(--border); border-radius:8px; padding:12px; overflow-x:auto;">
+      <svg id="irSvg" viewBox="0 0 700 240" style="width:100%; min-width:650px; height:200px;"></svg>
+    </div>
+    <div id="irStatus" style="font-size:0.86rem; color:var(--text-dim); margin-top:12px;"></div>
+  </div>
+
+  <!-- 5.6 Payoff Curves -->
+  <div class="panel opt-box">
+    <div class="panel-head">
+      <span>5.6 · The Payoff Horizon: Total Execution Time vs. Iterations</span>
+      <button class="btn btn-primary btn-sm" id="payoffPlay" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+        Animate Payoff Horizon
+      </button>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <div style="font-family:var(--font-mono); font-size:0.78rem; color:var(--text-faint);">
+        Iterations: <b id="payoffIter" style="color:var(--text);">0</b> · Lowest Total Time: <b id="payoffWinner" style="color:var(--steel);">Interpreter</b>
+      </div>
+      <div class="metric good" style="padding:4px 10px;">
+        <span class="m-lbl">C2 Status:</span>
+        <span class="m-val" id="payoffC2Head" style="font-size:0.86rem;">repaying compile cost</span>
+      </div>
+    </div>
+    <div style="background:var(--panel-inset); border:1px solid var(--border); border-radius:8px; padding:12px;">
+      <svg id="payoffSvg" viewBox="0 0 720 300" style="width:100%; height:230px;"></svg>
+    </div>
+    <div id="payoffStatus" style="font-family:var(--font-mono); font-size:0.84rem; color:var(--text); margin-top:10px;"></div>
+  </div>
+
+  <!-- 5.7 Optimization Showcase -->
+  <h3 class="sub">
+    <span class="kicker">Core Transformation Engines</span>
+    5.7 · In-Depth Optimization Showcase
+  </h3>
+
+  <!-- ① Method Inlining -->
+  <div class="panel opt-box">
+    <div class="panel-head">
+      <span>① Method Inlining — The Gateway Optimization</span>
+      <div class="btn-row">
+        <button class="btn btn-sm" id="inlineSwitch" type="button">Toggle Inlining</button>
+        <button class="btn btn-primary btn-sm" id="inlinePlay" type="button">Play Calls</button>
+      </div>
+    </div>
+    <p style="font-size:0.88rem; color:var(--text-dim); margin-bottom:12px;">
+      Inlining eliminates stack frame allocation overhead, argument copying, and jump instructions — enabling all downstream loop optimizations.
+    </p>
+    <div class="grid-2">
+      <div>
+        <div class="frame-box main" id="stackCanvas">
+          main() frame
+          <div class="frame-sub">locals: result, i</div>
+        </div>
+      </div>
+      <div>
+        <div class="grid-2" style="margin-bottom:12px;">
+          <div class="metric"><div class="m-lbl">Overhead Ops</div><div class="m-val" id="inlOverheadOps" style="color:var(--danger);">0</div></div>
+          <div class="metric"><div class="m-lbl">Useful Work</div><div class="m-val" id="inlUsefulOps" style="color:var(--verdant);">0</div></div>
+        </div>
+        <div style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-faint); margin-bottom:4px;">Call Overhead Waste: <span id="inlWaste">0%</span></div>
+        <div style="height:8px; background:var(--panel-inset); border-radius:4px; overflow:hidden;">
+          <div id="inlCostBar" style="height:100%; width:0%; background:var(--danger); transition:width 0.2s;"></div>
+        </div>
+      </div>
+    </div>
+    <div id="inlineStatus" style="font-family:var(--font-mono); font-size:0.84rem; color:var(--text); margin-top:12px;"></div>
+  </div>
+
+  <!-- ② Inline Caches -->
+  <div class="panel opt-box">
+    <div class="panel-head">
+      <span>② Polymorphism &amp; Inline Caches (Monomorphic vs Megamorphic)</span>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" id="icPlayMono" type="button">1 Type (Monomorphic)</button>
+        <button class="btn btn-amber btn-sm" id="icPlayBi" type="button">2 Types (Bimorphic)</button>
+        <button class="btn btn-danger btn-sm" id="icPlayMega" type="button">3+ Types (Megamorphic)</button>
+      </div>
+    </div>
+    <div class="grid-3" style="margin-bottom:12px;">
+      <div class="ic-state" id="icMono">Monomorphic · Direct JIT Inline</div>
+      <div class="ic-state" id="icBi">Bimorphic · 2-Way Branch Guard</div>
+      <div class="ic-state" id="icMega">Megamorphic · VTable Stub Dispatch</div>
+    </div>
+    <div id="icTypes" style="margin-bottom:10px;"></div>
+    <div id="icStatus" style="font-size:0.88rem; color:var(--text); line-height:1.6;"></div>
+  </div>
+
+  <!-- ③ Loop Unrolling -->
+  <div class="panel opt-box">
+    <div class="panel-head">
+      <span>③ Loop Unrolling — Cutting the Branch Tax</span>
+      <div class="btn-row">
+        <button class="btn btn-sm" id="unrollSwitch" type="button">Toggle 4× Unroll</button>
+        <button class="btn btn-primary btn-sm" id="unrollPlay" type="button">Play Loop</button>
+      </div>
+    </div>
+    <div id="unrollStrip" style="background:var(--panel-inset); padding:12px; border-radius:6px; margin-bottom:12px; overflow-x:auto; white-space:nowrap;"></div>
+    <div style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-faint); margin-bottom:8px;">
+      Condition Checks: <b id="unrollChecks" style="color:var(--ember);">0</b> · Operations: <b id="unrollAdds" style="color:var(--steel);">0</b> · Branch Tax: <b id="unrollRatio" style="color:var(--text);">—</b>
+    </div>
+    <div id="unrollStatus" style="font-size:0.86rem; color:var(--text-dim);"></div>
+  </div>
+
+  <!-- ④ Escape Analysis -->
+  <div class="panel opt-box">
+    <div class="panel-head">
+      <span>④ Escape Analysis &amp; Scalar Replacement</span>
+      <div class="btn-row">
+        <button class="btn btn-danger btn-sm" id="eaPlayHeap" type="button">Object Escapes (Heap + GC Churn)</button>
+        <button class="btn btn-primary btn-sm" id="eaPlayStack" type="button">No Escape (Scalar Replacement)</button>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-bottom:12px;">
+      <div>
+        <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-faint); margin-bottom:6px; font-weight:700;">JAVA HEAP ALLOCATIONS</div>
+        <div id="eaHeapObjects" style="background:var(--panel-inset); padding:10px; border-radius:6px; min-height:45px; display:flex; gap:6px; flex-wrap:wrap;"></div>
+      </div>
+      <div>
+        <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--text-faint); margin-bottom:6px; font-weight:700;">CPU REGISTERS (NO HEAP ALLOC)</div>
+        <div id="eaRegisters" style="background:var(--panel-inset); padding:10px; border-radius:6px; min-height:45px; display:flex; gap:6px; flex-wrap:wrap;"></div>
+      </div>
+    </div>
+    <div style="font-family:var(--font-mono); font-size:0.78rem; color:var(--text-faint); margin-bottom:8px;">
+      Allocs: <b id="eaAllocs" style="color:var(--text);">0</b> · GC Sweeps: <b id="eaGcs" style="color:var(--danger);">0</b> · Churn: <b id="eaBytes" style="color:var(--amber);">0 B</b>
+    </div>
+    <div id="eaStatus" style="font-size:0.86rem; color:var(--text-dim);"></div>
+  </div>
+
+  <!-- ⑤ SIMD Vectorization -->
+  <div class="panel opt-box">
+    <div class="panel-head">
+      <span>⑤ SIMD Superword Vectorization</span>
+      <div class="btn-row">
+        <button class="btn btn-sm" id="simdPlayScalar" type="button">Scalar ALU (1 by 1)</button>
+        <button class="btn btn-primary btn-sm" id="simdPlayVector" type="button">Vector Unit (VPADDD)</button>
+      </div>
+    </div>
+    <div class="grid-4" style="margin-bottom:12px;">
+      <div><div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-faint); text-align:center;">LANE 0</div><div class="lane-cell" id="su0">idle</div><div class="lane-cell" id="sr0" style="margin-top:4px;">—</div></div>
+      <div><div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-faint); text-align:center;">LANE 1</div><div class="lane-cell" id="su1">idle</div><div class="lane-cell" id="sr1" style="margin-top:4px;">—</div></div>
+      <div><div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-faint); text-align:center;">LANE 2</div><div class="lane-cell" id="su2">idle</div><div class="lane-cell" id="sr2" style="margin-top:4px;">—</div></div>
+      <div><div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-faint); text-align:center;">LANE 3</div><div class="lane-cell" id="su3">idle</div><div class="lane-cell" id="sr3" style="margin-top:4px;">—</div></div>
+    </div>
+    <div style="font-family:var(--font-mono); font-size:0.78rem; color:var(--text-faint); margin-bottom:8px;">
+      CPU Clock Ticks Used: <span class="tick" id="tk0"></span><span class="tick" id="tk1"></span><span class="tick" id="tk2"></span><span class="tick" id="tk3"></span> <b id="simdTickLabel" style="color:var(--verdant); margin-left:8px;">0 used</b>
+    </div>
+    <div id="simdStatus" style="font-size:0.86rem; color:var(--text-dim);"></div>
+  </div>
+
+
+  <h3 class="sub">
+    <span class="kicker">Read this alongside the five engines</span>
+    Why inlining is the optimization that unlocks all the others
+  </h3>
+  <div class="prose">
+    <p>If you remember one thing from this stage: <b>inlining is not primarily about avoiding call overhead</b>. It is about <b>widening the compiler's field of view</b>. An optimizer can only reason about code it can see at once. Every method boundary is a wall. Inlining removes the wall, and everything else in this section becomes possible on the other side of it.</p>
+    <p>Concretely: once <code>accumulate(a, b)</code> is inlined into the loop, the compiler can see that its argument is loop-invariant, that its result feeds directly into the next iteration, that no reference escapes, and that the whole body is a single <code>add</code>. Now unrolling is legal, scalar replacement is legal, vectorization is legal. <b>None of those analyses could cross the call.</b></p>
+
+    <h4>① Inlining — and why it refuses</h4>
+    <p>HotSpot inlines aggressively but not blindly. The usual refusals: the callee is too large (<code>MaxInlineSize</code> ~35 bytes for cold, <code>FreqInlineSize</code> ~325 bytes for hot methods), the call site is polymorphic beyond two types, inlining depth is exceeded, or the method is native or not yet compiled. <code>-XX:+PrintInlining</code> prints every decision <i>and the reason for every refusal</i> — this is the flag to reach for when a method is mysteriously slow.</p>
+    <p>Practical consequence: a huge method can be <b>slower</b> than the same logic split into small ones, because the huge one can never be inlined into its callers. "Extract method" is occasionally a performance optimization.</p>
+
+    <h4>② Inline caches — monomorphic, bimorphic, megamorphic</h4>
+    <p>At a virtual call site the JIT records which concrete types actually arrive. One type (<b>monomorphic</b>) is the best case: compile a direct call to that implementation guarded by a class check, then inline it. Two types (<b>bimorphic</b>) still works — an if/else of two guarded direct calls. Three or more (<b>megamorphic</b>) and the JIT gives up and emits a full vtable/itable dispatch, which is not just slower by itself but <b>blocks inlining</b>, and therefore blocks every optimization downstream.</p>
+    <p>This is why the shape of your abstraction has real performance consequences: an interface with one implementation in practice costs nothing, while a strategy interface with twelve implementations all flowing through one hot call site can cost a great deal. The fix is rarely "remove the interface" — it is to <b>split the call site</b> so each specialised path sees few types.</p>
+
+    <h4>③ Loop unrolling</h4>
+    <p>Every loop iteration pays a branch and a counter increment. Unrolling replicates the body N times and increments by N, amortising that tax and — more importantly — giving the scheduler a bigger straight-line block to reorder, and giving the vectorizer something to work with. The compiler must first prove the trip count and that the body has no cross-iteration dependency it cannot handle.</p>
+
+    <h4>④ Escape analysis and scalar replacement</h4>
+    <p>If the compiler can prove an object <b>never escapes</b> the compiling method — never stored to a field, never returned, never passed somewhere it might be retained — it can skip allocating it at all and keep its fields in registers as loose values. That is <b>scalar replacement</b>, and it is why the "always allocate objects and let the GC sort it out" advice is more often true than it sounds: the fastest garbage is the object that was never created. Related wins are <b>lock elision</b> (a lock on a non-escaping object is a no-op) and <b>stack allocation</b> where scalar replacement does not apply.</p>
+    <p>The catch, and it matters: escape analysis is <b>fragile</b>. Storing the object into a field, passing it to a non-inlined method, or a call site becoming megamorphic can all silently disable it. Performance that depends on escape analysis is performance that can vanish on a refactor — verify with <code>-XX:+PrintEscapeAnalysis</code> or by measuring allocation rate, never by assumption.</p>
+
+    <h4>⑤ SIMD / superword vectorization</h4>
+    <p>Modern CPUs can apply one instruction to 4, 8 or 16 values at once. C2's superword pass detects loops whose iterations are independent and rewrites them to use those wide registers. It requires a lot to line up — countable loop, unit stride, no aliasing, supported element type, alignment — which is why it is unreliable in hand-written code, and why the <b>Vector API</b> exists to express it explicitly instead of hoping the compiler notices.</p>
+  </div>
+
+  <h3 class="sub">
+    <span class="kicker">Interview drill · stage 06</span>
+    Questions they actually ask about the JIT
+  </h3>
+
+  <details class="qa">
+    <summary>Explain C1 vs C2 to someone who has never heard of tiered compilation.</summary>
+    <div class="ans">
+      <p>"Both compile bytecode to machine code. <b>C1 is a sprinter, C2 is a marathon runner.</b> C1 compiles in microseconds and produces code roughly 5–10× faster than interpreting — good enough, immediately. C2 spends milliseconds per method doing global analysis and produces code several times faster still, but only because it uses profiling data C1 collected while running."</p>
+      <p>"So the JVM uses them as a ladder: interpret to gather a first profile, promote to C1 to get fast quickly while gathering a richer profile, then promote to C2 for peak speed. You get low startup latency <i>and</i> high steady-state throughput, which neither compiler could deliver alone."</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>Why can the JIT produce faster code than a C++ compiler in some cases?</summary>
+    <div class="ans">
+      <p>Not because it is a better compiler — it is not — but because <b>it knows things no static compiler can know</b>:</p>
+      <ul>
+        <li><b>Runtime types.</b> A virtual call whose profile shows one receiver becomes a direct, inlined call. In C++ the equivalent devirtualization requires whole-program analysis or link-time optimization, and even then a dynamically loaded library defeats it.</li>
+        <li><b>The actual CPU.</b> Vector width, cache line size, instruction availability — all known exactly.</li>
+        <li><b>Actual values.</b> Configuration read at startup becomes a compile-time constant, so branches on it disappear entirely.</li>
+        <li><b>The freedom to be wrong.</b> A JIT can compile code that is invalid in general, guarded by a check, and recompile if the guard fails. A static compiler has no recompilation to fall back to.</li>
+      </ul>
+      <p>Be honest about the other side too: C++ wins on memory layout control, no GC, no warm-up, no header overhead, and deterministic latency. The realistic claim is "competitive on throughput for long-running server workloads", not "faster than C++".</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · You add a second implementation of an interface. One unrelated hot loop gets 3× slower. Explain.</summary>
+    <div class="ans">
+      <p><b>You broke a monomorphic call site.</b> Before the change, that call site had seen exactly one receiver type, so the JIT devirtualized it — direct call, guarded by a cheap class check, then <b>inlined</b>. Once a second implementation flows through it, the site becomes bimorphic or megamorphic and the JIT emits a real dispatch instead.</p>
+      <p>The 3× is not the dispatch cost itself, which is small. It is <b>everything that inlining was enabling</b>: with the callee body no longer visible, loop-invariant hoisting stops, escape analysis on objects crossing the call stops (so allocations reappear), constant folding through the callee stops, and vectorization stops. One wall reinstated, five optimizations lost.</p>
+      <p><b>Confirm it:</b> <code>-XX:+UnlockDiagnosticVMOptions -XX:+PrintInlining</code> and look for the call site changing from an inlined entry to <code>virtual call</code> / <code>not inlineable</code>. <code>PrintCompilation</code> will also show the method being made not entrant and recompiled around the time you deployed.</p>
+      <p><b>Fixes:</b></p>
+      <ul>
+        <li>Split the hot path so each call site sees one type — often just moving the dispatch outward, so the type is chosen once rather than per iteration.</li>
+        <li>Keep the abstraction but <b>hoist the virtual call out of the loop</b>: resolve the implementation before the loop, then loop over a concrete local.</li>
+        <li>If one implementation genuinely dominates, ordering matters less than you'd hope — bimorphic still inlines both, so two implementations is often fine; the cliff is at three.</li>
+        <li>Do not delete the interface for performance without measuring. Design cost is certain; the 3× may be specific to that one loop.</li>
+      </ul>
+      <p>The line that lands: "<b>The JIT was optimizing for a world with one implementation, and I changed the world.</b>"</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · Allocation rate triples after a refactor that "did not add any <code>new</code>". Where did the objects come from?</summary>
+    <div class="ans">
+      <p>They were always there — <b>escape analysis was hiding them, and the refactor broke it</b>. Scalar replacement had been eliminating those allocations entirely; now they materialise on the heap.</p>
+      <p><b>Typical breakages, all of them innocuous-looking:</b></p>
+      <ul>
+        <li>The object is now stored into a field or a collection, even briefly — it escapes.</li>
+        <li>It is passed to a method that grew past the inlining size limit, so the compiler can no longer see what happens to it.</li>
+        <li>The call site became megamorphic (see the previous scenario), so nothing inlines and nothing can be proven.</li>
+        <li>It is now returned from the method, or captured by a lambda that outlives the frame.</li>
+        <li>Extra logging: <code>log.debug("...", obj)</code> passes the object to a varargs array — the array escapes into a method call that is not inlined.</li>
+      </ul>
+      <p><b>Diagnose</b> with an allocation profiler (async-profiler <code>-e alloc</code>, or JFR's <code>ObjectAllocationSample</code>) to find the exact site, then <code>-XX:+PrintInlining</code> to see whether the enclosing method still inlines.</p>
+      <p><b>The durable lesson:</b> optimizations that depend on proofs are <b>not contractual</b>. Escape analysis, inlining and vectorization can all silently switch off. If a hot path's performance depends on one of them, it needs a benchmark that would fail if the optimization disappeared — otherwise you find out in production.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · Your team is evaluating GraalVM Native Image for a long-running REST service to "get rid of warm-up." What questions do you raise?</summary>
+    <div class="ans">
+      <p>Start by separating the two things AOT actually gives you — <b>fast startup and low memory</b> — from the thing you are being asked about, which is <b>steady-state throughput</b>.</p>
+      <p><b>Questions to ask:</b></p>
+      <ul>
+        <li><b>How long does an instance live?</b> If it is hours or days, the warm-up cost is amortised to nothing, and you would be trading away peak throughput to fix a problem that lasts 60 seconds. Fix warm-up with pre-warming instead.</li>
+        <li><b>Have we measured steady-state throughput both ways?</b> Native Image gives up profile-guided speculation. Depending on workload, expect it to be somewhat slower at peak unless you run PGO — which requires a representative profiling run and adds real build complexity.</li>
+        <li><b>What is our reflection/proxy/dynamic-loading surface?</b> Native Image assumes a <b>closed world</b>. Spring, Hibernate and friends have native support, but anything doing dynamic class generation needs configuration and sometimes cannot work at all. Budget for this — it is usually the largest cost.</li>
+        <li><b>What do we lose operationally?</b> No JFR/JMX in the same shape, different profiling and debugging tools, dramatically longer builds, and platform-specific binaries in CI.</li>
+        <li><b>What is the actual business driver?</b> If it is per-instance memory on a large fleet or scale-to-zero serverless, AOT is a strong fit. If it is "deploy alerts are noisy", the fix is warm-up traffic and costs a day.</li>
+      </ul>
+      <p><b>Middle grounds worth naming:</b> CDS/AppCDS for startup at near-zero cost and no semantic change; <code>-XX:TieredStopAtLevel=1</code> for short-lived processes; and Project Leyden's ahead-of-time caching, which is bringing much of the startup benefit into the standard JVM without the closed-world constraint.</p>
+    </div>
+  </details>
+
+  <div class="trap">
+    <span class="lbl">Common Interview Trap</span>
+    <span class="wrong">"Inlining is a performance optimization because method calls are expensive."</span>
+    <span class="right">Call overhead is the small part. Inlining is what gives the optimizer <b>visibility</b>.</span>
+    On a modern CPU a predicted direct call costs a couple of cycles. The reason inlining is called the "gateway optimization" is that every other analysis — constant folding, escape analysis, loop-invariant hoisting, dead-branch elimination, vectorization — can only operate on code the compiler can see in one piece. <b>Inlining does not make the call fast; it makes the callee optimizable.</b>
+  </div>
+  <!-- Page Navigation Footer -->
+  <footer class="page-nav-footer">
+    <a href="05-profile.html" class="nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Prev: 05 · Profile &amp; Counters
+    </a>
+    <a href="07-native-and-deopt.html" class="nav-btn next">
+      Next: 07 · Native &amp; Deopt
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+  </footer>
+</div>
+
+<script src="js/jvm-common.js"></script>
+<script>
+/* 5.1 Why JIT */
+const whyJitSeq = Seq();
+function playWhyJit(){
+  const chips = Array.from(document.querySelectorAll('.pchip'));
+  chips.forEach(c => c.className = 'pchip');
+  ['verdictAot','verdictInterp','verdictJit'].forEach(id => $(id).textContent = '');
+  $('whyJitStatus').textContent = '';
+  const byLane = l => chips.filter(c => c.dataset.l === l);
+  const A = byLane('aot'), I = byLane('int'), J = byLane('jit');
+  whyJitSeq.run([
+    [150, ()=>{ A[0].classList.add('on'); I[0].classList.add('on'); J[0].classList.add('on');
+      $('whyJitStatus').textContent = 'All three start from source code.'; }],
+    [800, ()=>{ A[1].classList.add('slow'); I[1].classList.add('win'); J[1].classList.add('on');
+      $('whyJitStatus').textContent = 'Build time: C++ pays heavy AOT compilation up front. Python and Java bytecode are ready instantly.'; }],
+    [800, ()=>{ A[2].classList.add('on'); I[2].classList.add('slow'); J[2].classList.add('on');
+      $('whyJitStatus').textContent = 'Execution starts: C++ is already native. Python interprets every opcode. Java interprets but collects execution profiling telemetry.'; }],
+    [1000,()=>{ A[3].classList.add('win'); I[3].classList.add('slow'); J[3].classList.add('win');
+      $('whyJitStatus').textContent = 'Iteration 10,000: C++ and Java are both running optimized native machine code. Python is still interpreting.'; }],
+    [600, ()=>{
+      $('verdictAot').innerHTML = '<b style="color:var(--steel)">Fast immediately</b>, but static compiler could not see runtime branch probabilities or concrete subtype frequencies.';
+      $('verdictInterp').innerHTML = '<b style="color:var(--amber)">Zero warmup, slow forever.</b> Interpretation tax paid on every single instruction.';
+      $('verdictJit').innerHTML = '<b style="color:var(--verdant)">Brief warmup, peak steady-state speed</b> — HotSpot optimizes using exact runtime empirical measurements.';
+      $('whyJitStatus').textContent = 'JIT bet: Pay a short warmup cost to generate peak specialized machine code.'; }]
+  ]);
+}
+
+/* 5.2 Compiler Factory */
+const facSeq = Seq();
+function playFactory(){
+  const s1 = Array.from(document.querySelectorAll('.station[data-f="c1"]'));
+  const s2 = Array.from(document.querySelectorAll('.station[data-f="c2"]'));
+  [...s1,...s2].forEach(s => s.className = 'station');
+  $('facC1Out').className = 'fac-out'; $('facC1Out').textContent = 'waiting…';
+  $('facC2Out').className = 'fac-out'; $('facC2Out').textContent = 'waiting…';
+  $('facC1Clock').textContent = '0.0 ms'; $('facC2Clock').textContent = '0.0 ms';
+  ['facC1Speed','facC2Speed','facRatio'].forEach(id => $(id).textContent = '—');
+  const steps = []; let c1ms = 0, c2ms = 0;
+  s1.forEach((st, i)=>{
+    steps.push([ i===0?150:280, ()=>{
+      if(i>0) s1[i-1].className = 'station done';
+      st.className = 'station busy';
+      c1ms += [0.12, 0.28, 0.09, 0.31, 0.21][i];
+      $('facC1Clock').textContent = c1ms.toFixed(2) + ' ms';
+      $('facStatus').textContent = 'C1 · ' + st.textContent.trim();
+    }]);
+  });
+  steps.push([280, ()=>{
+    s1[s1.length-1].className = 'station done';
+    $('facC1Out').className = 'fac-out ready';
+    $('facC1Out').textContent = 'nmethod installed · Tier 3 (~5× interpreter)';
+    $('facC1Speed').textContent = '≈ 5×';
+    $('facStatus').textContent = 'C1 finished in ~1 ms. Now watch C2 compile the same method with deep SSA optimization.';
+  }]);
+  s2.forEach((st, i)=>{
+    steps.push([ i===0?450:400, ()=>{
+      if(i>0) s2[i-1].className = 'station done';
+      st.className = 'station busy';
+      c2ms += [3.1, 9.4, 4.2, 6.8, 11.3, 3.6, 5.1, 7.9, 2.4][i];
+      $('facC2Clock').textContent = c2ms.toFixed(1) + ' ms';
+      $('facStatus').textContent = 'C2 · ' + st.textContent.trim();
+    }]);
+  });
+  steps.push([400, ()=>{
+    s2[s2.length-1].className = 'station done';
+    $('facC2Out').className = 'fac-out ready';
+    $('facC2Out').textContent = 'nmethod installed · Tier 4 (~30× interpreter + deopt maps)';
+    $('facC2Speed').textContent = '≈ 30×';
+    $('facRatio').textContent = (c2ms / c1ms).toFixed(0) + '× more effort';
+    $('facStatus').textContent = 'C2 spent ' + (c2ms / c1ms).toFixed(0) + '× more compilation effort to unlock maximum peak throughput.';
+  }]);
+  facSeq.run(steps);
+}
+
+/* 5.3 Tier Ladder */
+const tierSeq = Seq();
+const ladderRows = () => Array.from(document.querySelectorAll('.lrow'));
+function clearLadder(){ ladderRows().forEach(r => r.classList.remove('on')); }
+function playTierPath(kind){
+  clearLadder();
+  const rows = ladderRows();
+  const light = t => rows.find(r => r.dataset.t === String(t));
+  const paths = {
+    common: [
+      [0, 'Method starts interpreted at <b>Tier 0</b>, invocation counters ticking.'],
+      [3, 'Threshold crossed → C1 compiles with <b>full profiling counters</b> (Tier 3, ~5× speed).'],
+      [4, 'Method remains hot → C2 recompiles using profiling data into peak <b>Tier 4 native code</b>.']
+    ],
+    trivial: [
+      [0, 'Trivial getter starts interpreted at Tier 0.'],
+      [1, 'HotSpot recognizes trivial method → C1 compiles <b>without profiling</b> (Tier 1). Never enters C2.']
+    ],
+    deopt: [
+      [4, 'Running at Tier 4 under speculative assumptions.'],
+      [0, 'Speculation invalidated → nmethod discarded, execution falls back to <b>Tier 0 interpreter</b>.'],
+      [3, 'Re-profiles at Tier 3 with corrected assumptions…'],
+      [4, '…and recompiles back into Tier 4.']
+    ]
+  };
+  const seq = paths[kind];
+  const steps = seq.map(([t, msg], i)=>[ i===0?150:1400, ()=>{
+    clearLadder();
+    const targetRow = light(t);
+    if(targetRow) targetRow.classList.add('on');
+    $('tierStatus').innerHTML = `<b>Tier ${t}:</b> ${msg}`;
+  }]);
+  tierSeq.run(steps);
+}
+
+/* 5.4 Compilation Queue */
+const queueSeq = Seq();
+function playQueue(){
+  const T = $('qTasks'), W = $('qWorkers');
+  T.innerHTML = '<div style="color:var(--text-faint); font-size:0.76rem;">empty</div>';
+  W.innerHTML = '<div style="color:var(--text-faint); font-size:0.76rem;">idle</div>';
+  $('qApp').className = 'appthread';
+  $('qApp').textContent = 'running accumulate() — interpreted';
+  queueSeq.run([
+    [150, ()=>{ $('queueStatus').textContent = '① Invocation counter crosses Tier 3 threshold.'; }],
+    [700, ()=>{
+      T.innerHTML = '<div class="task c1">MathWizard.accumulate(II)I → Tier 3 (C1)</div>';
+      $('queueStatus').textContent = '② Compile task queued. Application thread keeps running uninterrupted.';
+    }],
+    [800, ()=>{
+      T.innerHTML = '<div style="color:var(--text-faint); font-size:0.76rem;">empty</div>';
+      W.innerHTML = '<div class="task c1 running">C1 CompilerThread0 — compiling…</div>';
+      $('queueStatus').textContent = '③ Background C1 worker compiles on separate CPU core.';
+    }],
+    [900, ()=>{
+      W.innerHTML = '<div class="task c1">C1 CompilerThread0 — installed nmethod</div>';
+      $('qApp').className = 'appthread native';
+      $('qApp').textContent = 'running accumulate() — C1 native code';
+      $('queueStatus').textContent = '④ nmethod installed in CodeCache. Entry point atomically patched.';
+    }],
+    [1000,()=>{
+      T.innerHTML = '<div class="task c2">MathWizard.accumulate(II)I → Tier 4 (C2)</div>';
+      W.innerHTML = '<div class="task c2 running">C2 CompilerThread0 — compiling…</div>';
+      $('queueStatus').textContent = '⑤ Later, Tier 4 threshold crossed → C2 compiles in background while C1 serves calls.';
+    }],
+    [1200,()=>{
+      T.innerHTML = '<div style="color:var(--text-faint); font-size:0.76rem;">empty</div>';
+      W.innerHTML = '<div class="task c2">C2 CompilerThread0 — installed nmethod</div>';
+      $('qApp').className = 'appthread native';
+      $('qApp').textContent = 'running accumulate() — C2 peak native';
+      $('queueStatus').textContent = '⑥ Tier 4 code installed. Application thread never experienced a single pause.';
+    }]
+  ]);
+}
+
+/* 5.5 IR Graph */
+const IR_NODES = [
+  { id:'a',   x:42,  y:98,  w:68, label:'Parm a',  color:'var(--steel)' },
+  { id:'c2a', x:140, y:34,  w:60, label:'Con 2',   color:'var(--text-faint)' },
+  { id:'m1',  x:240, y:60,  w:58, label:'Mul',     color:'var(--violet)' },
+  { id:'c2b', x:140, y:160, w:60, label:'Con 2',   color:'var(--text-faint)', gone:2 },
+  { id:'m2',  x:240, y:160, w:58, label:'Mul',     color:'var(--violet)', gone:2 },
+  { id:'ad1', x:340, y:100, w:58, label:'Add',     color:'var(--amber)' },
+  { id:'c0',  x:340, y:30,  w:58, label:'Con 0',   color:'var(--text-faint)', gone:3 },
+  { id:'ad2', x:440, y:60,  w:58, label:'Add',     color:'var(--amber)', gone:3 },
+  { id:'ret', x:560, y:98,  w:70, label:'Return',  color:'var(--verdant)' },
+  { id:'shl', x:340, y:100, w:88, label:'Shl a, 2', color:'var(--verdant)', appear:4 }
+];
+const IR_EDGES = [
+  ['a','m1'], ['c2a','m1'], ['a','m2',2], ['c2b','m2',2],
+  ['m1','ad1'], ['m2','ad1',2], ['ad1','ad2',3], ['c0','ad2',3],
+  ['ad2','ret',3], ['ad1','ret',null,4], ['a','shl',null,4], ['shl','ret',null,4]
+];
+
+function drawIR(pass){
+  const N = {}; IR_NODES.forEach(n => N[n.id] = n);
+  const vis = n => (n.appear ? pass >= n.appear : true) && !(n.gone && pass >= n.gone);
+  let g = '';
+  IR_EDGES.forEach(([from, to, goneAt, appearAt])=>{
+    const A = N[from], B = N[to];
+    if(!vis(A) || !vis(B)) return;
+    if(goneAt && pass >= goneAt) return;
+    if(appearAt && pass < appearAt) return;
+    const x1 = A.x + A.w, y1 = A.y + 15, x2 = B.x, y2 = B.y + 15;
+    g += `<path d="M${x1},${y1} C${(x1+x2)/2},${y1} ${(x1+x2)/2},${y2} ${x2},${y2}" fill="none" stroke="#2c3446" stroke-width="1.6"/>`;
+  });
+  IR_NODES.forEach(n=>{
+    if(!vis(n)) return;
+    const faded = (n.appear && pass < n.appear);
+    g += `<g opacity="${faded?0.15:1}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="30" rx="6" fill="#111726" stroke="${n.color}" stroke-width="1.4"/>`;
+    g += `<text x="${n.x+n.w/2}" y="${n.y+19}" text-anchor="middle" fill="${n.color}" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700">${n.label}</text></g>`;
+  });
+  $('irSvg').innerHTML = g;
+}
+
+const irSeq = Seq();
+const IR_PASSES = [
+  { p:1, name:'Parse · Bytecode → Sea of Nodes', nodes:9, removed:0, instr:'—', note:'Operations parsed into graph nodes showing identical subcomputations.' },
+  { p:2, name:'GVN · Global Value Numbering', nodes:7, removed:2, instr:'—', note:'Duplicate multiplication node merged: <code>a * 2</code> computed only once.' },
+  { p:3, name:'Identity & Algebraic Simplification', nodes:5, removed:4, instr:'—', note:'<code>x + 0</code> eliminated. Dead nodes pruned from graph.' },
+  { p:4, name:'Strength Reduction', nodes:3, removed:6, instr:'—', note:'Multiplication converted into bitwise shift: <code>a &lt;&lt; 2</code>.' },
+  { p:5, name:'Register Allocation & Code Emission', nodes:3, removed:6, instr:'2 instructions', note:'Graph emitted as 2 native instructions: <code>shl eax, 2; ret;</code>' }
+];
+
+function playIR(){
+  drawIR(1);
+  irSeq.run(IR_PASSES.map((ps, i)=>[ i===0?150:1400, ()=>{
+    drawIR(ps.p);
+    $('irPhase').innerHTML = `<b>Pass ${ps.p}/5: ${ps.name}</b>`;
+    $('irNodes').textContent = ps.nodes;
+    $('irRemoved').textContent = ps.removed;
+    $('irInstr').textContent = ps.instr;
+    $('irStatus').innerHTML = ps.note;
+  }]));
+}
+
+/* 5.6 Payoff Chart */
+const NMAX = 50000, YMAX = 300, P = { l:50, r:20, t:18, b:35, w:720, h:230 };
+const COST_INTERP = 0.0055, COST_C1 = 0.0009, COST_C2 = 0.00007;
+const C1_COMPILE = 2, C2_COMPILE = 25;
+const px = n => P.l + Math.sqrt(Math.max(0, n) / NMAX) * (P.w - P.l - P.r);
+const py = ms => (P.h - P.b) - Math.sqrt(Math.min(Math.max(0, ms), YMAX) / YMAX) * (P.h - P.t - P.b);
+const fI = n => COST_INTERP * n, f1 = n => C1_COMPILE + COST_C1 * n, f2 = n => C2_COMPILE + COST_C2 * n;
+
+function buildChart(){
+  let g = '';
+  [1, 5, 25, 100, 300].forEach(v=>{
+    const y = py(v);
+    g += `<line x1="${P.l}" y1="${y}" x2="${P.w-P.r}" y2="${y}" stroke="#1e293b"/>`;
+    g += `<text x="${P.l-8}" y="${y+3.5}" text-anchor="end" fill="#64748b" font-family="JetBrains Mono, monospace" font-size="9">${v} ms</text>`;
+  });
+  [100, 1000, 5000, 15000, 50000].forEach(v=>{
+    const x = px(v);
+    g += `<line x1="${x}" y1="${P.t}" x2="${x}" y2="${P.h-P.b}" stroke="#1e293b"/>`;
+    g += `<text x="${x}" y="${P.h-P.b+14}" text-anchor="middle" fill="#64748b" font-family="JetBrains Mono, monospace" font-size="9">${v.toLocaleString()}</text>`;
+  });
+  g += `<polyline id="lnInterp" fill="none" stroke="#38bdf8" stroke-width="2.2" points=""/>`;
+  g += `<polyline id="lnC1" fill="none" stroke="#fbbf24" stroke-width="2.2" points=""/>`;
+  g += `<polyline id="lnC2" fill="none" stroke="#34d399" stroke-width="2.2" points=""/>`;
+  g += `<line id="playhead" x1="${P.l}" y1="${P.t}" x2="${P.l}" y2="${P.h-P.b}" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="3 3" opacity="0"/>`;
+  $('payoffSvg').innerHTML = g;
+}
+
+let payoffRaf = null;
+function playPayoff(){
+  cancelAnimationFrame(payoffRaf);
+  const lnI = $('lnInterp'), ln1 = $('lnC1'), ln2 = $('lnC2'), head = $('playhead');
+  head.setAttribute('opacity', '1');
+  const DUR = REDUCED ? 1 : 3800, t0 = performance.now();
+  const draw = n => {
+    const pi = [], p1 = [], p2 = [], S = 80;
+    for(let s=0; s<=S; s++){
+      const x = Math.pow(s/S, 2) * n;
+      pi.push(`${px(x).toFixed(1)},${py(fI(x)).toFixed(1)}`);
+      p1.push(`${px(x).toFixed(1)},${py(f1(x)).toFixed(1)}`);
+      p2.push(`${px(x).toFixed(1)},${py(f2(x)).toFixed(1)}`);
+    }
+    lnI.setAttribute('points', pi.join(' '));
+    ln1.setAttribute('points', p1.join(' '));
+    ln2.setAttribute('points', p2.join(' '));
+    head.setAttribute('x1', px(n));
+    head.setAttribute('x2', px(n));
+    const vI = fI(n), v1 = f1(n), v2 = f2(n), best = Math.min(vI, v1, v2);
+    $('payoffIter').textContent = Math.round(n).toLocaleString();
+    $('payoffWinner').textContent = best === vI ? 'Interpreter' : best === v1 ? 'C1 Native' : 'C2 Native (Peak)';
+    $('payoffWinner').style.color = best === vI ? 'var(--steel)' : best === v1 ? 'var(--amber)' : 'var(--verdant)';
+    $('payoffStatus').textContent = n < 500
+      ? 'Early on, Interpreter is fastest (no compilation overhead paid yet).'
+      : n < 28000
+        ? 'C1 wins: Cheap compilation cost rapidly repaid.'
+        : 'C2 overtakes all: The 25 ms compile investment is fully repaid and accelerating.';
+  };
+  const frame = now => {
+    const p = Math.min(1, (now - t0) / DUR);
+    draw(Math.pow(p, 1.4) * NMAX);
+    if(p < 1) payoffRaf = requestAnimationFrame(frame);
+  };
+  payoffRaf = requestAnimationFrame(frame);
+}
+
+/* 5.7 Optimization Showcase: Inlining */
+let inlineOn = false;
+const inlSeq = Seq();
+function resetStackCanvas(){
+  $('stackCanvas').innerHTML = 'main() frame<div class="frame-sub">locals: result, i</div>';
+  if(inlineOn){
+    const b = document.createElement('div');
+    b.className = 'frame-box inlined-body';
+    b.innerHTML = 'accumulate() body (Inlined)<div class="frame-sub">Zero frame overhead · Direct registers</div>';
+    $('stackCanvas').appendChild(b);
+  }
+  $('inlOverheadOps').textContent = '0';
+  $('inlUsefulOps').textContent = '0';
+  $('inlCostBar').style.width = '0%';
+  $('inlWaste').textContent = '0%';
+}
+function setInline(on){
+  inlineOn = on;
+  $('inlineSwitch').textContent = on ? 'Inlining: ON' : 'Inlining: OFF';
+  $('inlineSwitch').className = 'btn btn-sm ' + (on ? 'btn-primary' : '');
+  resetStackCanvas();
+}
+function playInline(){
+  resetStackCanvas();
+  let over = 0, use = 0;
+  const steps = [];
+  for(let k=0; k<5; k++){
+    if(!inlineOn){
+      steps.push([k===0?100:150, ()=>{
+        const f = document.createElement('div');
+        f.className = 'frame-box callee';
+        f.id = 'clFrame';
+        f.innerHTML = `accumulate() frame #${k+1}<div class="frame-sub">push frame, copy 2 args, save return IP</div>`;
+        $('stackCanvas').appendChild(f);
+        over += 5; $('inlOverheadOps').textContent = over;
+        $('inlineStatus').textContent = `Push frame #${k+1}: 5 bookkeeping operations.`;
+        const waste = Math.round(over / (over + use || 1) * 100);
+        $('inlCostBar').style.width = waste + '%';
+        $('inlWaste').textContent = waste + '%';
+      }]);
+      steps.push([200, ()=>{
+        use += 4; $('inlUsefulOps').textContent = use;
+        $('inlineStatus').textContent = 'Inside method: iload, iload, iadd, ireturn (4 useful ops).';
+      }]);
+      steps.push([180, ()=>{
+        const f = $('clFrame'); if(f) f.remove();
+        $('inlineStatus').textContent = 'Pop frame and return.';
+      }]);
+    } else {
+      steps.push([k===0?100:180, ()=>{
+        use += 4; $('inlUsefulOps').textContent = use;
+        $('inlineStatus').textContent = `Iteration ${k+1}: Straight-line code in main(). 0 frame overhead.`;
+      }]);
+    }
+  }
+  steps.push([200, ()=>{
+    $('inlineStatus').textContent = inlineOn ? 'Done. 0% call waste. Loop body is now contiguous for SIMD and unrolling.' : 'Done. Significant CPU cycles spent pushing/popping frames.';
+  }]);
+  inlSeq.run(steps);
+}
+
+/* 5.7 Inline Caches */
+const IC_TYPES = ['ArrayList','LinkedList','CopyOnWriteArrayList','ImmutableList','Arrays$ArrayList'];
+function playIC(kind){
+  ['icMono','icBi','icMega'].forEach(id => $(id).className = 'ic-state');
+  $('icTypes').innerHTML = '';
+  if(kind === 'mono'){
+    $('icMono').className = 'ic-state mono';
+    $('icTypes').innerHTML = '<span class="typechip hot">ArrayList</span>';
+    $('icStatus').innerHTML = '<b>Monomorphic:</b> Only 1 receiver type seen. C2 inlines method directly behind a single class-pointer comparison guard.';
+  } else if(kind === 'bi'){
+    $('icBi').className = 'ic-state bi';
+    $('icTypes').innerHTML = '<span class="typechip hot">ArrayList</span><span class="typechip hot">LinkedList</span>';
+    $('icStatus').innerHTML = '<b>Bimorphic:</b> 2 receiver types. Inlines both branches guarded by a 2-way type check.';
+  } else {
+    $('icMega').className = 'ic-state mega';
+    $('icTypes').innerHTML = '<span class="typechip hot">ArrayList</span><span class="typechip hot">LinkedList</span><span class="typechip hot">CopyOnWriteArrayList</span>';
+    $('icStatus').innerHTML = '<b>Megamorphic:</b> 3+ types seen. Inlining fails. Falls back to expensive VTable/ITable indirect dispatch stub on every call.';
+  }
+}
+
+/* 5.7 Loop Unrolling */
+let unrollFactor = 1;
+const unrSeq = Seq();
+function buildUnroll(){
+  let html = '';
+  if(unrollFactor === 1){
+    for(let i=0; i<8; i++) html += `<div class="u-check" data-k="c${i}">i &lt; N? ↺</div><div class="u-add" data-k="a${i}">iadd</div>`;
+  } else {
+    for(let g=0; g<2; g++){
+      html += `<div class="u-check" data-k="c${g}">i+4 &lt; N? ↺</div>`;
+      for(let j=0; j<4; j++) html += `<div class="u-add" data-k="a${g*4+j}">iadd</div>`;
+    }
+  }
+  $('unrollStrip').innerHTML = html;
+}
+function playUnroll(){
+  buildUnroll();
+  const els = Array.from($('unrollStrip').querySelectorAll('[data-k]'));
+  let checks = 0, adds = 0;
+  const steps = els.map((el, i)=>[ i===0?100:150, ()=>{
+    el.classList.add('hit');
+    if(el.classList.contains('u-check')){ checks++; $('unrollChecks').textContent = checks; }
+    else { adds++; $('unrollAdds').textContent = adds; }
+    $('unrollRatio').textContent = (checks / (adds || 1)).toFixed(2) + ' branches / op';
+  }]);
+  unrSeq.run(steps);
+}
+
+/* 5.7 Escape Analysis */
+const eaSeq = Seq();
+function playEA(escaped){
+  eaSeq.cancel();
+  $('eaHeapObjects').innerHTML = '';
+  $('eaRegisters').innerHTML = '';
+  $('eaAllocs').textContent = '0'; $('eaGcs').textContent = '0'; $('eaBytes').textContent = '0 B';
+  let allocs = 0, gcs = 0;
+  const steps = [];
+  for(let i=0; i<6; i++){
+    steps.push([ i===0?100:250, ()=>{
+      if(escaped){
+        allocs++;
+        $('eaAllocs').textContent = allocs;
+        $('eaBytes').textContent = (allocs * 24) + ' B';
+        const c = document.createElement('span');
+        c.className = 'chip obj';
+        c.textContent = `Point#${i} (24B)`;
+        $('eaHeapObjects').appendChild(c);
+        if(allocs >= 3 && allocs % 3 === 0){
+          gcs++;
+          $('eaGcs').textContent = gcs;
+          $('eaHeapObjects').innerHTML = '';
+        }
+        $('eaStatus').textContent = `Heap allocation: Point#${i} allocated in Eden, triggering GC cycles.`;
+      } else {
+        $('eaRegisters').innerHTML = '<span class="chip prim">r8 = x</span><span class="chip prim">r9 = y</span><span class="chip prim">r10 = sum</span>';
+        $('eaStatus').textContent = 'Scalar Replacement: Escape analysis proved Point never escapes. Coordinates unpacked directly into CPU registers.';
+      }
+    }]);
+  }
+  eaSeq.run(steps);
+}
+
+/* 5.7 SIMD */
+const simdSeq = Seq();
+const SA = [12, 7, 31, 4], SB = [5, 5, 5, 5];
+function playSimd(vector){
+  simdSeq.cancel();
+  for(let i=0; i<4; i++){
+    $('su'+i).className = 'lane-cell'; $('su'+i).textContent = 'idle';
+    $('sr'+i).className = 'lane-cell'; $('sr'+i).textContent = '—';
+    $('tk'+i).className = 'tick';
+  }
+  const steps = [];
+  if(!vector){
+    for(let i=0; i<4; i++){
+      steps.push([ i===0?100:300, ()=>{
+        for(let j=0; j<4; j++){ $('su'+j).className = 'lane-cell'; $('su'+j).textContent = 'idle'; }
+        $('su'+i).className = 'lane-cell busy'; $('su'+i).textContent = 'add';
+        $('tk'+i).className = 'tick on';
+        $('simdTickLabel').textContent = (i+1) + ' ticks used';
+        $('simdStatus').textContent = `Scalar ALU: Processing lane ${i}. Other 3 lanes sit idle.`;
+      }]);
+      steps.push([200, ()=>{
+        $('sr'+i).className = 'lane-cell done'; $('sr'+i).textContent = String(SA[i] + SB[i]);
+      }]);
+    }
+  } else {
+    steps.push([150, ()=>{
+      for(let j=0; j<4; j++){ $('su'+j).className = 'lane-cell busy'; $('su'+j).textContent = 'vpaddd'; }
+      $('tk0').className = 'tick on';
+      $('simdTickLabel').textContent = '1 tick used (4× throughput)';
+      $('simdStatus').textContent = 'AVX2 SIMD: Single instruction adds all 4 integer lanes simultaneously.';
+    }]);
+    steps.push([400, ()=>{
+      for(let j=0; j<4; j++){ $('sr'+j).className = 'lane-cell done'; $('sr'+j).textContent = String(SA[j] + SB[j]); $('su'+j).className = 'lane-cell'; }
+    }]);
+  }
+  simdSeq.run(steps);
+}
+
+/* Bindings */
+$('whyJitPlay').addEventListener('click', playWhyJit);
+$('facPlay').addEventListener('click', playFactory);
+$('tierPlay').addEventListener('click', () => playTierPath('common'));
+$('tierTrivial').addEventListener('click', () => playTierPath('trivial'));
+$('tierDeoptPath').addEventListener('click', () => playTierPath('deopt'));
+$('queuePlay').addEventListener('click', playQueue);
+$('irPlay').addEventListener('click', playIR);
+$('payoffPlay').addEventListener('click', playPayoff);
+
+$('inlineSwitch').addEventListener('click', () => setInline(!inlineOn));
+$('inlinePlay').addEventListener('click', playInline);
+$('icPlayMono').addEventListener('click', () => playIC('mono'));
+$('icPlayBi').addEventListener('click', () => playIC('bi'));
+$('icPlayMega').addEventListener('click', () => playIC('mega'));
+$('unrollSwitch').addEventListener('click', () => { unrollFactor = unrollFactor === 1 ? 4 : 1; $('unrollSwitch').textContent = unrollFactor === 4 ? 'Unroll: 4×' : 'Unroll: 1×'; buildUnroll(); });
+$('unrollPlay').addEventListener('click', playUnroll);
+$('eaPlayHeap').addEventListener('click', () => playEA(true));
+$('eaPlayStack').addEventListener('click', () => playEA(false));
+$('simdPlayScalar').addEventListener('click', () => playSimd(false));
+$('simdPlayVector').addEventListener('click', () => playSimd(true));
+
+buildChart();
+drawIR(1);
+buildUnroll();
+setInline(false);
+playIC('mono');
+</script>
+</body>
+</html>

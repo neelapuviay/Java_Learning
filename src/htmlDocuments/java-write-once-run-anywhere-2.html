@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Write once, run anywhere — how a Java program travels</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          display: ['"Fraunces"', 'serif'],
+          sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  html { scroll-behavior: smooth; }
+  body { background:#120C09; }
+
+  .glow {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+    pointer-events: none;
+  }
+
+  @keyframes steamRise {
+    0%   { transform: translateY(0) scaleY(1);   opacity: 0; }
+    30%  { opacity: .5; }
+    100% { transform: translateY(-30px) scaleY(1.35); opacity: 0; }
+  }
+  .steam { animation: steamRise 2.8s ease-in-out infinite; }
+  .steam.d1 { animation-delay: 0s; }
+  .steam.d2 { animation-delay: .55s; }
+  .steam.d3 { animation-delay: 1.1s; }
+
+  @keyframes floatArrow {
+    0%,100% { transform: translateY(0); }
+    50%     { transform: translateY(5px); }
+  }
+  .float-arrow { animation: floatArrow 2s ease-in-out infinite; }
+
+  .reveal { opacity: 0; transform: translateY(22px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: translateY(0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .steam, .float-arrow { animation: none; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+  }
+
+  ::selection { background: rgba(231,167,61,.35); color:#F3E9DA; }
+
+  .icon { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+
+<body class="bg-[#120C09] text-[#F3E9DA] font-sans antialiased selection:bg-amber-500/30">
+
+  <!-- ================= HERO ================= -->
+  <section class="relative overflow-hidden px-6 pt-28 pb-24 text-center">
+    <div class="glow w-[520px] h-[520px] bg-[#E7A73D]/10 -top-40 -left-32"></div>
+    <div class="glow w-[420px] h-[420px] bg-[#FF7A45]/10 -top-24 right-0"></div>
+
+    <div class="relative max-w-2xl mx-auto">
+      <div class="relative w-24 h-24 mx-auto mb-6">
+        <span class="steam d1 absolute left-8 top-2 w-1.5 h-6 rounded-full bg-[#B7A594]/60"></span>
+        <span class="steam d2 absolute left-11 -top-1 w-1.5 h-7 rounded-full bg-[#B7A594]/60"></span>
+        <span class="steam d3 absolute left-14 top-2 w-1.5 h-6 rounded-full bg-[#B7A594]/60"></span>
+        <div class="w-full h-full rounded-2xl bg-[#1C140F] border border-white/10 flex items-center justify-center shadow-[0_10px_40px_rgba(0,0,0,.45)]">
+          <svg viewBox="0 0 24 24" class="icon w-10 h-10 text-[#E7A73D]" stroke-width="1.6" aria-hidden="true">
+            <path d="M17 8h1a4 4 0 1 1 0 8h-1"/><path d="M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4Z"/>
+            <line x1="6" x2="6" y1="2" y2="4"/><line x1="10" x2="10" y1="2" y2="4"/><line x1="14" x2="14" y1="2" y2="4"/>
+          </svg>
+        </div>
+      </div>
+
+      <span class="inline-block text-xs font-semibold tracking-[0.14em] uppercase text-[#F4B84A] bg-[#F4B84A]/10 border border-[#F4B84A]/20 px-4 py-1.5 rounded-full mb-6">
+        A little java mystery
+      </span>
+
+      <h1 class="font-display font-semibold text-5xl sm:text-6xl leading-[1.08] mb-6 bg-gradient-to-br from-[#F8EFDF] via-[#F0C778] to-[#E7A73D] bg-clip-text text-transparent">
+        Write once.<br>Run everywhere.
+      </h1>
+
+      <p class="text-lg text-[#B7A594] max-w-md mx-auto mb-3">
+        How does one tiny program run on a Windows PC, a Mac, and a Linux machine — without ever being rewritten? Let's follow it, one step at a time.
+      </p>
+      <p class="text-sm text-[#7C6C5C]">Fun fact — the Java language is named after coffee.</p>
+    </div>
+  </section>
+
+  <main class="max-w-2xl mx-auto px-6 pb-10 space-y-8">
+
+    <!-- STEP 1 -->
+    <article class="reveal rounded-2xl bg-[#1A130E]/80 border border-white/[0.06] p-8 shadow-[0_8px_30px_rgba(0,0,0,.35)] transition-all duration-300 hover:border-white/[0.12] hover:-translate-y-0.5">
+      <div class="flex items-center gap-2 mb-4">
+        <svg viewBox="0 0 24 24" class="icon w-4 h-4 text-[#F4B84A]" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/>
+          <path d="m10 13-2 2 2 2"/><path d="m14 13 2 2-2 2"/>
+        </svg>
+        <span class="text-xs font-semibold tracking-[0.12em] uppercase text-[#F4B84A]">Step 1</span>
+      </div>
+      <h2 class="font-display text-2xl font-semibold mb-3">You write the spell</h2>
+      <p class="text-[#B7A594] mb-5">This is <span class="font-mono text-[#F3E9DA]">HelloWorld.java</span> — the only part a person ever actually reads or writes.</p>
+
+      <div class="rounded-xl overflow-hidden border border-white/[0.08]">
+        <div class="flex items-center gap-2 px-4 py-2 bg-[#0F0A07] border-b border-white/[0.06]">
+          <svg viewBox="0 0 24 24" class="icon w-3.5 h-3.5 text-[#7C6C5C]" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/>
+            <path d="m10 13-2 2 2 2"/><path d="m14 13 2 2-2 2"/>
+          </svg>
+          <span class="text-xs text-[#7C6C5C] font-mono">HelloWorld.java</span>
+        </div>
+        <pre class="font-mono text-sm leading-relaxed p-5 bg-[#150F0B] overflow-x-auto"><span class="text-[#7FB0E0]">public class</span> <span class="text-[#F3E9DA]">HelloWorld</span> {
+    <span class="text-[#7FB0E0]">public static void</span> <span class="text-[#F3E9DA]">main</span>(String[] args) {
+        System.out.println(<span class="text-[#F0C778]">"Hello, World!"</span>);
+    }
+}</pre>
+      </div>
+      <p class="text-xs text-[#7C6C5C] italic mt-4">Written for people. No computer understands this yet.</p>
+    </article>
+
+    <!-- CONNECTOR -->
+    <div class="reveal flex flex-col items-center gap-2 py-2 text-center">
+      <svg viewBox="0 0 24 24" class="icon float-arrow w-5 h-5 text-[#E7A73D]" aria-hidden="true">
+        <path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>
+      </svg>
+      <p class="text-sm text-[#B7A594]"><span class="font-mono text-[#F3E9DA]">javac</span> compiles it — once, on your machine.</p>
+    </div>
+
+    <!-- STEP 2 -->
+    <article class="reveal rounded-2xl bg-[#1A130E]/80 border border-[#F4B84A]/20 p-8 shadow-[0_8px_30px_rgba(0,0,0,.35)] transition-all duration-300 hover:border-[#F4B84A]/35 hover:-translate-y-0.5">
+      <div class="flex items-center gap-2 mb-4">
+        <svg viewBox="0 0 24 24" class="icon w-4 h-4 text-[#F4B84A]" aria-hidden="true">
+          <path d="M7 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2"/>
+          <path d="M17 3a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2"/>
+        </svg>
+        <span class="text-xs font-semibold tracking-[0.12em] uppercase text-[#F4B84A]">Step 2</span>
+      </div>
+      <h2 class="font-display text-2xl font-semibold mb-3">It becomes a secret scroll</h2>
+      <p class="text-[#B7A594] mb-5">The compiler turns your spell into <span class="font-mono text-[#F3E9DA]">HelloWorld.class</span> — numbered instructions called <strong class="text-[#F3E9DA]">bytecode</strong>. It isn't English, and it isn't built for any one computer.</p>
+
+      <div class="rounded-xl overflow-hidden border border-[#F4B84A]/25">
+        <div class="flex items-center gap-2 px-4 py-2 bg-[#241B0E] border-b border-[#F4B84A]/20">
+          <svg viewBox="0 0 24 24" class="icon w-3.5 h-3.5 text-[#F4B84A]/70" aria-hidden="true">
+            <path d="M7 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2 2 2 0 0 1 2 2v4a2 2 0 0 0 2 2"/>
+            <path d="M17 3a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2 2 2 0 0 0-2 2v4a2 2 0 0 1-2 2"/>
+          </svg>
+          <span class="text-xs text-[#F4B84A]/80 font-mono">HelloWorld.class</span>
+        </div>
+        <pre class="font-mono text-sm leading-relaxed p-5 bg-[#1F1608] overflow-x-auto text-[#F0C778]"><span class="text-[#F4B84A]">0:</span> getstatic     #7   <span class="text-[#8A7A5E]">// System.out</span>
+<span class="text-[#F4B84A]">3:</span> ldc           #13  <span class="text-[#8A7A5E]">// "Hello, World!"</span>
+<span class="text-[#F4B84A]">5:</span> invokevirtual #15  <span class="text-[#8A7A5E]">// println</span>
+<span class="text-[#F4B84A]">8:</span> return</pre>
+      </div>
+      <p class="text-xs text-[#7C6C5C] italic mt-4">This exact file is what gets sent anywhere in the world — unchanged.</p>
+    </article>
+
+    <!-- CONNECTOR -->
+    <div class="reveal flex flex-col items-center gap-2 py-2 text-center">
+      <svg viewBox="0 0 24 24" class="icon float-arrow w-5 h-5 text-[#E7A73D]" aria-hidden="true">
+        <path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>
+      </svg>
+      <p class="text-sm text-[#B7A594]">The same file travels to <strong class="text-[#F3E9DA]">any</strong> computer, as-is.</p>
+    </div>
+
+    <!-- STEP 3 -->
+    <article class="reveal rounded-2xl bg-[#1A130E]/80 border border-white/[0.06] p-8 shadow-[0_8px_30px_rgba(0,0,0,.35)]">
+      <div class="flex items-center gap-2 mb-4">
+        <svg viewBox="0 0 24 24" class="icon w-4 h-4 text-[#F4B84A]" aria-hidden="true">
+          <path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/>
+          <path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>
+        </svg>
+        <span class="text-xs font-semibold tracking-[0.12em] uppercase text-[#F4B84A]">Step 3</span>
+      </div>
+      <h2 class="font-display text-2xl font-semibold mb-3">Three robot translators</h2>
+      <p class="text-[#B7A594] mb-6">Every computer keeps its own translator robot, called a <strong class="text-[#F3E9DA]">JVM</strong>. Each one reads that very same secret scroll — and turns it into whatever that computer actually understands.</p>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="group rounded-xl p-5 text-center bg-[#6FA8E0]/[0.06] border border-[#6FA8E0]/25 transition-all duration-300 hover:bg-[#6FA8E0]/[0.1] hover:-translate-y-1">
+          <div class="flex justify-center gap-1.5 mb-3">
+            <svg viewBox="0 0 24 24" class="icon w-6 h-6 text-[#6FA8E0]" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/>
+            </svg>
+            <svg viewBox="0 0 24 24" class="icon w-6 h-6 text-[#6FA8E0] transition-transform duration-300 group-hover:scale-110" aria-hidden="true">
+              <path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/>
+              <path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>
+            </svg>
+          </div>
+          <h3 class="font-semibold text-[#9CC2ED] mb-1">Windows PC</h3>
+          <p class="text-xs text-[#B7A594]">Reads the scroll. Speaks Windows only.</p>
+        </div>
+        <div class="group rounded-xl p-5 text-center bg-[#B8AC9C]/[0.06] border border-[#B8AC9C]/25 transition-all duration-300 hover:bg-[#B8AC9C]/[0.1] hover:-translate-y-1">
+          <div class="flex justify-center gap-1.5 mb-3">
+            <svg viewBox="0 0 24 24" class="icon w-6 h-6 text-[#C9BFAE]" aria-hidden="true">
+              <rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>
+            </svg>
+            <svg viewBox="0 0 24 24" class="icon w-6 h-6 text-[#C9BFAE] transition-transform duration-300 group-hover:scale-110" aria-hidden="true">
+              <path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/>
+              <path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>
+            </svg>
+          </div>
+          <h3 class="font-semibold text-[#D8CFC0] mb-1">Mac</h3>
+          <p class="text-xs text-[#B7A594]">Reads the same scroll. Speaks Mac only.</p>
+        </div>
+        <div class="group rounded-xl p-5 text-center bg-[#E28640]/[0.06] border border-[#E28640]/25 transition-all duration-300 hover:bg-[#E28640]/[0.1] hover:-translate-y-1">
+          <div class="flex justify-center gap-1.5 mb-3">
+            <svg viewBox="0 0 24 24" class="icon w-6 h-6 text-[#E9975A]" aria-hidden="true">
+              <polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>
+            </svg>
+            <svg viewBox="0 0 24 24" class="icon w-6 h-6 text-[#E9975A] transition-transform duration-300 group-hover:scale-110" aria-hidden="true">
+              <path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/>
+              <path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>
+            </svg>
+          </div>
+          <h3 class="font-semibold text-[#EFAC7A] mb-1">Linux machine</h3>
+          <p class="text-xs text-[#B7A594]">Reads the same scroll. Speaks Linux only.</p>
+        </div>
+      </div>
+    </article>
+
+    <!-- CONNECTOR -->
+    <div class="reveal flex flex-col items-center gap-2 py-2 text-center">
+      <svg viewBox="0 0 24 24" class="icon float-arrow w-5 h-5 text-[#E7A73D]" aria-hidden="true">
+        <path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>
+      </svg>
+      <p class="text-sm text-[#B7A594]">Three different robots. One shared instruction.</p>
+    </div>
+
+    <!-- STEP 4 -->
+    <article class="reveal rounded-2xl bg-[#1A130E]/80 border border-white/[0.06] p-8 shadow-[0_8px_30px_rgba(0,0,0,.35)]">
+      <div class="flex items-center gap-2 mb-4">
+        <svg viewBox="0 0 24 24" class="icon w-4 h-4 text-[#F4B84A]" aria-hidden="true">
+          <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+        </svg>
+        <span class="text-xs font-semibold tracking-[0.12em] uppercase text-[#F4B84A]">Step 4</span>
+      </div>
+      <h2 class="font-display text-2xl font-semibold mb-3">Ta-da! Same result, everywhere</h2>
+      <p class="text-[#B7A594] mb-6">Three totally different computers. Same tiny file. Same exact answer.</p>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="rounded-xl bg-[#0F0A07] border border-white/[0.08] p-4 font-mono text-sm">
+          <p class="text-[10px] uppercase tracking-wider text-[#7C6C5C] mb-2">Windows</p>
+          <p><span class="text-[#9BC98B]">&gt;</span> <span class="text-[#F3E9DA]">Hello, World!</span></p>
+        </div>
+        <div class="rounded-xl bg-[#0F0A07] border border-white/[0.08] p-4 font-mono text-sm">
+          <p class="text-[10px] uppercase tracking-wider text-[#7C6C5C] mb-2">Mac</p>
+          <p><span class="text-[#9BC98B]">&gt;</span> <span class="text-[#F3E9DA]">Hello, World!</span></p>
+        </div>
+        <div class="rounded-xl bg-[#0F0A07] border border-white/[0.08] p-4 font-mono text-sm">
+          <p class="text-[10px] uppercase tracking-wider text-[#7C6C5C] mb-2">Linux</p>
+          <p><span class="text-[#9BC98B]">&gt;</span> <span class="text-[#F3E9DA]">Hello, World!</span></p>
+        </div>
+      </div>
+    </article>
+
+    <!-- FINALE -->
+    <div class="reveal text-center pt-8 pb-16">
+      <div class="inline-flex items-center gap-2 font-display font-semibold text-xl text-[#F4B84A] border-2 border-[#F4B84A]/60 rounded-2xl px-7 py-4 -rotate-2">
+        <svg viewBox="0 0 24 24" class="icon w-5 h-5" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>
+        </svg>
+        Write once. Run anywhere.
+      </div>
+      <p class="text-[#7C6C5C] text-sm max-w-sm mx-auto mt-6">
+        That's the whole trick — and now you've seen every step of it, from the spell you wrote, to the secret scroll, to the robots who read it.
+      </p>
+    </div>
+
+  </main>
+
+<script>
+  var els = document.querySelectorAll('.reveal');
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: .15 });
+    els.forEach(function (el) { io.observe(el); });
+  } else {
+    els.forEach(function (el) { el.classList.add('in'); });
+  }
+</script>
+
+</body>
+</html>

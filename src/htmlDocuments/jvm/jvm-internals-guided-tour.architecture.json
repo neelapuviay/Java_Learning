@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "One Java Program, Inside the JVM",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "src/htmlDocuments/jvm/jvm-internals-guided-tour.html",
+    "viewBox": [1390, 560],
+    "views": [
+      {
+        "id": "build_load",
+        "label": "1. Build and load",
+        "focus": ["java_source", "class_binary", "class_lifecycle", "metaspace"],
+        "note": "Follow source into a verified, linked, initialized runtime class."
+      },
+      {
+        "id": "static_instance",
+        "label": "2. Static vs instance",
+        "focus": ["class_lifecycle", "metaspace", "thread_areas", "java_heap"],
+        "note": "Separate class metadata, static values, object fields, and local references."
+      },
+      {
+        "id": "tiered_execution",
+        "label": "3. Interpreter to CPU",
+        "focus": ["bytecode_interpreter", "tiered_controller", "c1", "c2", "code_cache_cpu"],
+        "note": "See hot bytecode become C1 and then C2 machine code."
+      },
+      {
+        "id": "memory_collection",
+        "label": "4. Memory and GC",
+        "focus": ["thread_areas", "java_heap", "metaspace", "code_cache_cpu", "gc"],
+        "note": "See what is thread-local, what is shared, and what GC can reclaim."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "java_source",
+      "type": "frontend",
+      "label": "JvmTour.java",
+      "sublabel": "static + instances",
+      "tag": "source",
+      "pos": [25, 250],
+      "size": [150, 72]
+    },
+    {
+      "id": "class_binary",
+      "type": "database",
+      "label": "JvmTour.class",
+      "sublabel": "bytecode + constants",
+      "tag": "javac output",
+      "pos": [220, 250],
+      "size": [160, 72]
+    },
+    {
+      "id": "class_lifecycle",
+      "type": "security",
+      "label": "Load, Link, Initialize",
+      "sublabel": "verify + prepare + resolve",
+      "tag": "ClassLoader + <clinit>",
+      "pos": [425, 250],
+      "size": [180, 72]
+    },
+    {
+      "id": "metaspace",
+      "type": "cloud",
+      "label": "Metaspace",
+      "sublabel": "class + method metadata",
+      "tag": "native memory",
+      "pos": [435, 75],
+      "size": [160, 72]
+    },
+    {
+      "id": "bytecode_interpreter",
+      "type": "backend",
+      "label": "Bytecode Interpreter",
+      "sublabel": "runs immediately",
+      "tag": "collects profiles",
+      "pos": [650, 250],
+      "size": [165, 72]
+    },
+    {
+      "id": "tiered_controller",
+      "type": "messagebus",
+      "label": "Tiered JIT",
+      "sublabel": "hotness levels 0-4",
+      "tag": "selects C1 or C2",
+      "pos": [860, 250],
+      "size": [155, 72]
+    },
+    {
+      "id": "code_cache_cpu",
+      "type": "backend",
+      "label": "Code Cache -> CPU",
+      "sublabel": "native machine code",
+      "tag": "OSR + deoptimization",
+      "pos": [1195, 250],
+      "size": [175, 72]
+    },
+    {
+      "id": "c1",
+      "type": "backend",
+      "label": "C1 Compiler",
+      "sublabel": "quick compilation",
+      "tag": "light optimization",
+      "pos": [860, 75],
+      "size": [155, 72]
+    },
+    {
+      "id": "c2",
+      "type": "backend",
+      "label": "C2 Compiler",
+      "sublabel": "profile-guided compile",
+      "tag": "deep optimization",
+      "pos": [1202.5, 75],
+      "size": [160, 72]
+    },
+    {
+      "id": "thread_areas",
+      "type": "external",
+      "label": "Per-thread Areas",
+      "sublabel": "PC + Java frames",
+      "tag": "native method stack",
+      "pos": [645, 420],
+      "size": [175, 72]
+    },
+    {
+      "id": "java_heap",
+      "type": "database",
+      "label": "Managed Java Heap",
+      "sublabel": "objects + arrays",
+      "tag": "Class mirror + statics",
+      "pos": [850, 420],
+      "size": [180, 72]
+    },
+    {
+      "id": "gc",
+      "type": "cloud",
+      "label": "Garbage Collector",
+      "sublabel": "trace roots + reclaim",
+      "tag": "G1 / ZGC / others",
+      "pos": [1110, 420],
+      "size": [175, 72]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "HotSpot JVM process",
+      "wraps": [
+        "class_lifecycle",
+        "metaspace",
+        "bytecode_interpreter",
+        "tiered_controller",
+        "code_cache_cpu",
+        "c1",
+        "c2",
+        "thread_areas",
+        "java_heap",
+        "gc"
+      ],
+      "pad": 12
+    }
+  ],
+  "connections": [
+    {
+      "id": "compile",
+      "from": "java_source",
+      "to": "class_binary",
+      "label": "javac",
+      "variant": "default"
+    },
+    {
+      "id": "load_bytes",
+      "from": "class_binary",
+      "to": "class_lifecycle",
+      "variant": "emphasis"
+    },
+    {
+      "id": "invoke_main",
+      "from": "class_lifecycle",
+      "to": "bytecode_interpreter",
+      "variant": "default"
+    },
+    {
+      "id": "profile_hotness",
+      "from": "bytecode_interpreter",
+      "to": "tiered_controller",
+      "variant": "emphasis"
+    },
+    {
+      "id": "install_code",
+      "from": "tiered_controller",
+      "to": "code_cache_cpu",
+      "label": "install nmethod",
+      "variant": "emphasis"
+    },
+    {
+      "id": "store_metadata",
+      "from": "class_lifecycle",
+      "to": "metaspace",
+      "label": "metadata",
+      "variant": "dashed"
+    },
+    {
+      "id": "push_frames",
+      "from": "bytecode_interpreter",
+      "to": "thread_areas",
+      "variant": "default"
+    },
+    {
+      "id": "allocate",
+      "from": "bytecode_interpreter",
+      "to": "java_heap",
+      "label": "new objects",
+      "variant": "dashed"
+    },
+    {
+      "id": "choose_c1",
+      "from": "tiered_controller",
+      "to": "c1",
+      "variant": "default"
+    },
+    {
+      "id": "promote_c2",
+      "from": "c1",
+      "to": "c2",
+      "label": "hotter",
+      "variant": "emphasis"
+    },
+    {
+      "id": "optimized_native",
+      "from": "c2",
+      "to": "code_cache_cpu",
+      "variant": "emphasis"
+    },
+    {
+      "id": "collect",
+      "from": "java_heap",
+      "to": "gc",
+      "label": "unreachable",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "The one program followed",
+      "items": [
+        "static int created = 0; final int id;",
+        "constructor stores id and increments created",
+        "work() returns id * 2",
+        "main creates many objects and repeatedly calls work()"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Where each thing lives",
+      "items": [
+        "Metaspace: class shape, bytecode, methods, runtime constant pool",
+        "Heap Class mirror: static field value JvmTour.created",
+        "Heap instance: object header and each object's id",
+        "Frame: parameters, locals, operand stack, return data",
+        "Code Cache: JIT-compiled native instructions"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Optimization and collection loops",
+      "items": [
+        "C1 compiles quickly; C2 uses profiles for aggressive optimization",
+        "OSR enters compiled code inside a hot loop",
+        "Failed assumptions deoptimize into reconstructed interpreter frames",
+        "GC roots include active frames, JNI handles, and live class statics",
+        "Class unloading can reclaim Metaspace after its loader is unreachable"
+      ]
+    }
+  ]
+}

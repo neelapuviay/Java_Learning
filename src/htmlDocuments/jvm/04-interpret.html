@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>04 · The Bytecode Interpreter — Inside the JVM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/jvm-theme.css">
+</head>
+<body>
+
+<div class="stage-container">
+  <header class="stage-head">
+    <span class="stage-num-badge">STAGE 04</span>
+    <h1>The Bytecode Interpreter — A Virtual Stack Machine in Action</h1>
+    <span class="stage-tag">Tier 0 execution</span>
+  </header>
+
+  <p class="stage-desc">
+    Execution begins at <b>Tier 0</b> in the bytecode interpreter (HotSpot Template Interpreter). Unlike physical x86/ARM CPUs that operate on register banks, the JVM operates as an abstract <b>stack machine</b>. Every operation pushes values onto the operand stack, manipulates the top operands, and stores results back into local variable slots.
+  </p>
+
+
+  <div class="mental">
+    <span class="lbl">Mental model — hold this picture</span>
+    <p>Picture a clerk at a desk with an <b>in-tray of numbered slips</b> (the local variable array) and a <b>spike</b> on which papers are stacked (the operand stack). Every instruction is one tiny order: "copy slip&nbsp;0 onto the spike", "copy slip&nbsp;1 onto the spike", "take the top two papers off the spike, add them, put the result back", "take the top paper and hand it to whoever asked."</p>
+    <p>The clerk never improvises and never looks ahead. Read order, do order, read next order. That is the interpreter — and its honesty is exactly its weakness: a real CPU could have done all four of those orders in a single instruction, but the clerk cannot see four steps at once. <b>The JIT is the manager who watches the clerk for a while, notices the same four-step ritual repeating ten thousand times, and replaces it with one motion.</b></p>
+  </div>
+  <!-- Interactive Controls & Model Selector -->
+  <div class="panel" style="margin-bottom:20px; padding:18px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-family:var(--font-mono); font-size:0.8rem; font-weight:700; color:var(--text-faint);">LOOP MODEL:</span>
+        <select id="modelSelect" style="background:var(--panel-raised); border:1px solid var(--border); color:var(--text); font-family:var(--font-mono); font-size:0.82rem; padding:6px 12px; border-radius:6px; outline:none;">
+          <option value="method">Model A · accumulate() method calls</option>
+          <option value="inlined">Model B · loop inside main() (OSR)</option>
+        </select>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="stepBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          Step 1 Instruction
+        </button>
+        <button class="btn" id="autoStepBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+          Auto-step
+        </button>
+        <button class="btn" id="finishIterBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 5l7 7-7 7M4 5l7 7-7 7"/></svg>
+          Finish Iteration
+        </button>
+        <button class="btn btn-ghost" id="resetBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>
+          Reset
+        </button>
+      </div>
+    </div>
+    <div id="modelExplain" style="font-size:0.86rem; color:var(--text-dim); margin-top:12px; border-top:1px solid var(--border-soft); padding-top:10px;"></div>
+  </div>
+
+  <div class="grid-2">
+    <!-- Bytecode Instruction Stream -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>Bytecode Instruction Stream</span>
+        <span>IP: <span id="ipVal" style="color:var(--steel);">0</span></span>
+      </div>
+      <div class="bc-stream" id="bytecodeStream"></div>
+      <div style="margin-top:12px; font-size:0.78rem; font-family:var(--font-mono); color:var(--text-faint);">
+        Current Method Frame: <span id="frameLabel" style="color:var(--text); font-weight:700;">accumulate()</span>
+      </div>
+    </div>
+
+    <!-- Stack & Frame Registers -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>JVM Stack Frame State</span>
+        <span id="iterLabel" style="color:var(--verdant);">iter: 0</span>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <div style="font-family:var(--font-mono); font-size:0.72rem; text-transform:uppercase; color:var(--text-faint); margin-bottom:6px; font-weight:700;">
+          Operand Stack (Push / Pop)
+        </div>
+        <div class="stack-canvas" id="stackView">
+          <span style="font-size:0.8rem; color:var(--text-faint);">[empty stack]</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-family:var(--font-mono); font-size:0.72rem; text-transform:uppercase; color:var(--text-faint); margin-bottom:6px; font-weight:700;">
+          Local Variables Array (Slots)
+        </div>
+        <div class="stack-canvas" id="localsView"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <h3 class="sub">
+    <span class="kicker">Read this while stepping through</span>
+    How the interpreter actually executes a method
+  </h3>
+  <div class="prose">
+    <p>After class loading, the JVM feeds bytecode into the <b>interpreter</b>, which translates each instruction into machine-level work and drives the operating system underneath. It is the only execution mode that is always available — every method in every Java program starts here, at <b>Tier&nbsp;0</b>, including methods that will later be compiled to peak native code.</p>
+
+    <h4>Three things exist per method call: a frame</h4>
+    <p>Every method invocation pushes a <b>frame</b> onto the calling thread's stack, and the frame is destroyed when the method returns. A frame holds exactly three things:</p>
+    <ul>
+      <li><b>The local variable array</b> — numbered slots. Slot&nbsp;0 of an instance method is always <code>this</code>; for a <code>static</code> method slot&nbsp;0 is the first parameter, which is why <code>accumulate</code>'s <code>balance</code> is <code>ILOAD 0</code>. Parameters occupy the first slots, then declared locals. A <code>long</code> or <code>double</code> consumes <b>two</b> slots.</li>
+      <li><b>The operand stack</b> — the scratch space where actual computation happens. Its maximum depth is <code>max_stack</code>, precomputed by javac and stored in the <code>Code</code> attribute, so the JVM knows the exact frame size before executing anything.</li>
+      <li><b>A reference to the runtime constant pool</b> of the frame's class, so instructions like <code>invokevirtual #18</code> can look up what <code>#18</code> means.</li>
+    </ul>
+    <p>Alongside, each thread has a <b>PC register</b> holding the address of the instruction currently executing. Frames are strictly thread-private, which is why <b>local variables can never have a visibility problem between threads</b> — there is nothing to share.</p>
+
+    <h4>Everything is push, operate, pop</h4>
+    <p>The JVM is a <b>stack machine using Reverse Polish Notation</b>: <code>1 + 2</code> is expressed as <code>1 2 +</code>. Operands go up first, the operator consumes them. Watch the panel above and you will see nothing else ever happens — every arithmetic instruction pops its inputs from the top of the stack and pushes its result back.</p>
+    <p>The opcode names are a small, regular language once you see the pattern. The <b>first letter is the type</b> (<code>i</code> int, <code>l</code> long, <code>f</code> float, <code>d</code> double, <code>a</code> reference), and the rest is the action: <code>iload_1</code> pushes the int in slot&nbsp;1, <code>istore_2</code> pops into slot&nbsp;2, <code>iconst_3</code> pushes the literal 3, <code>iadd</code> adds, <code>ireturn</code> returns an int, <code>aload_0</code> pushes <code>this</code>. Learn the pattern and you can read any disassembly without a reference table.</p>
+
+    <h4>Why this is slow — and why it is still worth having</h4>
+    <p>The cost is not the arithmetic; it is the <b>dispatch</b>. For every single instruction the interpreter must fetch the opcode, jump to the handler for it, move values to and from the stack in memory, and advance the PC. A simple <code>a + b</code> costs four instructions and several memory round-trips where a CPU would use one register-to-register <code>add</code>. Worse, the indirect jump at the heart of the dispatch loop is hostile to the CPU's branch predictor.</p>
+    <p>HotSpot's answer is the <b>template interpreter</b>: rather than a giant C++ <code>switch</code>, at startup the VM <i>generates machine code</i> for each opcode handler and stitches the dispatch together with direct jumps. It is a substantial win over a naïve interpreter — and still roughly an order of magnitude slower than compiled code, which is precisely why the JIT exists.</p>
+    <p>So why not compile everything immediately? Because <b>most code runs once</b>. Compiling a method costs far more CPU than interpreting it a handful of times, and — the deeper reason — the interpreter is where the JVM <b>collects the profile</b> that makes the eventual compilation good. Stage&nbsp;05 is that profile being gathered.</p>
+
+    <h4>The two ways compiled code takes over</h4>
+    <p>Switch the <b>loop model</b> selector above and watch the difference. In <b>Model A</b> the hot work lives in a method that is called repeatedly, so the <i>invocation counter</i> rises and the next call simply dispatches to the compiled version — clean and easy. In <b>Model B</b> the loop never leaves <code>main()</code>, so no invocation ever completes; the <i>back-edge counter</i> is what rises, and HotSpot must swap compiled code into a frame that is <b>already running</b>. That is <b>On-Stack Replacement (OSR)</b>, and it is why a single monolithic <code>main</code> method can behave strangely in benchmarks.</p>
+  </div>
+
+  <div class="factgrid">
+    <div>frame</div><div>Created per method <b>invocation</b> (not per method). Recursion means many frames of the same method, each with its own locals and operand stack.</div>
+    <div>slot 0</div><div><code>this</code> in an instance method; the first parameter in a static method. This one fact decodes most disassembly you will read.</div>
+    <div>max_stack / max_locals</div><div>Computed by javac, stored in the <code>Code</code> attribute, checked by the verifier. The frame's size is fixed and known <b>before</b> execution — no dynamic growth, ever.</div>
+    <div>invoke* family</div><div><code>invokestatic</code> (static), <code>invokespecial</code> (constructors, <code>private</code>, <code>super</code>), <code>invokevirtual</code> (normal instance dispatch via vtable), <code>invokeinterface</code> (interface dispatch), <code>invokedynamic</code> (lambdas, string concat, records — the call target is decided at first execution by a bootstrap method).</div>
+    <div>-Xint</div><div>Interpreter only, no JIT. Useful for <b>debugging</b> and for getting deterministic traces; typically 10–50× slower. Never a production flag.</div>
+    <div>-Xss</div><div>Per-thread stack size. Bigger stack = deeper recursion possible, but the memory is <b>per thread</b> and native — 1000 threads × 1&nbsp;MB is a gigabyte outside <code>-Xmx</code>.</div>
+  </div>
+
+  <h3 class="sub">
+    <span class="kicker">Interview drill · stage 04</span>
+    Questions they actually ask about interpretation &amp; the stack
+  </h3>
+
+  <details class="qa">
+    <summary>What exactly lives on the JVM stack versus the heap?</summary>
+    <div class="ans">
+      <p><b>The stack holds frames; frames hold local variables and the operand stack. Objects always live on the heap.</b></p>
+      <p>The precise phrasing that separates a good answer from a vague one: for <code>Order o = new Order();</code>, the <b>reference variable <code>o</code></b> is a slot in the frame on the stack; the <b>object it points at</b> is on the heap. For <code>int i = 5;</code> the value itself is in the slot — primitives declared as locals have no heap presence at all. An <code>int</code> field <i>inside</i> an object, by contrast, lives on the heap with that object.</p>
+      <p>Add the nuance and you sound senior: <b>escape analysis</b> (Stage&nbsp;06) can let the JIT skip the heap allocation entirely for objects that never escape their method, breaking the object into raw values in registers. So "objects are always on the heap" is true of the <i>abstract machine</i> and not always true of the machine code that actually runs.</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>Why does the JVM start by interpreting instead of compiling everything up front?</summary>
+    <div class="ans">
+      <p>Three reasons, and the third is the one interviewers are listening for.</p>
+      <ul>
+        <li><b>Startup latency.</b> Compiling every method that gets loaded — thousands of them, most executed once — would cost far more than simply running them.</li>
+        <li><b>Memory.</b> Native code is many times larger than bytecode, and the code cache is a finite native region.</li>
+        <li><b>Profile quality.</b> The interpreter is where the JVM <i>learns</i>: which branches are taken, which types actually appear at each call site, how many times each loop runs. That telemetry is what lets C2 produce code that is faster than any ahead-of-time compiler could have produced, because AOT never sees the real workload.</li>
+      </ul>
+      <p>Roughly <b>80% of execution time is spent in 20% of the code</b>. Interpreting first is how the JVM finds out <i>which</i> 20% — and spends its compilation budget only there.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · A recursive tree walk works in tests but throws <code>StackOverflowError</code> in production on real data. Someone proposes <code>-Xss512m</code>. What do you say?</summary>
+    <div class="ans">
+      <p>First, the mechanism: each recursive call pushes a frame, frames are never reclaimed until the call returns, and the thread's stack is a <b>fixed-size</b> native region (default around 512&nbsp;KB–1&nbsp;MB). Real data is simply deeper than test data. Note that the <b>heap is completely untouched</b> — this is not a memory-pressure problem, and no amount of <code>-Xmx</code> helps.</p>
+      <p><b>Why <code>-Xss512m</code> is the wrong instinct:</b> stack size is <b>per thread</b> and is native memory outside <code>-Xmx</code>. On a 200-thread server that is 100&nbsp;GB of address space reservation; you will hit <code>OutOfMemoryError: unable to create new native thread</code> or get OOM-killed by the kernel long before you get a useful answer. It also only moves the cliff — the next deeper input fails again.</p>
+      <p><b>What to do instead, in order:</b></p>
+      <ul>
+        <li><b>Convert recursion to iteration with an explicit stack.</b> An <code>ArrayDeque</code> of nodes on the <i>heap</i> grows to gigabytes happily. This is the real fix and it is usually a ten-line change.</li>
+        <li><b>Bound the depth</b> and fail with a domain error — an unbounded tree walk over user-supplied data is also a denial-of-service vector.</li>
+        <li><b>Modest</b> <code>-Xss</code> bump (1&nbsp;MB &rarr; 2&nbsp;MB) as a stopgap, sized against your actual thread count, with the number written down.</li>
+        <li>Isolate the deep work on a dedicated thread created with an explicit stack size: <code>new Thread(group, runnable, name, 16L*1024*1024)</code> — the only way to give <i>one</i> thread a big stack without giving it to all of them.</li>
+      </ul>
+      <p><b>The follow-up they will ask:</b> "why doesn't the JVM do tail-call optimisation?" Because the JVM specification does not permit frames to be silently elided — stack walking is observable through <code>Throwable.getStackTrace</code>, security checks and reflection, so removing frames would change program-visible behaviour. It is a known limitation, not an oversight; Project Loren/Valhalla-era proposals have circled it for years.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · A JMH benchmark shows a method taking 0.3&nbsp;ns per call — faster than a single CPU cycle. What is wrong?</summary>
+    <div class="ans">
+      <p>Nothing is wrong with the JVM; the benchmark is measuring nothing. C2 discovered the result was never used and <b>deleted the entire computation</b> — dead code elimination, enabled by inlining the method into the benchmark loop.</p>
+      <p>This connects directly back to the interpreter: while the method was interpreted, the four-instruction push/add/pop dance genuinely happened. Once compiled and inlined, the compiler can see the whole thing is pure and unobserved, and the correct machine code for "compute a value nobody reads" is <b>no machine code at all</b>.</p>
+      <p><b>Fixes:</b> return the value from the benchmark method (JMH consumes returned values), or pass it to a <code>Blackhole</code>. Also make the inputs <code>@State</code> fields rather than constants, or the compiler will constant-fold the whole expression at compile time.</p>
+      <p>The general lesson worth stating: <b>a benchmark measures what the optimizer could not prove was useless.</b> Any timing that looks physically impossible is an optimizer artefact, not a discovery.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · Production shows a bug you cannot reproduce. A colleague suggests running with <code>-Xint</code> to "rule out the JIT." Is that reasonable?</summary>
+    <div class="ans">
+      <p><b>As a diagnostic, yes — as a fix, no.</b> Running with <code>-Xint</code> is a legitimate and underused bisection step: if the bug disappears under interpretation, you have narrowed it to compiled code, which means either a genuine (rare) JIT bug or, far more likely, <b>a data race in your code that only manifests once the compiler reorders memory operations</b>.</p>
+      <p>That second case is the important one. The Java Memory Model permits reordering that the interpreter happens not to perform. Missing <code>volatile</code>, an unsynchronised lazy init, a non-thread-safe cache — all of these can be invisible at Tier&nbsp;0 and appear the moment C2 hoists a field read out of a loop. <b>The JIT did not cause the bug; it revealed one that was always there.</b></p>
+      <p>Better intermediate steps before the sledgehammer: <code>-XX:TieredStopAtLevel=1</code> (C1 only — much less aggressive reordering, but still fast), <code>-XX:-UseOnStackReplacement</code>, or excluding one suspect method with <code>-XX:CompileCommand=exclude,com/acme/Foo.bar</code>. Each narrows the search without a 30× slowdown.</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>Why is a stack-based interpreter slower than a register-based VM?</summary>
+    <div class="ans">
+      A stack architecture is exceptionally compact and easy for compilers to generate without complex register allocation. However, executing a simple binary operation like <code>a + b</code> requires <b>4 bytecode instructions</b>: two <code>iload</code> pushes to the stack, one <code>iadd</code> that pops two values and pushes the sum, and one <code>istore</code>. This generates massive memory traffic and dispatch overhead compared to a single physical machine instruction (e.g. <code>add eax, ebx</code>).
+    </div>
+  </details>
+
+  <div class="trap">
+    <span class="lbl">Common Interview Trap</span>
+    <span class="wrong">"Primitives go on the stack, objects go on the heap."</span>
+    <span class="right">Only <b>local</b> primitives live in a frame. A primitive <i>field</i> lives on the heap, inside its object.</span>
+    <code>int count</code> declared inside a method is a slot in the frame. <code>int count</code> declared as a field of <code>Order</code> is bytes inside the <code>Order</code> object on the heap. The distinction is <b>where it is declared</b>, never what type it is — and getting this precise is a cheap way to sound like you have actually looked at a frame.
+  </div>
+  <!-- Page Navigation Footer -->
+  <footer class="page-nav-footer">
+    <a href="03-load-and-link.html" class="nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Prev: 03 · Load &amp; Link
+    </a>
+    <a href="05-profile.html" class="nav-btn next">
+      Next: 05 · Profile &amp; Tier Counters
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+  </footer>
+</div>
+
+<script src="js/jvm-common.js"></script>
+<script>
+const MODELS = {
+  method: {
+    explain: '<b>Model A (Standard Method Calls):</b> <code>accumulate()</code> is a distinct method call each loop iteration. HotSpot tracks the invocation counter and recompiles standard entry points upon reaching the threshold.',
+    bytecode: [
+      { op:'ILOAD_0', desc:"push 'balance' (local slot 0) onto operand stack", action:'push_a' },
+      { op:'ILOAD_1', desc:"push 'item' (local slot 1) onto operand stack", action:'push_b' },
+      { op:'IADD', desc:'pop two ints, compute sum, push result', action:'iadd' },
+      { op:'IRETURN', desc:'pop sum and return to caller — 1 method call finished', action:'complete_method' }
+    ],
+    locals:['balance','item']
+  },
+  inlined: {
+    explain: "<b>Model B (Inlined Loop in main):</b> Computation occurs directly inside <code>main()'s</code> loop body without helper calls. HotSpot tracks the loop back-edge counter and uses On-Stack Replacement (OSR).",
+    bytecode: [
+      { op:'ILOAD_1', desc:"push 'result' (local slot 1)", action:'push_a' },
+      { op:'ILOAD_2', desc:"push 'i' (local slot 2)", action:'push_b' },
+      { op:'IADD', desc:"add result + i", action:'iadd' },
+      { op:'ISTORE_1', desc:"pop sum, store into 'result'", action:'istore' },
+      { op:'IINC 2, 1', desc:"increment loop variable 'i' by 1 in place", action:'iinc' },
+      { op:'IF_ICMPLT L0', desc:'backward branch (counted as loop back-edge)', action:'complete_inlined' }
+    ],
+    locals:['result','i']
+  }
+};
+
+const state = {
+  model: 'method',
+  ip: 0,
+  stack: [],
+  locals: { a: 0, b: 0 },
+  iteration: 0,
+  autoTimer: null
+};
+
+const modelSelect = $('modelSelect');
+const modelExplain = $('modelExplain');
+const bytecodeStream = $('bytecodeStream');
+const ipVal = $('ipVal');
+const stackView = $('stackView');
+const localsView = $('localsView');
+const frameLabel = $('frameLabel');
+const iterLabel = $('iterLabel');
+const stepBtn = $('stepBtn');
+const autoStepBtn = $('autoStepBtn');
+const finishIterBtn = $('finishIterBtn');
+const resetBtn = $('resetBtn');
+
+function applyAction(action) {
+  switch (action) {
+    case 'push_a': state.stack.push(state.locals.a); break;
+    case 'push_b': state.stack.push(state.locals.b); break;
+    case 'iadd': {
+      const b = state.stack.pop() || 0;
+      const a = state.stack.pop() || 0;
+      state.stack.push(a + b);
+      break;
+    }
+    case 'istore': state.locals.a = state.stack.pop() || 0; break;
+    case 'iinc': state.locals.b += 1; break;
+    case 'complete_method': {
+      state.locals.a = state.stack.pop() || 0;
+      state.iteration++;
+      state.locals.b = state.iteration;
+      break;
+    }
+    case 'complete_inlined': {
+      state.iteration++;
+      break;
+    }
+  }
+}
+
+function stepInstruction() {
+  const bc = MODELS[state.model].bytecode;
+  applyAction(bc[state.ip].action);
+  state.ip = (state.ip + 1) % bc.length;
+  render();
+}
+
+function finishIteration() {
+  const bc = MODELS[state.model].bytecode;
+  let guard = 0;
+  do {
+    stepInstruction();
+    guard++;
+  } while (state.ip !== 0 && guard < bc.length + 2);
+}
+
+function toggleAutoStep() {
+  if (state.autoTimer) {
+    clearInterval(state.autoTimer);
+    state.autoTimer = null;
+    autoStepBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Auto-step';
+    autoStepBtn.classList.remove('btn-danger');
+    return;
+  }
+  autoStepBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>Pause Auto-step';
+  autoStepBtn.classList.add('btn-danger');
+  state.autoTimer = setInterval(stepInstruction, 450);
+}
+
+function resetAll() {
+  if (state.autoTimer) {
+    clearInterval(state.autoTimer);
+    state.autoTimer = null;
+    autoStepBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Auto-step';
+    autoStepBtn.classList.remove('btn-danger');
+  }
+  state.ip = 0;
+  state.stack = [];
+  state.locals = { a: 0, b: 0 };
+  state.iteration = 0;
+  render();
+}
+
+function render() {
+  const bc = MODELS[state.model].bytecode;
+  bytecodeStream.innerHTML = bc.map((inst, i) => `
+    <div class="bc-line ${i === state.ip ? 'active' : ''}">
+      <span class="op">${inst.op}</span>
+      <span class="desc">${inst.desc}</span>
+    </div>
+  `).join('');
+
+  ipVal.textContent = state.ip;
+  iterLabel.textContent = `iteration: ${state.iteration.toLocaleString()}`;
+
+  stackView.innerHTML = state.stack.length
+    ? state.stack.map((v, i) => `<span class="slot">S[${i}] <b>${v}</b></span>`).join('')
+    : '<span style="font-size:0.8rem; color:var(--text-faint);">[empty stack]</span>';
+
+  const ln = MODELS[state.model].locals;
+  localsView.innerHTML = `
+    <span class="slot">${ln[0]} (slot 0): <b>${state.locals.a}</b></span>
+    <span class="slot">${ln[1]} (slot 1): <b>${state.locals.b}</b></span>
+  `;
+}
+
+modelSelect.addEventListener('change', () => {
+  state.model = modelSelect.value;
+  modelExplain.innerHTML = MODELS[state.model].explain;
+  frameLabel.textContent = state.model === 'method' ? 'accumulate()' : 'main() loop frame';
+  resetAll();
+});
+
+stepBtn.addEventListener('click', stepInstruction);
+autoStepBtn.addEventListener('click', toggleAutoStep);
+finishIterBtn.addEventListener('click', finishIteration);
+resetBtn.addEventListener('click', resetAll);
+
+modelExplain.innerHTML = MODELS[state.model].explain;
+render();
+</script>
+</body>
+</html>

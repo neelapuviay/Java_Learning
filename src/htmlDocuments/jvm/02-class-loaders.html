@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>02 · Class Loaders &amp; Modular Hierarchy — Inside the JVM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/jvm-theme.css">
+</head>
+<body>
+
+<div class="stage-container">
+  <header class="stage-head">
+    <span class="stage-num-badge">STAGE 02</span>
+    <h1>The Class Loader Hierarchy — Java 8 vs. The Modular JDK (Java 9+)</h1>
+    <span class="stage-tag">architecture, security &amp; JPMS</span>
+  </header>
+
+  <p class="stage-desc">
+    Before any bytecode can execute, a <b>ClassLoader</b> must locate its binary data and define it as a live type in memory. In Java 9, Project Jigsaw overhauled the classic 3-tier hierarchy: the monolithic <code>rt.jar</code> was dismantled into modular runtime images (<code>jimage</code>), the <b>Extension ClassLoader was eliminated</b>, and the <b>Platform ClassLoader</b> was introduced to enforce least privilege.
+  </p>
+
+
+  <div class="mental">
+    <span class="lbl">Mental model — hold this picture</span>
+    <p>Think of a large company where any expense must be approved. You submit a request to your immediate manager. Your manager does not decide — they pass it to <i>their</i> manager, who passes it to the director, who passes it to the CFO. The <b>CFO answers first</b>. Only if the CFO says "not my budget" does the answer come back down, one level at a time, until someone can handle it.</p>
+    <p>That is <b>parent-first delegation</b>, and it exists for exactly one reason: <b>so a junior employee cannot approve their own expenses</b>. Translate it back — if a random JAR on your classpath could define <code>java.lang.String</code>, every security guarantee in the JVM would evaporate. The Bootstrap loader answers first, always, so the real <code>String</code> always wins.</p>
+    <p>The second half of the picture: a class's identity in the JVM is <b>not</b> its name. It is <b>name + the loader that defined it</b>. Two loaders reading the same bytes produce two genuinely different types that cannot be assigned to each other. Almost every weird class-loading bug you will ever debug is that sentence biting you.</p>
+  </div>
+  <!-- Interactive Switcher -->
+  <div class="cl-switch">
+    <button class="cl-switch-btn amber" id="clToggleJ8" type="button">Java 8 &amp; Earlier (Classic 3-Tier)</button>
+    <button class="cl-switch-btn active" id="clToggleJ9" type="button">Java 9+ Modular JDK (JPMS)</button>
+  </div>
+
+  <div class="grid-2">
+    <!-- Hierarchy Visualizer -->
+    <div class="panel">
+      <div class="panel-head">
+        <span id="clHierarchyTitle">Java 9+ Modular JDK: JPMS Module-Aware Hierarchy</span>
+        <span>Runtime Hierarchy</span>
+      </div>
+      <div id="clHierarchyView"></div>
+    </div>
+
+    <!-- Class Resolution Tracer -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>Class Resolution Inspector</span>
+        <span>Interactive Probe</span>
+      </div>
+      <p style="font-size:0.86rem; color:var(--text-dim); margin-bottom:12px;">
+        Select a sample type below to inspect how the JVM delegates its loading across runtime versions:
+      </p>
+      <div class="cl-sim-chips">
+        <button class="cl-sim-chip active" data-cls="string" type="button">java.lang.String</button>
+        <button class="cl-sim-chip" data-cls="sql" type="button">java.sql.Connection</button>
+        <button class="cl-sim-chip" data-cls="xml" type="button">javax.xml.DocumentBuilder</button>
+        <button class="cl-sim-chip" data-cls="crypto" type="button">SunJCE Provider</button>
+        <button class="cl-sim-chip" data-cls="app" type="button">com.myapp.OrderService</button>
+      </div>
+      <div id="clTraceBoard" style="background:var(--panel-inset); border:1px solid var(--border); border-radius:8px; padding:16px;"></div>
+    </div>
+  </div>
+
+
+  <h3 class="sub">
+    <span class="kicker">Read this alongside the diagram</span>
+    What the loader hierarchy is doing, in plain words
+  </h3>
+  <div class="prose">
+    <p><b>The class loader is where the JVM begins, and where all of the verification processes begin.</b> Nothing else can happen first: before a single instruction executes, some loader must find bytes, hand them to the VM, and let the VM define a type from them. This is also the JVM's first security boundary — it is what stops arbitrary bytecode from simply being executed.</p>
+
+    <h4>The three loaders, and what each one owns</h4>
+    <p><b>Bootstrap</b> is written in native C++ inside HotSpot itself. It is not a Java object, which is why <code>String.class.getClassLoader()</code> returns <code>null</code> — <code>null</code> is the API's sentinel for "the bootstrap loader". It loads <code>java.base</code>: <code>Object</code>, <code>String</code>, <code>Integer</code>, the primitives' box types, the core of the language.</p>
+    <p><b>Platform</b> (called <b>Extension</b> before Java&nbsp;9) loads the rest of the JDK's own modules — <code>java.sql</code>, <code>java.xml</code>, <code>java.logging</code>, crypto providers. It is a real Java object, so it has a non-null loader reference.</p>
+    <p><b>Application</b> (also called the system loader) loads your code and your dependencies from the classpath or module path. This is the loader almost every class you write will report.</p>
+
+    <h4>Why the Extension loader had to die</h4>
+    <p>In Java&nbsp;8, dropping a JAR into <code>$JAVA_HOME/lib/ext</code> made it load automatically, with <b>higher priority than your application's own dependencies</b>, with no version information, on every application on that machine. A single stray JAR could silently override a library for every process. That is "JAR hell" in its most concentrated form. Java&nbsp;9 deleted <code>lib/ext</code> outright and replaced the implicit privilege with explicit module boundaries under the Platform loader.</p>
+
+    <h4>Delegation is a default, not a law</h4>
+    <p>Parent-first is what <code>ClassLoader.loadClass</code> does by default, but it is <b>ordinary Java code you can override</b>. Application servers routinely do: Tomcat's web-app loader is deliberately <b>parent-last</b> for most packages, so that a WAR bundling its own Jackson gets <i>its</i> Jackson rather than the container's. OSGi goes further and resolves per-package against a wiring graph. Knowing that delegation is policy rather than physics is what separates a memorised answer from an understood one.</p>
+
+    <h4>The three phases every loader runs through</h4>
+    <p>Whatever loader wins the search, the work it triggers is always the same triple, and the JVM specification fixes their order: <b>Loading</b> (find the bytes, define the type in Metaspace), <b>Linking</b> (verify, prepare static storage, resolve symbolic references), and <b>Initialization</b> (run <code>&lt;clinit&gt;</code>). Stage&nbsp;03 walks each of them frame by frame.</p>
+  </div>
+
+  <div class="factgrid">
+    <div>class identity</div><div>Fully-qualified name <b>+</b> defining loader. Same bytes, two loaders &rarr; two incompatible types &rarr; a <code>ClassCastException</code> whose message looks like it is casting a class to itself.</div>
+    <div>defining vs initiating</div><div>The <b>initiating</b> loader is the one you asked. The <b>defining</b> loader is the one that actually called <code>defineClass</code>. <code>getClassLoader()</code> reports the <i>defining</i> loader — which is why your classes often report a parent you never touched.</div>
+    <div>ClassNotFoundException</div><div>Thrown by an <b>explicit</b> lookup — <code>Class.forName</code>, <code>loadClass</code>. It is a checked exception: someone <i>asked</i> for a name and it was not found.</div>
+    <div>NoClassDefFoundError</div><div>Thrown by the <b>JVM itself</b> when linking. The class was present at compile time but is missing (or failed to initialise) now. A repeated <code>NoClassDefFoundError</code> on a class that <i>does</i> exist usually means its <code>&lt;clinit&gt;</code> threw the first time — look for the earlier <code>ExceptionInInitializerError</code>.</div>
+    <div>unloading</div><div>A class is unloadable only when its <b>entire defining loader</b> becomes unreachable, along with every instance and every <code>Class</code> object. One live reference pins the whole loader — the mechanism behind every Metaspace leak.</div>
+    <div>TCCL</div><div>The <b>Thread Context ClassLoader</b> (<code>Thread.currentThread().getContextClassLoader()</code>) is the escape hatch for the SPI inversion problem: JDK code loaded by Bootstrap needs to instantiate <i>your</i> implementation, which Bootstrap cannot see. JDBC, JAXP and <code>ServiceLoader</code> all rely on it.</div>
+  </div>
+
+  <h3 class="sub">
+    <span class="kicker">Interview drill · stage 02</span>
+    Questions they actually ask about class loading
+  </h3>
+  <details class="qa">
+    <summary>Why was the Extension ClassLoader removed in Java 9+?</summary>
+    <div class="ans">
+      In Java 8, dropping arbitrary JAR files into <code>&lt;JAVA_HOME&gt;/lib/ext</code> caused implicit, unversioned global classpath pollution (commonly referred to as <i>JAR Hell</i>). Any JAR in <code>lib/ext</code> was automatically loaded by the Extension ClassLoader with high privileges, frequently overriding application-level dependencies and causing silent classpath collisions. In Java 9, <code>lib/ext</code> was completely deleted; standard platform components were divided into modular descriptors with explicit boundaries under the <b>Platform ClassLoader</b>.
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>Why does String.class.getClassLoader() return null?</summary>
+    <div class="ans">
+      The <b>Bootstrap ClassLoader</b> is written in native C++ inside the HotSpot VM kernel — it is not a Java object instance. In the Java reflection API, <code>null</code> is the standard sentinel value representing the Bootstrap ClassLoader.
+    </div>
+  </details>
+
+
+  <details class="qa">
+    <summary>What exactly is the "parent delegation model", and name a case where breaking it is correct.</summary>
+    <div class="ans">
+      <p>On a request, a loader <b>first asks its parent</b>, recursively up to Bootstrap, and only searches its own sources if every ancestor failed. Two guarantees fall out of that: <b>uniqueness</b> (a core class is defined exactly once, by the highest loader that can see it) and <b>safety</b> (user code cannot shadow <code>java.*</code>).</p>
+      <p>Correct places to break it:</p>
+      <ul>
+        <li><b>Servlet containers</b> — Tomcat's web-app loader is parent-last for non-<code>java.*</code> packages so each WAR keeps its own dependency versions and can be redeployed independently.</li>
+        <li><b>OSGi / module systems</b> — per-package wiring rather than a linear chain, so two bundles can legitimately use two versions of the same library.</li>
+        <li><b>Plugin sandboxes</b> — an isolated child loader per plugin so plugins cannot see each other, and so unloading a plugin actually frees its classes.</li>
+      </ul>
+      <p>What you may <b>never</b> do is shadow <code>java.*</code> — the VM rejects that outright with <code>SecurityException: Prohibited package name</code>, regardless of your delegation policy.</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>Difference between <code>Class.forName("X")</code> and <code>loader.loadClass("X")</code>?</summary>
+    <div class="ans">
+      <p><b><code>Class.forName(name)</code> initialises the class; <code>loadClass(name)</code> does not.</b> That single difference is the whole question.</p>
+      <p><code>Class.forName</code> loads, links <i>and</i> runs <code>&lt;clinit&gt;</code>, using the caller's own loader. <code>loadClass</code> stops after loading — static blocks have not run, static fields still hold their zero defaults.</p>
+      <p>The historical proof is the old JDBC idiom: <code>Class.forName("com.mysql.jdbc.Driver")</code> worked <i>only</i> because the driver registers itself with <code>DriverManager</code> inside a static block. Swap in <code>loadClass</code> and no driver ever registers. (Since JDBC&nbsp;4 <code>ServiceLoader</code> makes the call unnecessary entirely.)</p>
+      <p>The three-argument form <code>Class.forName(name, initialize, loader)</code> lets you pick both explicitly — useful when you want reflection without triggering side effects.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · Production throws <code>ClassCastException: com.acme.Order cannot be cast to com.acme.Order</code>. The same class name on both sides. How is that possible and how do you fix it?</summary>
+    <div class="ans">
+      <p>This is the canonical proof that <b>class identity is name + defining loader</b>. Two different loaders each defined <code>com.acme.Order</code>, producing two runtime types that are unrelated as far as the VM is concerned. The message looks absurd only because <code>getName()</code> prints the same string for both.</p>
+      <p><b>Diagnose:</b> print the loaders, not the names.</p>
+      <ul>
+        <li><code>System.out.println(obj.getClass().getClassLoader() + " vs " + Order.class.getClassLoader());</code></li>
+        <li><code>obj.getClass().getProtectionDomain().getCodeSource()</code> tells you <i>which JAR</i> each came from.</li>
+        <li>Run with <code>-Xlog:class+load=info</code> (Java&nbsp;9+; <code>-verbose:class</code> on 8) and grep for the class name — you will see it defined twice, from two sources.</li>
+      </ul>
+      <p><b>Typical causes:</b> the same JAR present both in the container's <code>lib/</code> and inside the WAR; a shared interface accidentally bundled in the plugin instead of only in the parent; a hot-redeploy where an old loader's objects leaked into a cache the new loader reads; a custom loader that defines instead of delegating.</p>
+      <p><b>Fix:</b> make the shared type live in <b>exactly one loader</b> — normally the common parent. The plugin/WAR must depend on the API JAR as <i>provided</i>, never bundle it. If you genuinely need two versions, then the two sides must communicate through something loader-neutral (an interface from the shared parent, or serialised data), never by casting objects across the boundary.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · An app server dies with <code>OutOfMemoryError: Metaspace</code> after roughly the 8th hot redeploy, while the heap graph stays flat. Walk through it.</summary>
+    <div class="ans">
+      <p>This is a <b>ClassLoader leak</b>, and the flat heap graph is the diagnostic signature: class metadata lives in Metaspace, which is <b>native memory outside <code>-Xmx</code></b>, so heap dashboards show nothing.</p>
+      <p><b>The mechanism:</b> each redeploy creates a fresh web-app loader that defines every one of your application's classes again. The old loader's Metaspace is freed only when the <i>whole loader</i> becomes unreachable. A single surviving reference from outside the application pins the loader, every class it defined, and every static field those classes hold. Eight redeploys, eight full copies.</p>
+      <p><b>The usual culprits</b> — all of them references held by something that outlives the deployment:</p>
+      <ul>
+        <li><b>ThreadLocals on container-pooled threads</b> — the thread survives the redeploy and its <code>ThreadLocal</code> value pins your class, which pins your loader. The number-one cause in practice.</li>
+        <li><b>Threads your app started and never stopped</b> — a running thread is a GC root, and its context loader is yours.</li>
+        <li><b>JDBC drivers registered in <code>DriverManager</code></b>, which is loaded by Bootstrap and therefore immortal.</li>
+        <li><b>Shutdown hooks, JMX MBeans, <code>java.util.logging</code> handlers, security providers, <code>URL</code> stream handlers</b> — all JDK-level static registries.</li>
+        <li>Caches keyed by <code>Class</code> objects in a library sitting in the parent loader.</li>
+      </ul>
+      <p><b>How to prove it:</b> take a heap dump, find all instances of <code>WebappClassLoader</code>, and ask your tool for the <b>path to GC root</b> of the oldest one. That path <i>is</i> the bug — it names the exact static field holding it.</p>
+      <p><b>Mitigations:</b> a <code>ServletContextListener</code> that deregisters drivers, stops threads and clears ThreadLocals on shutdown; set <code>-XX:MaxMetaspaceSize</code> so a leak fails fast and visibly instead of consuming the machine; and in containers, prefer restarting the process over hot redeploy — the leak stops being a problem when the process is the deployment unit.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · A library works standalone but throws <code>ServiceConfigurationError</code> / "provider not found" once packaged into a fat JAR inside a framework. Why?</summary>
+    <div class="ans">
+      <p>Two independent causes, and a good answer separates them.</p>
+      <p><b>1. Merged <code>META-INF/services</code> files.</b> Fat-JAR builders concatenate archives; if two dependencies both ship <code>META-INF/services/javax.xml.parsers.DocumentBuilderFactory</code>, a naïve build keeps only the last one and the others vanish. The fix is a shading plugin with a <b>ServicesResourceTransformer</b> (Maven Shade) or the equivalent merge strategy in Gradle — it appends the files instead of overwriting.</p>
+      <p><b>2. The wrong loader is doing the lookup.</b> <code>ServiceLoader.load(Foo.class)</code> defaults to the <b>thread context class loader</b>. If the framework runs your code on a pooled thread whose TCCL is the container's loader rather than your application's, your provider file is invisible. Fix by passing the loader explicitly — <code>ServiceLoader.load(Foo.class, Foo.class.getClassLoader())</code> — which is the correct habit in library code regardless.</p>
+      <p>The underlying idea worth naming: this is the <b>SPI inversion problem</b>. Code high in the loader hierarchy needs to instantiate implementations that live low in it, and delegation only goes upward. TCCL is the deliberate escape hatch built for exactly that.</p>
+    </div>
+  </details>
+
+  <div class="trap">
+    <span class="lbl">Common Interview Trap</span>
+    <span class="wrong">"The class loader loads all the classes when the application starts."</span>
+    <span class="right">Nothing is eagerly loaded. Loading is triggered lazily, by first active use.</span>
+    The JVM does not scan your classpath at boot. A class is built in memory only when something actually needs it — the first <code>new</code>, the first static method call, the first non-constant static field access, or a reflective <code>Class.forName</code>. This is why a typo in a class name in a rarely-used branch can survive months of production traffic and then fail at 3&nbsp;a.m.
+  </div>
+  <!-- Page Navigation Footer -->
+  <footer class="page-nav-footer">
+    <a href="01-compile.html" class="nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Prev: 01 · Compile
+    </a>
+    <a href="03-load-and-link.html" class="nav-btn next">
+      Next: 03 · Load &amp; Link
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+  </footer>
+</div>
+
+<script src="js/jvm-common.js"></script>
+<script>
+const CL_DATA = {
+  string: {
+    name: 'java.lang.String',
+    j8: { loader: 'Bootstrap ClassLoader', internal: 'Native C++ in HotSpot', source: 'rt.jar (Monolithic archive)', priv: 'Full / Unrestricted (AllPermission)', api: 'String.class.getClassLoader() == null', note: 'Core foundational type loaded directly by HotSpot native bootstrap sequence.' },
+    j9: { loader: 'Bootstrap ClassLoader', internal: 'Native C++ in HotSpot', source: 'java.base (Core Module)', priv: 'Full / Unrestricted (AllPermission)', api: 'String.class.getClassLoader() == null', note: 'Lives in java.base, the foundational boot module loaded by Bootstrap ClassLoader.' }
+  },
+  sql: {
+    name: 'java.sql.Connection',
+    j8: { loader: 'Bootstrap ClassLoader', internal: 'Native C++ in HotSpot', source: 'rt.jar (Monolithic archive)', priv: 'Full / Unrestricted (AllPermission)', api: 'Connection.class.getClassLoader() == null', note: 'In Java 8, all SQL/JDBC APIs were bundled into rt.jar under Bootstrap.' },
+    j9: { loader: 'Platform ClassLoader', internal: 'jdk.internal.loader.ClassLoaders$PlatformClassLoader', source: 'java.sql (Platform Module)', priv: 'Platform Privilege (Restricted / Least Privilege)', api: 'ClassLoader.getPlatformClassLoader()', note: 'Moved out of Bootstrap into Platform ClassLoader to enforce security boundaries & modularity.' }
+  },
+  xml: {
+    name: 'javax.xml.parsers.DocumentBuilder',
+    j8: { loader: 'Bootstrap ClassLoader', internal: 'Native C++ in HotSpot', source: 'rt.jar (Monolithic archive)', priv: 'Full / Unrestricted (AllPermission)', api: 'DocumentBuilder.class.getClassLoader() == null', note: 'In Java 8, XML parsers lived inside the monolithic rt.jar archive.' },
+    j9: { loader: 'Platform ClassLoader', internal: 'jdk.internal.loader.ClassLoaders$PlatformClassLoader', source: 'java.xml (Platform Module)', priv: 'Platform Privilege (Restricted / Least Privilege)', api: 'ClassLoader.getPlatformClassLoader()', note: 'Isolated in java.xml module to prevent XML parsing vulnerabilities from exploiting full Bootstrap privilege.' }
+  },
+  crypto: {
+    name: 'com.sun.crypto.provider.SunJCE',
+    j8: { loader: 'Extension ClassLoader', internal: 'sun.misc.Launcher$ExtClassLoader', source: '<JAVA_HOME>/lib/ext/sunjce_provider.jar', priv: 'Extension Permissions', api: 'sun.misc.Launcher.getExtClassLoader() (Internal)', note: 'Loaded from the global lib/ext drop-in directory by Extension ClassLoader.' },
+    j9: { loader: 'Platform ClassLoader', internal: 'jdk.internal.loader.ClassLoaders$PlatformClassLoader', source: 'java.base / jdk.crypto.cryptoki (Modular JDK)', priv: 'Platform Module Privileges', api: 'ClassLoader.getPlatformClassLoader()', note: 'lib/ext eliminated. Security providers modularized into standard JDK modules under Platform/Bootstrap.' }
+  },
+  app: {
+    name: 'com.myapp.OrderService',
+    j8: { loader: 'Application / System ClassLoader', internal: 'sun.misc.Launcher$AppClassLoader', source: 'Classpath (-cp / -classpath)', priv: 'Application Sandbox / SecurityManager', api: 'ClassLoader.getSystemClassLoader()', note: 'Standard user application class loaded from the application classpath.' },
+    j9: { loader: 'Application / System ClassLoader', internal: 'jdk.internal.loader.ClassLoaders$AppClassLoader', source: 'Classpath (-cp) or Named Module (--module-path)', priv: 'Application / Module Sandbox', api: 'ClassLoader.getSystemClassLoader()', note: 'Loads application classes from classpath or user-defined modules on --module-path.' }
+  }
+};
+
+let clMode = 'j9';
+let clSelectedCls = 'string';
+
+function renderClHierarchy(){
+  const hView = $('clHierarchyView');
+  const hTitle = $('clHierarchyTitle');
+  if(!hView) return;
+  if(clMode === 'j8'){
+    hTitle.textContent = 'Java 8 & Earlier: Classic 3-Tier Hierarchy';
+    hView.innerHTML = `
+      <div class="cl-box boot">
+        <div class="cl-head-row"><span class="cl-title">1. Bootstrap ClassLoader</span><span class="cl-badge danger">Top Level · Native C++</span></div>
+        <div class="cl-subtext">Loads <b>rt.jar</b>, <code>resources.jar</code>, <code>charsets.jar</code>, and core JDK runtime classes.</div>
+        <div class="cl-meta"><span>Scope: <b>Monolithic rt.jar (~60MB)</b></span><span>API: <code>returns null</code></span></div>
+      </div>
+      <div class="chain-arrow">▲ Parent Delegation</div>
+      <div class="cl-box ext">
+        <div class="cl-head-row"><span class="cl-title">2. Extension ClassLoader</span><span class="cl-badge amber">Intermediate · URLClassLoader</span></div>
+        <div class="cl-subtext">Loads extensions from <code>&lt;JAVA_HOME&gt;/lib/ext</code> or <code>java.ext.dirs</code>.</div>
+        <div class="cl-meta"><span>Class: <code>sun.misc.Launcher$ExtClassLoader</code></span><span>Risk: <b>JAR Hell / Collisions</b></span></div>
+      </div>
+      <div class="chain-arrow">▲ Parent Delegation</div>
+      <div class="cl-box app">
+        <div class="cl-head-row"><span class="cl-title">3. System / Application ClassLoader</span><span class="cl-badge verdant">Application Level</span></div>
+        <div class="cl-subtext">Loads user classes and 3rd-party JARs from classpath (<code>-cp</code>, <code>CLASSPATH</code>).</div>
+        <div class="cl-meta"><span>Class: <code>sun.misc.Launcher$AppClassLoader</code></span><span>API: <code>ClassLoader.getSystemClassLoader()</code></span></div>
+      </div>
+    `;
+  } else {
+    hTitle.textContent = 'Java 9+ Modular JDK: JPMS Module-Aware Hierarchy';
+    hView.innerHTML = `
+      <div class="cl-box boot">
+        <div class="cl-head-row"><span class="cl-title">1. Bootstrap ClassLoader</span><span class="cl-badge danger">Top Level · Native Boot</span></div>
+        <div class="cl-subtext">Loads strictly foundational core module <b>java.base</b> (Object, String, Class, primitives, core I/O).</div>
+        <div class="cl-meta"><span>Scope: <b>Strictly java.base module</b></span><span>API: <code>returns null</code></span></div>
+      </div>
+      <div class="chain-arrow">▲ Parent Delegation</div>
+      <div class="cl-box plat">
+        <div class="cl-head-row"><span class="cl-title">2. Platform ClassLoader</span><span class="cl-badge cyan">Intermediate · Module Loader</span></div>
+        <div class="cl-subtext">Loads non-base standard Java SE platform &amp; JDK modules (e.g., <code>java.sql</code>, <code>java.compiler</code>, <code>java.xml</code>, <code>java.desktop</code>).</div>
+        <div class="cl-meta"><span>Class: <code>ClassLoaders$PlatformClassLoader</code></span><span>API: <code>ClassLoader.getPlatformClassLoader()</code></span></div>
+      </div>
+      <div class="chain-arrow">▲ Parent Delegation</div>
+      <div class="cl-box app">
+        <div class="cl-head-row"><span class="cl-title">3. System / Application ClassLoader</span><span class="cl-badge verdant">Application Level · Module-Aware</span></div>
+        <div class="cl-subtext">Loads user classes from classpath (<code>-cp</code>) and named application modules from <code>--module-path</code>.</div>
+        <div class="cl-meta"><span>Class: <code>ClassLoaders$AppClassLoader</code></span><span>API: <code>ClassLoader.getSystemClassLoader()</code></span></div>
+      </div>
+    `;
+  }
+  renderClTrace();
+}
+
+function renderClTrace(){
+  const board = $('clTraceBoard');
+  if(!board) return;
+  const item = CL_DATA[clSelectedCls];
+  const info = item[clMode];
+  board.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border);">
+      <span style="font-family:var(--font-mono);font-size:0.92rem;font-weight:700;color:var(--text);"><code>${item.name}</code></span>
+      <span class="cl-badge ${clMode==='j8'?'amber':'cyan'}">${clMode==='j8'?'Java 8 Environment':'Java 9+ JPMS'}</span>
+    </div>
+    <div class="cl-trace-row"><span class="cl-trace-k">Defining Loader</span><span class="cl-trace-v"><b>${info.loader}</b></span></div>
+    <div class="cl-trace-row"><span class="cl-trace-k">Internal Class</span><span class="cl-trace-v"><code>${info.internal}</code></span></div>
+    <div class="cl-trace-row"><span class="cl-trace-k">Location / Archive</span><span class="cl-trace-v"><code>${info.source}</code></span></div>
+    <div class="cl-trace-row"><span class="cl-trace-k">Security Privilege</span><span class="cl-trace-v">${info.priv}</span></div>
+    <div class="cl-trace-row"><span class="cl-trace-k">API Accessor</span><span class="cl-trace-v"><code>${info.api}</code></span></div>
+    <div class="cl-trace-row" style="align-items:start;"><span class="cl-trace-k">Architectural Note</span><span class="cl-trace-v" style="color:var(--text-dim);font-size:0.8rem;line-height:1.5;">${info.note}</span></div>
+  `;
+}
+
+$('clToggleJ8').addEventListener('click', ()=>{
+  clMode = 'j8';
+  $('clToggleJ8').className = 'cl-switch-btn amber active';
+  $('clToggleJ9').className = 'cl-switch-btn';
+  renderClHierarchy();
+});
+$('clToggleJ9').addEventListener('click', ()=>{
+  clMode = 'j9';
+  $('clToggleJ9').className = 'cl-switch-btn active';
+  $('clToggleJ8').className = 'cl-switch-btn';
+  renderClHierarchy();
+});
+
+document.querySelectorAll('.cl-sim-chip').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.cl-sim-chip').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    clSelectedCls = btn.dataset.cls;
+    renderClTrace();
+  });
+});
+
+renderClHierarchy();
+</script>
+</body>
+</html>

@@ -1,11 +1,13 @@
 # Java In Brief
 ## Java and Platform Independence
+- [Visual Guide: Write Once, Run Anywhere](src/htmlDocuments/java-write-once-run-anywhere-2.html) *(To view inside this IDE: right-click the HTML file & select **Show Preview** / use **Simple Browser**)*
 - Build once, Run anywhere
 - Java is one of the most popular platform  independent  languages.  Once  we  compile  a  java  program  and  build  a  jar,  we  can  run  the  jar  (compiled  java program) in any Operating System where a JVM is installed. 
 - What is ByteCode?
 - The  executable  instructions  are  different  in  different  operating  systems.  So,  there  are  different  JVM s  for  different  operating  systems.  A  JVM  for  windows  is  different  from  a  JVM  for  mac. 
 
 ## JDK vs JVM VS JRE
+- [Visual Guide: JDK vs JRE vs JVM](src/htmlDocuments/jvm-vs-jre-vs-jdk.html) *(To view inside this IDE: right-click the HTML file & select **Show Preview** / use **Simple Browser**)*
 - JVM
   - Virtual machine that run the Java bytecode.
   - Makes java portable.
@@ -15,6 +17,7 @@
   - JRE + Compilers + Debuggers
 
 ## Classloaders and Types
+- [Visual Guide: Classloaders and Types](src/htmlDocuments/class-loader.html) *(To view inside this IDE: right-click the HTML file & select **Show Preview** / use **Simple Browser**)*
 - A Java program is made up of a number of custom classes (written by programmers like us) and core  classes (which come pre-packaged with Java). When a program is executed, JVM needs to load the  content of all the needed class. JVM uses a ClassLoader to find the classes. 
 - System Class Loader : Loads all classes from CLASSPATH 
 - Extension Class Loader : Loads all classes from extension directory 

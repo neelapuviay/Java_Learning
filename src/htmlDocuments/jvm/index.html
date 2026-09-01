@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inside the JVM — Execution, JIT, Memory &amp; Garbage Collection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/jvm-theme.css">
+  <style>
+    /* ================================================================
+       APP LAYOUT WITH FIXED LEFT TOC SIDEBAR & RIGHT MAIN STAGE
+    ================================================================ */
+    body {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      background: var(--bg-base);
+    }
+
+    /* Left Sidebar */
+    aside.toc-sidebar {
+      width: 320px;
+      flex: 0 0 320px;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      z-index: 40;
+      transition: transform 0.25s ease, width 0.25s ease;
+    }
+
+    .sidebar-brand {
+      padding: 20px 18px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel-raised);
+    }
+    .brand-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--verdant);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+    .brand-title {
+      font-family: var(--font-display);
+      font-size: 1.12rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.25;
+    }
+
+    .sidebar-search {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-soft);
+      background: var(--panel);
+    }
+    .search-input {
+      width: 100%;
+      background: var(--panel-inset);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 0.82rem;
+      padding: 8px 12px;
+      border-radius: 6px;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+    .search-input:focus {
+      border-color: var(--steel);
+      box-shadow: 0 0 0 2px var(--steel-bg);
+    }
+
+    /* TOC Navigation Items */
+    nav.toc-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 10px;
+      scrollbar-width: thin;
+    }
+    .toc-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      margin-bottom: 4px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      color: var(--text-dim);
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .toc-item:hover {
+      background: var(--panel-raised);
+      color: var(--text);
+      border-color: var(--border-soft);
+    }
+    .toc-item.active {
+      background: rgba(56, 189, 248, 0.14);
+      border-color: rgba(56, 189, 248, 0.4);
+      color: var(--steel);
+      box-shadow: inset 3px 0 0 var(--steel);
+    }
+    .toc-num {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--text-faint);
+      background: var(--panel-inset);
+      border: 1px solid var(--border-soft);
+      padding: 2px 6px;
+      border-radius: 4px;
+      flex: 0 0 auto;
+    }
+    .toc-item.active .toc-num {
+      color: var(--steel);
+      border-color: var(--steel);
+      background: var(--steel-bg);
+    }
+    .toc-text {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Sidebar Footer */
+    .sidebar-footer {
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--panel-raised);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .theme-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--panel-inset);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .theme-toggle-btn:hover {
+      border-color: var(--steel);
+      color: var(--text);
+    }
+
+    /* Right Main Content Pane */
+    main.app-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Top Navigation Bar */
+    header.app-topbar {
+      height: 56px;
+      flex: 0 0 56px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      z-index: 30;
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .mobile-menu-toggle {
+      display: none;
+      background: var(--panel-raised);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .topbar-breadcrumb {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: var(--text-faint);
+    }
+    .topbar-breadcrumb b {
+      color: var(--text);
+    }
+    .topbar-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Embedded Frame Container */
+    .frame-container {
+      flex: 1;
+      position: relative;
+      background: var(--bg-base);
+    }
+    iframe#sectionFrame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+      background: transparent;
+    }
+
+    /* Mobile Responsive Sidebar */
+    @media (max-width: 860px) {
+      aside.toc-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        transform: translateX(-100%);
+        box-shadow: var(--shadow-md);
+      }
+      aside.toc-sidebar.open {
+        transform: translateX(0);
+      }
+      .mobile-menu-toggle {
+        display: inline-flex;
+      }
+      .sidebar-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 35;
+      }
+      .sidebar-backdrop.show {
+        display: block;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Mobile Sidebar Backdrop -->
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+<!-- Left Table of Contents Sidebar -->
+<aside class="toc-sidebar" id="tocSidebar">
+  <div class="sidebar-brand">
+    <div class="brand-eyebrow">JVM Internals</div>
+    <div class="brand-title">Architecture Simulator</div>
+  </div>
+
+  <div class="sidebar-search">
+    <input type="text" class="search-input" id="tocSearch" placeholder="Search stages (e.g. C2, GC, OSR, JIT)…" autocomplete="off">
+  </div>
+
+  <nav class="toc-nav" id="tocNav">
+    <a class="toc-item active" data-stage="01-compile" href="#01-compile">
+      <span class="toc-num">01</span>
+      <span class="toc-text">Bytecode &amp; Compilation</span>
+    </a>
+    <a class="toc-item" data-stage="02-class-loaders" href="#02-class-loaders">
+      <span class="toc-num">02</span>
+      <span class="toc-text">Class Loaders (Java 8 vs 9+)</span>
+    </a>
+    <a class="toc-item" data-stage="03-load-and-link" href="#03-load-and-link">
+      <span class="toc-num">03</span>
+      <span class="toc-text">Load, Link &amp; Initialize</span>
+    </a>
+    <a class="toc-item" data-stage="04-interpret" href="#04-interpret">
+      <span class="toc-num">04</span>
+      <span class="toc-text">Bytecode Interpreter</span>
+    </a>
+    <a class="toc-item" data-stage="05-profile" href="#05-profile">
+      <span class="toc-num">05</span>
+      <span class="toc-text">Profiling &amp; Tier Counters</span>
+    </a>
+    <a class="toc-item" data-stage="06-jit-c1-c2" href="#06-jit-c1-c2">
+      <span class="toc-num">06</span>
+      <span class="toc-text">JIT Compilers: C1 &amp; C2</span>
+    </a>
+    <a class="toc-item" data-stage="07-native-and-deopt" href="#07-native-and-deopt">
+      <span class="toc-num">07</span>
+      <span class="toc-text">Native Execution &amp; Deopt</span>
+    </a>
+    <a class="toc-item" data-stage="08-memory-areas" href="#08-memory-areas">
+      <span class="toc-num">08</span>
+      <span class="toc-text">JVM Memory Areas &amp; Layout</span>
+    </a>
+    <a class="toc-item" data-stage="09-garbage-collection" href="#09-garbage-collection">
+      <span class="toc-num">09</span>
+      <span class="toc-text">Garbage Collection</span>
+    </a>
+    <a class="toc-item" data-stage="10-how-it-connects" href="#10-how-it-connects">
+      <span class="toc-num">10</span>
+      <span class="toc-text">The Big Picture &amp; Lifecycle</span>
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <button class="theme-toggle-btn" id="themeToggle" type="button" title="Toggle Dark/Light High-Contrast Theme">
+      <span id="themeIcon">☀️</span>
+      <span id="themeLabel">Light Mode</span>
+    </button>
+    <a href="01-compile.html" target="_blank" class="theme-toggle-btn" id="popoutBtn" title="Open Current Section in New Tab">
+      ↗ Standalone
+    </a>
+  </div>
+</aside>
+
+<!-- Right Main App Stage -->
+<main class="app-main">
+  <header class="app-topbar">
+    <div class="topbar-left">
+      <button class="mobile-menu-toggle" id="menuToggle" type="button" aria-label="Toggle Navigation Sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="topbar-breadcrumb">
+        JVM Stage <span id="topbarStageNum">01</span> / 10 · <b id="topbarStageTitle">Bytecode &amp; Compilation</b>
+      </div>
+    </div>
+
+    <div class="topbar-controls">
+      <button class="btn btn-ghost btn-sm" id="prevStageBtn" type="button" title="Previous Stage (← Left Arrow)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Prev
+      </button>
+      <button class="btn btn-ghost btn-sm" id="nextStageBtn" type="button" title="Next Stage (→ Right Arrow)">
+        Next
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="frame-container">
+    <iframe id="sectionFrame" src="01-compile.html" title="Active JVM Stage Section"></iframe>
+  </div>
+</main>
+
+<script>
+const STAGES = [
+  { id: '01-compile', file: '01-compile.html', num: '01', title: 'Bytecode & Javac Compilation' },
+  { id: '02-class-loaders', file: '02-class-loaders.html', num: '02', title: 'Class Loaders (Java 8 vs 9+)' },
+  { id: '03-load-and-link', file: '03-load-and-link.html', num: '03', title: 'Load, Link & Initialize' },
+  { id: '04-interpret', file: '04-interpret.html', num: '04', title: 'Bytecode Interpreter' },
+  { id: '05-profile', file: '05-profile.html', num: '05', title: 'Profiling & Tier Counters' },
+  { id: '06-jit-c1-c2', file: '06-jit-c1-c2.html', num: '06', title: 'JIT Compilers: C1 & C2' },
+  { id: '07-native-and-deopt', file: '07-native-and-deopt.html', num: '07', title: 'Native Execution & Deopt' },
+  { id: '08-memory-areas', file: '08-memory-areas.html', num: '08', title: 'JVM Memory Areas & Layout' },
+  { id: '09-garbage-collection', file: '09-garbage-collection.html', num: '09', title: 'Garbage Collection' },
+  { id: '10-how-it-connects', file: '10-how-it-connects.html', num: '10', title: 'The Big Picture & Lifecycle' }
+];
+
+let currentIndex = 0;
+
+const sectionFrame = document.getElementById('sectionFrame');
+const topbarStageNum = document.getElementById('topbarStageNum');
+const topbarStageTitle = document.getElementById('topbarStageTitle');
+const prevStageBtn = document.getElementById('prevStageBtn');
+const nextStageBtn = document.getElementById('nextStageBtn');
+const popoutBtn = document.getElementById('popoutBtn');
+const tocSidebar = document.getElementById('tocSidebar');
+const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+const menuToggle = document.getElementById('menuToggle');
+const tocSearch = document.getElementById('tocSearch');
+const themeToggle = document.getElementById('themeToggle');
+const themeIcon = document.getElementById('themeIcon');
+const themeLabel = document.getElementById('themeLabel');
+
+function loadStage(index, updateHash = true) {
+  if (index < 0 || index >= STAGES.length) return;
+  currentIndex = index;
+  const stage = STAGES[index];
+
+  // Update Iframe
+  sectionFrame.src = stage.file;
+
+  // Update Topbar
+  topbarStageNum.textContent = stage.num;
+  topbarStageTitle.textContent = stage.title;
+  popoutBtn.href = stage.file;
+
+  // Update TOC active state
+  document.querySelectorAll('.toc-item').forEach((item, i) => {
+    item.classList.toggle('active', i === index);
+  });
+
+  // Update Previous / Next Buttons
+  prevStageBtn.disabled = index === 0;
+  nextStageBtn.disabled = index === STAGES.length - 1;
+
+  if (updateHash) {
+    window.location.hash = stage.id;
+  }
+
+  // Close mobile sidebar if open
+  closeMobileSidebar();
+}
+
+function handleHashChange() {
+  const hash = window.location.hash.replace('#', '');
+  const idx = STAGES.findIndex(s => s.id === hash);
+  if (idx !== -1) {
+    loadStage(idx, false);
+  } else {
+    loadStage(0, false);
+  }
+}
+
+// Search / Filter TOC Items
+tocSearch.addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase().trim();
+  document.querySelectorAll('.toc-item').forEach(item => {
+    const text = item.textContent.toLowerCase();
+    item.style.display = text.includes(q) ? 'flex' : 'none';
+  });
+});
+
+// Theme Switcher Sync
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('jvm_theme', theme);
+  if (theme === 'light') {
+    themeIcon.textContent = '🌙';
+    themeLabel.textContent = 'Dark Mode';
+  } else {
+    themeIcon.textContent = '☀️';
+    themeLabel.textContent = 'Light Mode';
+  }
+  // Send message to embedded iframe
+  if (sectionFrame.contentWindow) {
+    sectionFrame.contentWindow.postMessage({ type: 'SET_THEME', theme }, '*');
+  }
+}
+
+themeToggle.addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+});
+
+// When iframe loads, sync current theme
+sectionFrame.addEventListener('load', () => {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  if (sectionFrame.contentWindow) {
+    sectionFrame.contentWindow.postMessage({ type: 'SET_THEME', theme: current }, '*');
+  }
+});
+
+// Mobile Sidebar Handlers
+function openMobileSidebar() {
+  tocSidebar.classList.add('open');
+  sidebarBackdrop.classList.add('show');
+}
+function closeMobileSidebar() {
+  tocSidebar.classList.remove('open');
+  sidebarBackdrop.classList.remove('show');
+}
+menuToggle.addEventListener('click', openMobileSidebar);
+sidebarBackdrop.addEventListener('click', closeMobileSidebar);
+
+// Navigation Buttons
+prevStageBtn.addEventListener('click', () => loadStage(currentIndex - 1));
+nextStageBtn.addEventListener('click', () => loadStage(currentIndex + 1));
+
+// Keyboard Arrow Navigation
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowLeft') loadStage(currentIndex - 1);
+  if (e.key === 'ArrowRight') loadStage(currentIndex + 1);
+});
+
+// TOC Item Clicks
+document.querySelectorAll('.toc-item').forEach((item, i) => {
+  item.addEventListener('click', (e) => {
+    e.preventDefault();
+    loadStage(i);
+  });
+});
+
+// Init
+window.addEventListener('hashchange', handleHashChange);
+const initialTheme = localStorage.getItem('jvm_theme') || 'dark';
+applyTheme(initialTheme);
+handleHashChange();
+</script>
+</body>
+</html>

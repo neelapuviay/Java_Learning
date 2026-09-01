@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "JVM Loading, Linking & Initialization Workflow",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "output": "03-jvm-load-and-link-diagram.html",
+    "viewBox": [960, 860],
+    "views": [
+      {
+        "id": "full-path",
+        "label": "Full Class Lifecycle",
+        "focus": ["trigger", "delegation", "metaspace_klass", "verifier", "prep_slots", "clinit_exec"],
+        "note": "Follow MathWizard from first active invocation through Metaspace definition to live execution."
+      },
+      {
+        "id": "linking-phase",
+        "label": "Linking & Verification",
+        "focus": ["metaspace_klass", "verifier", "verify_error", "prep_slots"],
+        "note": "Inspect bytecode structural proofs, static zero-slot preparation, and lazy symbol resolution."
+      },
+      {
+        "id": "init-lock",
+        "label": "Initialization & Locking",
+        "focus": ["prep_slots", "clinit_exec", "heap_statics", "init_error"],
+        "note": "Examine thread-safe <clinit> execution, static field population, and permanent error states."
+      },
+      {
+        "id": "memory-split",
+        "label": "Metaspace vs Java Heap",
+        "focus": ["metaspace_klass", "heap_mirror", "prep_slots", "heap_statics"],
+        "note": "Distinguish native off-heap InstanceKlass descriptors from live garbage-collected Java Heap objects."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "trigger_lane", "label": "Invocation Trigger" },
+    { "id": "loader", "label": "ClassLoader Subsystem" },
+    { "id": "metaspace", "label": "Metaspace (Native RAM)" },
+    { "id": "engine", "label": "Execution Engine" },
+    { "id": "heap", "label": "Java Heap (-Xmx)" },
+    { "id": "exceptions", "label": "Error Traps", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "discover", "label": "1. Discovery", "fromCol": 0, "toCol": 1, "variant": "default" },
+    { "id": "load_verify", "label": "2. Load & Verify", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "prep_init", "label": "3. Prepare & Init", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "groups": [
+    { "id": "grp_loaders", "label": "Delegation chain", "lane": "loader", "fromCol": 0, "toCol": 1, "variant": "default" },
+    { "id": "grp_meta", "label": "Metaspace layout", "lane": "metaspace", "fromCol": 2, "toCol": 4, "variant": "emphasis" },
+    { "id": "grp_engine", "label": "Execution engine", "lane": "engine", "fromCol": 3, "toCol": 5, "variant": "security" }
+  ],
+  "mainPath": [
+    "trigger",
+    "delegation",
+    "metaspace_klass",
+    "verifier",
+    "prep_slots",
+    "clinit_exec"
+  ],
+  "nodes": [
+    { "id": "trigger", "lane": "trigger_lane", "col": 0, "width": 72, "type": "frontend", "label": "Trigger", "sublabel": "main() or new", "tag": "lazy start" },
+    { "id": "delegation", "lane": "loader", "col": 1, "width": 76, "type": "security", "label": "Delegation", "sublabel": "App → Boot", "tag": "parent first" },
+    { "id": "metaspace_klass", "lane": "metaspace", "col": 2, "width": 92, "type": "database", "label": "InstanceKlass", "sublabel": "native struct", "tag": "0xCAFEBABE" },
+    { "id": "heap_mirror", "lane": "heap", "col": 2, "width": 88, "type": "cloud", "label": "Class Mirror", "sublabel": "Class<T> obj", "tag": "on-heap" },
+    { "id": "verifier", "lane": "engine", "col": 3, "width": 64, "type": "security", "label": "Verifier", "sublabel": "StackMap proof", "tag": "safety gate" },
+    { "id": "verify_error", "lane": "exceptions", "col": 3, "width": 84, "type": "security", "label": "VerifyError", "sublabel": "corrupted code" },
+    { "id": "prep_slots", "lane": "metaspace", "col": 4, "width": 88, "type": "database", "label": "Static Slots", "sublabel": "defaults: 0/null", "tag": "uninitialized" },
+    { "id": "heap_statics", "lane": "heap", "col": 4, "width": 84, "type": "cloud", "label": "Heap Objects", "sublabel": "int[8] array", "tag": "heap object" },
+    { "id": "clinit_exec", "lane": "engine", "col": 5, "width": 64, "type": "backend", "label": "<clinit>()", "sublabel": "static lock", "tag": "thread-safe" },
+    { "id": "init_error", "lane": "exceptions", "col": 5, "width": 84, "type": "security", "label": "Init Error", "sublabel": "NoClassDefFound" }
+  ],
+  "edges": [
+    { "id": "e_trig_del", "from": "trigger", "to": "delegation", "variant": "emphasis", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e_del_meta", "from": "delegation", "to": "metaspace_klass", "variant": "emphasis", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e_meta_mirror", "from": "metaspace_klass", "to": "heap_mirror", "variant": "dashed", "role": "branch", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e_meta_verify", "from": "metaspace_klass", "to": "verifier", "variant": "emphasis", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e_verify_fail", "from": "verifier", "to": "verify_error", "variant": "security", "role": "error", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e_verify_prep", "from": "verifier", "to": "prep_slots", "variant": "emphasis", "route": "drop", "fromSide": "top", "toSide": "bottom" },
+    { "id": "e_prep_clinit", "from": "prep_slots", "to": "clinit_exec", "variant": "emphasis", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "id": "e_clinit_heap", "from": "clinit_exec", "to": "heap_statics", "variant": "dashed", "role": "branch" },
+    { "id": "e_clinit_fail", "from": "clinit_exec", "to": "init_error", "variant": "security", "role": "error", "route": "drop", "fromSide": "bottom", "toSide": "top" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Mental Model & Sequence Rules",
+      "items": [
+        "Loading creates the InstanceKlass in native Metaspace; Linking validates structure and prepares slots; Initialization runs <clinit>",
+        "Preparation sets specification default values (0, null); user static initializers do NOT run until Initialization",
+        "Compile-time constants (static final primitive/String) are populated during Preparation via ConstantValue attributes",
+        "Only Initialization executes user Java code; all earlier phases construct and validate metadata"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Metaspace vs Java Heap",
+      "items": [
+        "InstanceKlass, vtables, and static field slots reside in Metaspace (native RAM outside -Xmx)",
+        "Class<T> mirror object and static heap references (e.g. int[] array instances) live on the Java Heap",
+        "Runtime Constant Pool entries remain symbolic text until lazily resolved into direct 64-bit memory addresses on first instruction use",
+        "Metaspace exhaustion (OutOfMemoryError: Metaspace) can occur from dynamic proxies even while Java Heap is completely empty"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Interview Traps & Edge Cases",
+      "items": [
+        "VerifyError: Bytecode structural proof failure (almost always stale agent transforms, ASM version mismatch, or corrupted StackMapTable)",
+        "ExceptionInInitializerError: Escaped exception marks class permanently erroneous; subsequent touches throw causeless NoClassDefFoundError",
+        "Circular static initialization: Re-entrant threads proceed on half-initialized classes, observing default null/0 values without exceptions",
+        "Holder idiom is completely thread-safe without synchronized because HotSpot serializes execution under the class initialization lock"
+      ]
+    }
+  ]
+}

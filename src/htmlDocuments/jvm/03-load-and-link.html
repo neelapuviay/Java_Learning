@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>03 · Loading, Linking &amp; Initialization — Inside the JVM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/jvm-theme.css">
+  <style>
+    /* give Metaspace room to breathe — it is the star of this stage */
+    @media (min-width: 901px) { .theater { grid-template-columns: 0.9fr 1.65fr 1fr; } }
+  </style>
+</head>
+<body>
+
+<div class="stage-container">
+  <header class="stage-head">
+    <span class="stage-num-badge">STAGE 03</span>
+    <h1>Loading, Linking &amp; Initialization — From raw bytes to a live type</h1>
+    <span class="stage-tag">runtime class lifecycle</span>
+  </header>
+
+  <p class="stage-desc">
+    Before any method can execute, the JVM transitions the class through three strictly ordered phases: <b>Loading</b> (reading bytes and defining the type in Metaspace), <b>Linking</b> (Verification, Preparation of static slots, and Resolution of symbolic references), and <b>Initialization</b> (executing static initializers <code>&lt;clinit&gt;</code>).
+  </p>
+
+
+  <div class="mental">
+    <span class="lbl">Mental model — hold this picture</span>
+    <p>A new employee joins. <b>Loading</b> is HR reading their CV and creating a personnel record — the person now <i>exists</i> in the system. <b>Linking</b> is compliance: verify the certificates are genuine (Verification), allocate a desk, a laptop and an empty mailbox (Preparation), and replace "reports to the London finance manager" with an actual named person's badge number (Resolution). <b>Initialization</b> is the first day: the desk gets filled, the passwords get set, the defaults become real values.</p>
+    <p>The ordering matters and is fixed by the specification. You cannot run the static initialiser before the storage exists, and you cannot allocate storage for a type nobody has verified. Everything confusing about static state in Java — <code>null</code> in a static field, deadlocking class initialisation, the holder idiom being thread-safe for free — falls out of <b>where in this sequence you happened to look</b>.</p>
+  </div>
+  <!-- Interactive Controls Bar -->
+  <div class="panel" style="margin-bottom:20px; padding:16px 20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div class="btn-row">
+        <button class="btn btn-primary" id="clPlay" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+          Play whole sequence
+        </button>
+        <button class="btn" id="clNext" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4l10 8-10 8V4zM19 5v14"/></svg>
+          Next step
+        </button>
+        <button class="btn btn-ghost" id="clReplay" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>
+          Reset
+        </button>
+        <a class="btn btn-ghost" href="03-jvm-load-and-link-diagram.html" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          Archify Diagram ↗
+        </a>
+      </div>
+      <div style="font-family:var(--font-mono); font-size:0.78rem; color:var(--text-faint);">
+        Phase: <span id="cpState" style="color:var(--text); font-weight:700;">symbolic names</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase Progress Ribbon -->
+  <div class="phase-ribbon" id="phaseRibbon"></div>
+
+  <!-- The Interactive Theater Zones -->
+  <div class="theater">
+    <!-- Zone 1: ClassLoader Delegation -->
+    <div class="t-zone">
+      <div class="t-zone-head">
+        <span>1. Loader Delegation</span>
+        <span>Search Chain</span>
+      </div>
+      <div class="loader-box" id="ldBoot">
+        <div style="font-weight:700;">Bootstrap ClassLoader</div>
+        <div id="vdBoot" style="font-size:0.74rem; color:var(--text-faint); margin-top:3px;"></div>
+      </div>
+      <div class="chain-arrow" id="arrPlat">▲ delegates upward</div>
+      <div class="loader-box" id="ldPlat">
+        <div style="font-weight:700;">Platform ClassLoader</div>
+        <div id="vdPlat" style="font-size:0.74rem; color:var(--text-faint); margin-top:3px;"></div>
+      </div>
+      <div class="chain-arrow" id="arrApp">▲ delegates upward</div>
+      <div class="loader-box" id="ldApp">
+        <div style="font-weight:700;">Application ClassLoader</div>
+        <div id="vdApp" style="font-size:0.74rem; color:var(--text-faint); margin-top:3px;"></div>
+      </div>
+      <div style="margin-top:12px; font-family:var(--font-mono); font-size:0.74rem; color:var(--text-faint);" id="diskFile">
+        Disk source: <code>MathWizard.class</code>
+      </div>
+    </div>
+
+    <!-- Zone 2: Metaspace & Native Memory -->
+    <div class="t-zone">
+      <div class="t-zone-head">
+        <span>2. Metaspace (Native RAM)</span>
+        <span id="metaTag" style="color:var(--steel);">empty</span>
+      </div>
+      <div class="mem-box" id="memMeta">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+          <span style="font-weight:700; font-family:var(--font-mono); font-size:0.8rem;">InstanceKlass &lt;MathWizard&gt;</span>
+          <span style="font-family:var(--font-mono); font-size:0.68rem; color:var(--text-faint);">native, off &minus;Xmx</span>
+        </div>
+        <div id="metaEmpty" style="font-size:0.76rem; color:var(--text-faint);">No type metadata loaded yet — this region is untouched until first active use.</div>
+
+        <div id="classObj" style="display:none;">
+          <div class="cobj-row"><span>name</span><span>MathWizard</span></div>
+          <div class="cobj-row"><span>super</span><span>java/lang/Object</span></div>
+          <div class="cobj-row"><span>interfaces</span><span>&mdash; none &mdash;</span></div>
+          <div class="cobj-row"><span>access_flags</span><span>ACC_PUBLIC, ACC_SUPER</span></div>
+          <div class="cobj-row"><span>defining loader</span><span>AppClassLoader@2f92e0f4</span></div>
+          <div class="cobj-row"><span>init state</span><span id="klassState" style="color:var(--amber);">loaded</span></div>
+          <div class="cobj-row"><span>verified</span><span id="vfState" style="color:var(--amber);">no</span></div>
+
+          <div class="cobj-group">
+            <div class="cg-head"><span>Method table (vtable + bytecode)</span><span>4 entries</span></div>
+            <div class="cg-body">
+              <div class="cobj-row"><span>&lt;init&gt;()V</span><span>Code · 5 B</span></div>
+              <div class="cobj-row"><span>&lt;clinit&gt;()V</span><span>Code · 11 B</span></div>
+              <div class="cobj-row"><span>main([Ljava/lang/String;)V</span><span>Code · 34 B</span></div>
+              <div class="cobj-row"><span>accumulate(II)I</span><span>Code · 4 B</span></div>
+            </div>
+          </div>
+
+          <div class="cobj-group">
+            <div class="cg-head"><span>Field layout (instance)</span><span>0 instance fields</span></div>
+            <div class="cg-body">
+              <div class="cobj-row"><span>header (mark + klass)</span><span>12 B</span></div>
+              <div class="cobj-row"><span>instance size</span><span>16 B (padded to 8)</span></div>
+            </div>
+          </div>
+
+          <div class="cobj-group">
+            <div class="cg-head"><span>Runtime constant pool</span><span id="cpTag">37 entries</span></div>
+            <div class="cg-body">
+              <div class="cobj-row"><span>state</span><span id="cpState2" style="color:var(--amber);">symbolic names</span></div>
+              <div class="cobj-row"><span>resolved refs</span><span id="cpResolvedN">0 / 4</span></div>
+              <div class="cobj-row" style="border-top:1px dashed var(--border-soft); padding-top:6px;">
+                <span style="color:var(--steel);">expanded below &darr;</span><span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mem-box" id="memStatics">
+        <div style="font-weight:700; font-family:var(--font-mono); font-size:0.8rem; margin-bottom:4px;">Static Fields Storage</div>
+        <div id="staticsEmpty" style="font-size:0.76rem; color:var(--text-faint);">Not allocated</div>
+        <div id="staticsTable" style="display:none; font-size:0.78rem;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+            <span>static final int TOTAL:</span><span id="sfTotal" class="sf-val">—</span>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span>static int[] cache:</span><span id="sfCache" class="sf-val">—</span>
+          </div>
+          <div style="font-size:0.72rem; color:var(--text-faint); margin-top:8px; line-height:1.5;">
+            Static fields belong <b>to the class</b>, not to its instances. In HotSpot, their values are stored with the heap-resident <code>java.lang.Class</code> mirror, while the field definitions and offsets live in Metaspace. There is one shared value per defining class.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zone 3: Java Heap Memory -->
+    <div class="t-zone">
+      <div class="t-zone-head">
+        <span>3. Java Heap (-Xmx)</span>
+        <span id="heapTag" style="color:var(--verdant);">empty</span>
+      </div>
+      <div class="mem-box" id="memHeap" style="min-height:120px;">
+        <div style="font-weight:700; font-family:var(--font-mono); font-size:0.8rem; margin-bottom:6px;">Live Heap Objects</div>
+        <div id="heapContent" style="font-size:0.78rem; color:var(--text-faint);">No heap objects created</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Real-Time Narrative Explanation -->
+  <div class="narr-box">
+    <div class="narr-step" id="narrStep">Ready</div>
+    <div class="narr-text" id="narrText">Click <b>Play whole sequence</b> or step through using <b>Next step</b> above.</div>
+    <div class="narr-why" id="narrWhy" style="display:none;"></div>
+  </div>
+
+
+  <!-- Runtime Constant Pool, expanded -->
+  <h3 class="sub">
+    <span class="kicker">Zoom in on the metaspace box</span>
+    The Runtime Constant Pool, expanded
+  </h3>
+  <div class="prose">
+    <p>The <code>constant pool</code> row inside the Klass above is a whole data structure of its own — so here it is opened up. This is the table the <code>.class</code> file ships with, copied into Metaspace and then <b>mutated in place</b> as names get resolved into pointers. Click any row to see what it references.</p>
+  </div>
+
+  <div class="panel" style="margin-bottom:8px;">
+    <div class="panel-head">
+      <span>MathWizard — runtime constant pool (abridged, 16 of 37 entries)</span>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" id="cpResolveBtn" type="button">Resolve references</button>
+        <button class="btn btn-ghost btn-sm" id="cpResetBtn" type="button">Back to symbolic</button>
+      </div>
+    </div>
+    <div class="cp-table">
+      <div class="cp-head">
+        <span>#</span><span>tag</span><span>value</span><span>state</span>
+      </div>
+      <div id="cpRows"></div>
+    </div>
+    <div class="cp-legend">
+      <span><b style="color:var(--violet);">#n</b> pool index (1-based)</span>
+      <span><b style="color:var(--steel);">tag</b> entry kind — JVMS §4.4</span>
+      <span><b style="color:var(--amber);">symbolic</b> still just text</span>
+      <span><b style="color:var(--verdant);">resolved</b> now a direct pointer</span>
+      <span><b>const</b> nothing to resolve</span>
+    </div>
+    <div id="cpDetail" style="margin-top:12px; background:var(--panel-inset); border:1px solid var(--border-soft); border-radius:8px; padding:12px 14px; font-size:0.86rem; color:var(--text-dim); line-height:1.6;">
+      Click a row above to trace how that entry is built out of other entries.
+    </div>
+  </div>
+
+  <div class="plain violet">
+    <span class="lbl">The one sentence that makes the constant pool click</span>
+    The <code>.class</code> file refers to everything <b>by name, as text</b> — because when it was compiled, nothing was in memory and no address existed. Resolution is the JVM looking each name up <b>once</b> and overwriting the entry with a real memory address, so the ten-thousandth call does not repeat a string lookup. Most of it happens <b>lazily</b>, at the first moment each particular name is actually used — which is why a missing class can surface hours into a run rather than at startup.
+  </div>
+  <!-- Verification Sandbox -->
+  <h3 class="sub">
+    <span class="kicker">Security &amp; Structural Safety</span>
+    Linking Step ①: The Bytecode Verifier Sandbox
+  </h3>
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-head">
+        <span>Verifier Input Test</span>
+        <span id="vfMode">honest javac bytecode</span>
+      </div>
+      <p style="font-size:0.86rem; color:var(--text-dim); margin-bottom:14px;">
+        Before trusting bytecode, the JVM mathematically proves that operand stacks never underflow, types match, and jumps land on valid instructions:
+      </p>
+      <div class="btn-row" style="margin-bottom:14px;">
+        <button class="btn btn-primary btn-sm" id="vfGoodBtn" type="button">Verify Honest Bytecode</button>
+        <button class="btn btn-danger btn-sm" id="vfBadBtn" type="button">Test Corrupted Bytecode (Stack Underflow)</button>
+      </div>
+      <div id="verifyLines" style="background:var(--panel-inset); border:1px solid var(--border-soft); border-radius:6px; padding:10px;"></div>
+      <div class="vf-verdict" id="vfVerdict"></div>
+    </div>
+
+    <!-- Symbolic Resolution -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>Linking Step ③: Symbolic Resolution</span>
+        <span>Constant Pool Binding</span>
+      </div>
+      <p style="font-size:0.86rem; color:var(--text-dim); margin-bottom:14px;">
+        The constant pool stores external calls as text names. Resolution swaps symbolic strings for direct memory addresses:
+      </p>
+      <div style="background:var(--panel-inset); border:1px solid var(--border-soft); border-radius:6px; padding:14px; font-family:var(--font-mono); font-size:0.82rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span>#7 MethodRef</span>
+          <span style="color:var(--text-faint);">MathWizard.accumulate:(II)I</span>
+          <span id="resArrow1" style="color:var(--steel); font-weight:700;">→</span>
+          <span id="resDirect1" style="color:var(--verdant); font-weight:700;">0x7fff92a4</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span>#12 FieldRef</span>
+          <span style="color:var(--text-faint);">java.lang.System.out</span>
+          <span id="resArrow2" style="color:var(--steel); font-weight:700;">→</span>
+          <span id="resDirect2" style="color:var(--verdant); font-weight:700;">0x7fff9810</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <h3 class="sub">
+    <span class="kicker">Read this after playing the sequence</span>
+    What just happened, phase by phase
+  </h3>
+  <div class="prose">
+    <h4>Loading — bytes become a type</h4>
+    <p>The loader reads the byte stream, checks the <code>0xCAFEBABE</code> magic and the version, parses the constant pool and the method table, and builds an <b>InstanceKlass in Metaspace</b>. From this moment <code>MathWizard</code> exists as something the JVM can talk about. Superclasses are loaded first, recursively — you cannot describe a type without describing what it extends.</p>
+    <p>Metaspace is <b>native memory, not the heap</b>. It holds the <i>description</i> of your classes: one copy, shared by every instance you will ever create. That is why loading thousands of generated classes can exhaust Metaspace while your heap graph looks perfectly healthy — and why the <code>Class&lt;MathWizard&gt;</code> mirror object you get from <code>getClass()</code> is a separate, ordinary Java object that <i>does</i> live on the heap.</p>
+
+    <h4>Linking ① Verification — why Java can run code it did not compile</h4>
+    <p>Anybody can hand-write a <code>.class</code> file. <b>The compiler is not a security boundary</b> — it is a convenience. So before trusting a single instruction, the verifier statically proves properties over every possible execution path: the operand stack never underflows or overflows, types line up at every merge point, every jump lands on a real instruction boundary, <code>final</code> methods are not overridden, and every method returns the type it claims.</p>
+    <p>The payoff is <b>speed, not just safety</b>. Because those properties are proven once, up front, the interpreter and the JIT can skip checking them on every one of ten million iterations. Verification is the reason the fast path is allowed to be fast. Try the "corrupted bytecode" button above: an <code>iadd</code> with one value on the stack is rejected before execution begins, with <code>VerifyError</code>.</p>
+
+    <h4>Linking ② Preparation — the phase that explains half your NPEs</h4>
+    <p>Storage for static fields is allocated and set to <b>specification default values</b>: <code>0</code>, <code>0L</code>, <code>false</code>, <code>'\u0000'</code>, <code>null</code>. <b>No user code runs.</b> Your initialiser <code>= 15000</code> has not executed yet; the slot holds <code>0</code>.</p>
+    <p>Notice the one exception on screen: a <code>static final</code> field with a compile-time constant is given its real value during <i>preparation</i>, not initialisation, because the value lives in the <code>ConstantValue</code> attribute rather than in <code>&lt;clinit&gt;</code>. That is a genuinely different mechanism, and it is the root of the stale-constant problem from Stage&nbsp;01.</p>
+
+    <h4>Linking ③ Resolution — names become addresses</h4>
+    <p>Every symbolic reference in the constant pool is looked up and replaced with a direct pointer. Crucially this is <b>lazy</b> in HotSpot: each entry is resolved at the first instruction that actually uses it, not all at once. That is a startup optimisation with a real consequence — a missing dependency does not fail at launch; it fails hours later, the first time that one code path runs.</p>
+
+    <h4>Initialization — <code>&lt;clinit&gt;</code> runs, exactly once</h4>
+    <p>Now the static initialisers execute, in source order, merged into the single synthetic method <code>&lt;clinit&gt;()</code>. The JVM holds a <b>per-class initialisation lock</b> while this runs, and it is re-entrant for the initialising thread. Two facts follow, both of them interview favourites: the <b>initialization-on-demand holder idiom is thread-safe with no <code>synchronized</code> anywhere</b>, and <b>circular static initialisation can deadlock or silently observe zero-defaults</b>, because a re-entrant thread is allowed to proceed on a half-initialised class.</p>
+    <p>If <code>&lt;clinit&gt;</code> throws, the class is marked <b>erroneous permanently</b>. The first failure surfaces as <code>ExceptionInInitializerError</code> with the real cause attached; every later access to the same class throws a bare <code>NoClassDefFoundError</code> with no cause at all. When you see that pair in a log, <b>always scroll up for the first one</b> — that is where the actual bug is.</p>
+  </div>
+
+  <div class="factgrid">
+    <div>triggers init</div><div><code>new</code>; a static method call; reading/writing a <b>non-constant</b> static field; <code>Class.forName(name)</code>; initialising a subclass (parent goes first); the main class at launch.</div>
+    <div>does NOT trigger</div><div>Reading a <code>static final</code> compile-time constant; declaring an array (<code>new Foo[10]</code> initialises the array type, not <code>Foo</code>); <code>Foo.class</code>; <code>loader.loadClass()</code>; accessing a static member <b>through</b> a subclass — that initialises the declaring parent only.</div>
+    <div>interfaces</div><div>An interface is <b>not</b> initialised when an implementing class is. It is initialised only when one of its own non-constant fields is used — a subtle difference from class inheritance.</div>
+    <div>VerifyError</div><div>Structural proof failed. Almost always a bytecode-manipulation library (a stale agent, an old ASM, a Lombok/instrumentation clash) — it is very rarely javac's output.</div>
+    <div>ExceptionInInitializerError</div><div>An unchecked exception escaped <code>&lt;clinit&gt;</code>. The <b>first</b> occurrence carries the cause; every subsequent access to that class throws a causeless <code>NoClassDefFoundError</code>.</div>
+    <div>-Xlog:class+load</div><div>Java 9+: prints every class as it is defined, with its source. The single fastest way to answer "where did this class come from?" On Java 8 it is <code>-verbose:class</code>.</div>
+  </div>
+
+  <h3 class="sub">
+    <span class="kicker">Interview drill · stage 03</span>
+    Questions they actually ask about loading, linking &amp; initialization
+  </h3>
+
+  <details class="qa">
+    <summary>What are the exact phases of the class lifecycle, and which of them run user code?</summary>
+    <div class="ans">
+      <p><b>Loading &rarr; Linking (Verification, Preparation, Resolution) &rarr; Initialization &rarr; Using &rarr; Unloading.</b></p>
+      <p>Only <b>Initialization</b> runs your code. Everything before it is the JVM constructing and validating a description. The interviewer is usually probing whether you know that <b>Preparation happens before Initialization</b> — that is the seam where static fields hold zeros and where half the surprising behaviour lives.</p>
+      <p>Worth adding: Resolution is the one phase whose <i>timing</i> the specification deliberately leaves open. HotSpot does it lazily; a different VM could do it eagerly and still be conformant.</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>Why is the initialization-on-demand holder idiom thread-safe without any synchronization?</summary>
+    <div class="ans">
+      <p>Because <b>the JVM already holds a lock for you</b>. Class initialisation is specified (JLS §12.4.2) to happen under a per-class initialisation lock, exactly once, with the correct memory-visibility guarantees.</p>
+      <p>So in:</p>
+      <ul>
+        <li><code>private static class Holder { static final Singleton INSTANCE = new Singleton(); }</code></li>
+        <li><code>public static Singleton get() { return Holder.INSTANCE; }</code></li>
+      </ul>
+      <p><code>Holder</code> is not initialised until <code>get()</code> first touches <code>Holder.INSTANCE</code> — lazy, for free. And when it is, the JVM serialises competing threads and publishes the result safely — thread-safe, for free, with <b>zero synchronisation cost on subsequent reads</b>, unlike double-checked locking with <code>volatile</code>.</p>
+      <p>The follow-up they want: an <code>enum</code> singleton gets the same guarantee by the same mechanism, plus serialisation safety.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · Two classes have static fields initialised from each other. Depending on which class is touched first, one of them ends up <code>null</code> — but there is no exception. Explain and fix.</summary>
+    <div class="ans">
+      <p>Classic <b>circular static initialisation</b>. Say <code>A</code> has <code>static B b = B.INSTANCE;</code> and <code>B</code> has <code>static A a = A.INSTANCE;</code>.</p>
+      <p><b>What happens:</b> thread touches <code>A</code> &rarr; JVM marks <code>A</code> "being initialised by this thread" and starts <code>&lt;clinit&gt;</code> &rarr; that reads <code>B.INSTANCE</code>, so <code>B</code> initialises &rarr; <code>B</code>'s <code>&lt;clinit&gt;</code> reads <code>A.INSTANCE</code>. The JVM sees <code>A</code> is already "in progress <b>on this same thread</b>", and the specification says a re-entrant thread must <b>proceed, not block</b> (blocking would be a guaranteed deadlock). So <code>B</code> reads <code>A.INSTANCE</code> while <code>A</code>'s initialiser is only half-done and gets the <b>Preparation default: <code>null</code></b>. <code>B</code> completes, <code>A</code> completes, and <code>B.a</code> is permanently <code>null</code>. No exception is thrown — the JVM did precisely what it promised.</p>
+      <p>Touch <code>B</code> first and the null lands on the other side. That is why the bug appears to depend on class-loading order, request order, or "only in production".</p>
+      <p><b>How to spot it:</b> a static field that is <code>null</code> despite an initialiser that obviously assigns it. Confirm with <code>-Xlog:class+init=info</code> and read the interleaving.</p>
+      <p><b>Fixes:</b> break the cycle — move shared state into a third class that neither initialises the other; make one side lazy behind an accessor method (<code>B.instance()</code> instead of <code>B.INSTANCE</code>); or use the holder idiom so initialisation is deferred to first real use. Static-initialiser cycles are one of the few places where "just use dependency injection" is a genuinely correct answer, because a container resolves the graph explicitly rather than by accident.</p>
+      <p><b>Bonus:</b> the same mechanism <i>can</i> deadlock — if <b>two different threads</b> each start initialising one of the two classes, each blocks on the other's initialisation lock. That deadlock does not appear in a thread dump as a Java monitor; you will see threads parked in <code>Class.forName0</code> or <code>in-class-initialization</code>, which is the giveaway.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · You add a Java agent (APM, coverage, mocking) and the app dies at startup with <code>java.lang.VerifyError: Expecting a stackmap frame at branch target</code>. Diagnose it.</summary>
+    <div class="ans">
+      <p>The agent rewrote bytecode and produced a class that no longer passes verification. The specific message names the mechanism: since class version&nbsp;50 (Java&nbsp;6) the verifier uses <b>StackMapTable</b> — a precomputed type map at each branch target, so verification is a single linear pass rather than an expensive dataflow fixpoint. If an instrumentation library inserts instructions and does <b>not</b> recompute those frames, the map no longer matches the code.</p>
+      <p><b>Diagnose:</b></p>
+      <ul>
+        <li>Read the class name in the error — is it yours, a library's, or a JDK class? That tells you whose transform broke.</li>
+        <li>Remove agents one at a time. Two agents transforming the same class in sequence is a very common trigger, and the pair may work fine individually.</li>
+        <li>Check versions: an ASM version that predates your target bytecode level literally cannot parse it. This is the single most frequent root cause.</li>
+        <li>Dump the transformed bytes and run <code>javap -v</code> or a CheckClassAdapter over them to see the malformed method.</li>
+      </ul>
+      <p><b>Fix properly:</b> upgrade the agent/ASM to one that understands your class-file version, and ensure the transform uses <code>COMPUTE_FRAMES</code> (with a correct <code>getCommonSuperClass</code> that can see the right loader) so the map is regenerated.</p>
+      <p><b>What not to do:</b> <code>-Xverify:none</code> / <code>-noverify</code> "fixes" it by disabling the safety net. It is deprecated and ignored on modern JDKs, and on older ones it converts a clean startup failure into an unpredictable runtime crash. Say this out loud in an interview — recognising that the workaround is worse than the bug is the actual signal they are testing for.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · A microservice's p99 latency spikes to 4 seconds every time a rarely-used endpoint is first called after deploy — then it is fine forever. Nothing in the code is slow. What is going on?</summary>
+    <div class="ans">
+      <p>Two lazy mechanisms compounding, and both live in this stage:</p>
+      <ul>
+        <li><b>Lazy class loading + linking.</b> That endpoint's class graph — the controller, the DTOs, the serialiser, the JDBC path, the validation framework — is loaded, verified and initialised on the <b>first request that touches it</b>, and that request pays for all of it. Hundreds of classes, each read from a JAR, parsed, verified, and initialised.</li>
+        <li><b>Lazy resolution + cold JIT.</b> Every constant-pool entry on that path resolves on first use, and every method runs interpreted at Tier&nbsp;0 until counters build up (Stage&nbsp;05).</li>
+      </ul>
+      <p><b>Confirm it in one run:</b> <code>-Xlog:class+load=info:file=cl.log</code> and check whether a burst of loads coincides with the slow request. <code>-Xlog:class+init</code> and JFR's "Class Loading" event give the same story with timings.</p>
+      <p><b>Fixes, roughly in order of value:</b></p>
+      <ul>
+        <li><b>AppCDS</b> (<code>-XX:SharedArchiveFile</code>, or <code>-XX:+AutoCreateSharedArchive</code> on JDK&nbsp;19+): pre-parses classes into a memory-mappable archive shared across processes. Class loading, not GC or JIT, dominates JVM startup — this is the highest-leverage fix.</li>
+        <li><b>Warm-up traffic</b> before the instance enters the load balancer: synthetic requests over every endpoint. Crude, and extremely effective.</li>
+        <li>Move initialisation out of the request path — eager-init the beans/serialisers you know you need at boot rather than lazily.</li>
+        <li>If the process is genuinely short-lived, this whole class of problem is the argument for AOT / native image (Stage&nbsp;06).</li>
+      </ul>
+      <p>The sentence that lands in an interview: "<b>the first request pays for everything the JVM deferred</b> — and the JVM defers by design, because deferring is what makes startup fast for the paths you never call."</p>
+    </div>
+  </details>
+
+  <div class="trap">
+    <span class="lbl">Common Interview Trap</span>
+    <span class="wrong">"Loading a class runs its static initializer."</span>
+    <span class="right">Loading only builds the type. <code>&lt;clinit&gt;</code> runs at Initialization — a separate, later, lazily-triggered phase.</span>
+    A class can sit fully loaded, verified, prepared and linked for the entire life of the process and <b>never</b> be initialised, if nothing ever actively uses it. This is exactly why <code>loader.loadClass("com.mysql.Driver")</code> never registered a JDBC driver but <code>Class.forName("com.mysql.Driver")</code> did.
+  </div>
+  <!-- Page Navigation Footer -->
+  <footer class="page-nav-footer">
+    <a href="02-class-loaders.html" class="nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Prev: 02 · Class Loaders
+    </a>
+    <a href="04-interpret.html" class="nav-btn next">
+      Next: 04 · Interpret
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+  </footer>
+</div>
+
+<script src="js/jvm-common.js"></script>
+<script>
+const clPlay = $('clPlay');
+const clNext = $('clNext');
+const clReplay = $('clReplay');
+const phaseRibbon = $('phaseRibbon');
+
+const diskFile = $('diskFile');
+const ldApp = $('ldApp');
+const ldPlat = $('ldPlat');
+const ldBoot = $('ldBoot');
+const vdApp = $('vdApp');
+const vdPlat = $('vdPlat');
+const vdBoot = $('vdBoot');
+const arrApp = $('arrApp');
+const arrPlat = $('arrPlat');
+
+const memMeta = $('memMeta');
+const memStatics = $('memStatics');
+const memHeap = $('memHeap');
+const metaTag = $('metaTag');
+const metaEmpty = $('metaEmpty');
+const classObj = $('classObj');
+const cpState = $('cpState');
+
+const staticsEmpty = $('staticsEmpty');
+const staticsTable = $('staticsTable');
+const sfTotal = $('sfTotal');
+const sfCache = $('sfCache');
+const heapTag = $('heapTag');
+const heapContent = $('heapContent');
+
+const verifyLines = $('verifyLines');
+const vfVerdict = $('vfVerdict');
+const vfMode = $('vfMode');
+const resArrow1 = $('resArrow1');
+const resArrow2 = $('resArrow2');
+const resDirect1 = $('resDirect1');
+const resDirect2 = $('resDirect2');
+
+const narrStep = $('narrStep');
+const narrText = $('narrText');
+const narrWhy = $('narrWhy');
+
+const clSeq = Seq();
+const vfSeq = Seq();
+const resSeq = Seq();
+let clIndex = -1;
+
+function narrate(step, text, why){
+  narrStep.textContent = step;
+  narrText.innerHTML = text;
+  narrWhy.innerHTML = why || '';
+  narrWhy.style.display = why ? 'block' : 'none';
+}
+
+const CL_PHASES = [
+  { pill:'trigger', step:'Trigger · first active use',
+    text:"Something references <b>MathWizard</b> for the first time — here the JVM launcher wants to invoke its <code>main()</code> method. The Application ClassLoader is handed the string <code>\"MathWizard\"</code>.",
+    why:"<b>Nothing is eagerly loaded.</b> The JVM does not scan your entire classpath at boot. A class is built in memory only upon active use (first <code>new</code>, first static method call, first non-constant static field read).",
+    enter(){ ldApp.classList.add('asking'); vdApp.textContent = 'asked for "MathWizard"'; } },
+  { pill:'delegate ↑', step:'Delegation · parent-first hierarchy',
+    text:"The Application loader passes the request upward to Platform, which delegates upward to Bootstrap. Bootstrap searches <code>java.base</code>.",
+    why:"<b>Upward delegation guarantees security.</b> If user loaders resolved classes first, placing a rogue <code>java/lang/String.class</code> in your project would compromise the entire JVM runtime.",
+    enter(){ arrApp.classList.add('up'); arrPlat.classList.add('up'); ldPlat.classList.add('asking'); ldBoot.classList.add('asking');
+      vdApp.textContent='delegating up…'; vdPlat.textContent='delegating up…'; vdBoot.textContent='searching java.base…'; } },
+  { pill:'found ↓', step:'Delegation · fallback resolution',
+    text:"Bootstrap: <b>not found</b>. Platform: <b>not found</b>. The request falls back down to Application ClassLoader, which discovers the <code>.class</code> file on the application classpath.",
+    why:"A class's true identity in the JVM is defined as <b>fully qualified class name + defining ClassLoader instance</b>. Two different loaders loading the same class file produce distinct, incompatible types.",
+    enter(){ ldBoot.classList.remove('asking'); ldBoot.classList.add('miss'); vdBoot.textContent='✗ not in java.base';
+      ldPlat.classList.remove('asking'); ldPlat.classList.add('miss'); vdPlat.textContent='✗ not a JDK module';
+      arrApp.className='chain-arrow down'; arrPlat.className='chain-arrow down';
+      arrApp.textContent='▼ falls back down'; arrPlat.textContent='▼ falls back down';
+      ldApp.classList.remove('asking'); ldApp.classList.add('found'); vdApp.textContent='✓ found on classpath'; } },
+  { pill:'loading', step:'Loading · parsing binary format into Metaspace',
+    text:"The loader reads byte stream, verifies the <code>0xCAFEBABE</code> magic header, parses constant pool tables, and constructs the <code>Klass</code> descriptor in <b>Metaspace</b>.",
+    why:"Metaspace is native off-heap memory outside <code>-Xmx</code>. Loading thousands of dynamic proxies or generated lambdas can exhaust native memory while the Java heap remains empty.",
+    enter(){
+      memMeta.classList.add('lit'); metaTag.textContent='Class object created'; metaTag.style.color='var(--verdant)';
+      metaEmpty.style.display='none'; classObj.style.display='block';
+      $('klassState').textContent='loaded'; $('klassState').style.color='var(--amber)'; } },
+  { pill:'verification', step:'Linking ① Verification · static structural analysis',
+    text:"The verifier traverses instructions and statically proves stack bounds, type alignment, and branch destinations without running the code.",
+    why:"Verification allows the interpreter and JIT to bypass runtime safety checks on every iteration, drastically accelerating execution.",
+    enter(){ runVerify('good'); $('vfState').textContent='yes'; $('vfState').style.color='var(--verdant)'; $('klassState').textContent='linked · verified'; } },
+  { pill:'preparation', step:'Linking ② Preparation · allocating static storage',
+    text:"Memory is allocated for static fields and initialized to specification default zero values (<code>0</code> for integers, <code>null</code> for object references).",
+    why:"Preparation runs zero user code. Reading a static field before initialization runs will observe these zero defaults (a common cause of cyclic static NPEs).",
+    enter(){
+      memStatics.classList.add('lit'); staticsEmpty.style.display='none'; staticsTable.style.display='block';
+      sfTotal.textContent='0'; sfTotal.className='sf-val def';
+      sfCache.textContent='null'; sfCache.className='sf-val def'; } },
+  { pill:'resolution', step:'Linking ③ Resolution · pointer binding',
+    text:"Symbolic string references in the constant pool (e.g. <code>#7 → MathWizard.accumulate:(II)I</code>) are resolved into direct memory addresses.",
+    why:"Resolution is lazily performed at first instruction execution to minimize memory footprint and startup overhead.",
+    enter(){
+      resSeq.run([
+        [200, ()=>{ resArrow1.classList.add('on'); resDirect1.classList.add('on'); }],
+        [350, ()=>{ resArrow2.classList.add('on'); resDirect2.classList.add('on'); }],
+        [250, ()=>{ cpState.textContent='direct pointers'; cpState.style.color='var(--verdant)'; cpResolve(); }]
+      ]); } },
+  { pill:'initialization', step:'Initialization · <clinit>() execution',
+    text:"The JVM invokes <code>&lt;clinit&gt;()</code>. Static initializers execute in source order: <code>TOTAL = 15000</code> and <code>cache = new int[8]</code> are evaluated and stored.",
+    why:"<code>&lt;clinit&gt;</code> execution is thread-safe and protected by a class-level lock held by HotSpot. This is why the Initialization-on-demand holder idiom is completely thread-safe without explicit <code>synchronized</code> blocks.",
+    enter(){
+      sfTotal.textContent='15000'; sfTotal.className='sf-val real';
+      sfCache.textContent='int[8]'; sfCache.className='sf-val real';
+      $('klassState').textContent='initialized'; $('klassState').style.color='var(--verdant)';
+      memHeap.classList.add('lit'); heapTag.textContent='1 object';
+      heapContent.innerHTML='<span class="chip obj">int[8] @0x71ab04240 · 48 B</span>'; } },
+  { pill:'ready', step:'Ready · main() execution commences',
+    text:"The class is fully linked and initialized in memory. Execution of <code>MathWizard.main()</code> can now begin at Tier 0 in the interpreter.",
+    why:"Summary: <b>Loading builds the type structure, Linking validates and binds addresses, Initialization supplies real values.</b>",
+    enter(){ metaTag.textContent='live & initialized'; } }
+];
+
+function buildRibbon(){
+  phaseRibbon.innerHTML = CL_PHASES.map((p,i)=>`<button class="phase-pill" data-i="${i}" type="button">${i+1}. ${p.pill}</button>`).join('');
+  Array.from(phaseRibbon.children).forEach(btn => btn.addEventListener('click', () => {
+    const target = Number(btn.dataset.i);
+    clResetTheater();
+    for(let i=0;i<=target;i++){ clIndex=i; CL_PHASES[i].enter(); }
+    const p = CL_PHASES[target];
+    narrate(p.step, p.text, p.why);
+    paintRibbon();
+  }));
+}
+
+function paintRibbon(){
+  Array.from(phaseRibbon.children).forEach((btn,i) => {
+    btn.className = 'phase-pill' + (i===clIndex ? ' active' : (i<clIndex ? ' done' : ''));
+  });
+}
+
+function clAdvance(){
+  if(clIndex >= CL_PHASES.length-1) return false;
+  clIndex++;
+  const p = CL_PHASES[clIndex];
+  p.enter(); narrate(p.step, p.text, p.why); paintRibbon();
+  return true;
+}
+
+function clResetTheater(){
+  clSeq.cancel(); resSeq.cancel(); vfSeq.cancel();
+  clIndex = -1;
+  [ldApp,ldPlat,ldBoot].forEach(l=>l.className='loader-box');
+  [vdApp,vdPlat,vdBoot].forEach(v=>v.textContent='');
+  arrApp.className='chain-arrow'; arrPlat.className='chain-arrow';
+  arrApp.textContent='▲ delegates upward'; arrPlat.textContent='▲ delegates upward';
+  memMeta.classList.remove('lit'); memStatics.classList.remove('lit'); memHeap.classList.remove('lit');
+  metaTag.textContent='empty'; metaTag.style.color=''; metaEmpty.style.display='block'; classObj.style.display='none';
+  $('vfState').textContent='no'; $('vfState').style.color='var(--amber)';
+  $('klassState').textContent='loaded'; $('klassState').style.color='var(--amber)';
+  cpReset();
+  cpState.textContent='symbolic names'; cpState.style.color='';
+  staticsEmpty.style.display='block'; staticsTable.style.display='none';
+  sfTotal.className='sf-val'; sfCache.className='sf-val'; sfTotal.textContent='—'; sfCache.textContent='—';
+  heapTag.textContent='empty'; heapContent.innerHTML='No heap objects created';
+  resArrow1.classList.remove('on'); resArrow2.classList.remove('on');
+  resDirect1.classList.remove('on'); resDirect2.classList.remove('on');
+  vfVerdict.className='vf-verdict'; verifyLines.innerHTML='';
+  paintRibbon();
+  narrate('Ready','Press <b>Play whole sequence</b> or step forward with <b>Next step</b>.','');
+}
+
+function clPlayAll(){
+  clResetTheater();
+  clSeq.run(CL_PHASES.map((p,i)=>[ i===0?200:2600, ()=>clAdvance() ]));
+}
+
+const VERIFY_GOOD = [
+  { op:'iload_0', note:'stack depth 0 → 1', ok:true },
+  { op:'iload_1', note:'stack depth 1 → 2', ok:true },
+  { op:'iadd',    note:'stack depth 2 → 1', ok:true },
+  { op:'ireturn', note:'stack depth 1 → 0', ok:true }
+];
+const VERIFY_BAD = [
+  { op:'iload_0', note:'stack depth 0 → 1', ok:true },
+  { op:'iadd',    note:'requires 2 operands, found 1', ok:false },
+  { op:'ireturn', note:'unreachable dead code', ok:null }
+];
+
+function runVerify(mode){
+  vfSeq.cancel();
+  const lines = mode==='good' ? VERIFY_GOOD : VERIFY_BAD;
+  vfMode.textContent = mode==='good' ? 'honest javac bytecode' : 'hand-hacked .class file';
+  vfVerdict.className='vf-verdict';
+  verifyLines.innerHTML = lines.map((l,i)=>`<div class="vf-line" id="vfL${i}"><span>•</span><span style="font-weight:700;">${l.op}</span><span style="color:var(--text-faint); margin-left:auto;">${l.note}</span></div>`).join('');
+  const steps = lines.map((l,i)=>[ i===0?150:400, ()=>{
+    if(i>0){ const p=$('vfL'+(i-1)); p.className='vf-line '+(lines[i-1].ok===true?'ok':lines[i-1].ok===false?'bad':''); }
+    $('vfL'+i).className='vf-line scanning';
+  }]);
+  steps.push([400, ()=>{
+    lines.forEach((l,i)=>{
+      $('vfL'+i).className = 'vf-line ' + (l.ok===true?'ok':l.ok===false?'bad':'');
+    });
+    vfVerdict.classList.add('show');
+    if(mode==='good'){
+      vfVerdict.classList.add('pass');
+      vfVerdict.innerHTML = '✓ <b>Verification Successful:</b> Operand stack balance validated across all paths. Types match exactly. Bytecode is proven structurally sound.';
+    } else {
+      vfVerdict.classList.add('fail');
+      vfVerdict.innerHTML = '✗ <b>java.lang.VerifyError:</b> Operand stack underflow at offset 1 — <code>iadd</code> requires two int values but only one was on stack. Class safely rejected before execution.';
+    }
+  }]);
+  vfSeq.run(steps);
+}
+
+/* ---------- Runtime constant pool table ---------- */
+const CP_ENTRIES = [
+  { i:1,  tag:'Methodref',   val:'java/lang/Object."&lt;init&gt;":()V', kind:'ref',
+    detail:'A <b>Methodref</b> never stores a name directly. #1 points at <b>#2</b> (the Class entry) and <b>#3</b> (the NameAndType entry); #3 in turn points at <b>#5</b> and <b>#6</b>, the raw Utf8 characters. That indirection is why the text "&lt;init&gt;" is stored exactly once no matter how many entries mention it. This particular entry is the super-constructor call every constructor begins with.' },
+  { i:2,  tag:'Class',       val:'java/lang/Object', kind:'ref',
+    detail:'A <b>Class</b> entry is a thin wrapper around a Utf8 name (<b>#4</b>). Resolving it means: ask this class\'s defining loader to load that name, then replace the entry with a pointer to the resulting Klass in Metaspace. If the loader cannot find it, this is where <code>NoClassDefFoundError</code> is born.' },
+  { i:3,  tag:'NameAndType', val:'&lt;init&gt;:()V', kind:'const',
+    detail:'<b>NameAndType</b> pairs a member name (<b>#5</b>) with a type descriptor (<b>#6</b>). It carries no owner — which is exactly why the same NameAndType can be shared by a method on two unrelated classes. Nothing to resolve; it is pure description.' },
+  { i:4,  tag:'Utf8',        val:'java/lang/Object', kind:'const', detail:'Raw modified-UTF8 characters. <b>Every</b> name, descriptor and string literal in the file bottoms out in Utf8 entries. They are the leaves of the constant-pool tree and are never "resolved" — they are already the data.' },
+  { i:5,  tag:'Utf8',        val:'&lt;init&gt;', kind:'const', detail:'The constructor\'s internal name. You can never write <code>&lt;init&gt;</code> in Java source — the angle brackets are illegal identifiers precisely so that user code can never collide with compiler-generated members.' },
+  { i:6,  tag:'Utf8',        val:'()V', kind:'const', detail:'A method descriptor: no parameters, returns void. Parameters live inside the parentheses, the return type follows. <code>(II)I</code> = two ints in, int out.' },
+  { i:7,  tag:'Methodref',   val:'MathWizard.accumulate:(II)I', kind:'ref', hot:true,
+    detail:'The call site inside <code>main()</code>. Built from <b>#8</b> (Class MathWizard) + <b>#9</b> (NameAndType accumulate:(II)I). At resolution the JVM walks the method table of the Klass, finds the matching name+descriptor, and overwrites this entry with a <code>Method*</code> — the address shown in the resolution panel below. A mismatch here is where <code>NoSuchMethodError</code> comes from.' },
+  { i:8,  tag:'Class',       val:'MathWizard', kind:'ref',
+    detail:'The class\'s reference to itself. Even self-references go through the pool — the bytecode format has no notion of "me", only pool indices.' },
+  { i:9,  tag:'NameAndType', val:'accumulate:(II)I', kind:'const',
+    detail:'Name <b>#21</b> + descriptor. Note the JVM matches methods on <b>name AND descriptor together</b>: overloads are entirely distinct entries with no relationship. This is also why return type alone cannot overload in Java source but <i>can</i> differ in bytecode (bridge methods exploit that).' },
+  { i:12, tag:'Fieldref',    val:'java/lang/System.out:Ljava/io/PrintStream;', kind:'ref', hot:true,
+    detail:'A <b>Fieldref</b> = Class (<b>#13</b>) + NameAndType (<b>#14</b>). Resolving a <i>static</i> field identifies its declaring class and field offset; HotSpot reads the value through that class\'s heap-resident <code>java.lang.Class</code> mirror. The first active <code>getstatic</code> use also <b>triggers initialization of java.lang.System</b> if needed.' },
+  { i:13, tag:'Class',       val:'java/lang/System', kind:'ref', detail:'Loaded by the <b>Bootstrap</b> loader, not yours — delegation means the request goes up the chain first. This is Stage 02 in action from inside a single pool entry.' },
+  { i:14, tag:'NameAndType', val:'out:Ljava/io/PrintStream;', kind:'const', detail:'<code>L…;</code> is how a reference type is spelled in a descriptor: <code>L</code> + slash-separated name + semicolon. Arrays prefix <code>[</code>, so <code>[[Ljava/lang/String;</code> is <code>String[][]</code>.' },
+  { i:18, tag:'Methodref',   val:'java/io/PrintStream.println:(I)V', kind:'ref', hot:true,
+    detail:'Chosen by <b>javac</b>, not by the JVM. Overload selection is a compile-time decision baked into the descriptor: because <code>result</code> is an <code>int</code>, javac wrote <code>(I)V</code>. Change the variable to <code>long</code> and this entry silently becomes <code>(J)V</code> — a different method entirely.' },
+  { i:21, tag:'Utf8',        val:'accumulate', kind:'const', detail:'The method name as characters. Obfuscators rewrite exactly these entries — the bytecode still runs because every instruction refers to the pool <i>index</i>, never to the text.' },
+  { i:25, tag:'Fieldref',    val:'MathWizard.cache:[I', kind:'ref', hot:true,
+    detail:'The static array field. <code>[I</code> = <code>int[]</code>. Resolved to the address of the static slot prepared during <b>Linking ② Preparation</b> — the slot exists (holding <code>null</code>) long before <code>&lt;clinit&gt;</code> puts an array in it.' },
+  { i:30, tag:'Integer',     val:'15000', kind:'const',
+    detail:'A literal value living directly in the pool. Note what is <b>not</b> here: <code>TOTAL</code>. Because it is <code>static final int</code> with a constant initialiser, javac folded the value into the bytecode of <code>main()</code>. The constant is gone as a <i>reference</i> — which is exactly why changing it in a library requires recompiling every caller.' }
+];
+const CP_HOT = CP_ENTRIES.filter(e => e.hot).length;
+const cpRows = $('cpRows');
+const cpDetail = $('cpDetail');
+const cpTag = $('cpTag');
+const cpState2 = $('cpState2');
+const cpResolvedN = $('cpResolvedN');
+
+function buildCP(){
+  cpRows.innerHTML = CP_ENTRIES.map(e =>
+    `<div class="cp-row" id="cpR${e.i}" data-i="${e.i}" role="button" tabindex="0">
+       <span class="cp-idx">#${e.i}</span>
+       <span class="cp-kind">${e.tag}</span>
+       <span class="cp-val">${e.val}</span>
+       <span class="cp-res">${e.kind === 'const' ? 'const' : 'symbolic'}</span>
+     </div>`).join('');
+  Array.from(cpRows.children).forEach(row => {
+    const show = () => {
+      const e = CP_ENTRIES.find(x => x.i === Number(row.dataset.i));
+      cpDetail.innerHTML = `<b style="color:var(--violet); font-family:var(--font-mono);">#${e.i} ${e.tag}</b> &nbsp;<code>${e.val}</code><br>${e.detail}`;
+    };
+    row.addEventListener('click', show);
+    row.addEventListener('keydown', ev => { if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); show(); } });
+  });
+}
+
+function cpResolve(){
+  CP_ENTRIES.filter(e => e.kind === 'ref').forEach(e => {
+    const row = $('cpR' + e.i);
+    row.classList.add('resolved');
+    row.querySelector('.cp-res').textContent = e.hot ? 'resolved →ptr' : 'resolved';
+  });
+  cpState2.textContent = 'direct pointers';
+  cpState2.style.color = 'var(--verdant)';
+  cpResolvedN.textContent = CP_HOT + ' / ' + CP_HOT;
+  cpTag.textContent = '37 entries · linked';
+}
+
+function cpReset(){
+  Array.from(cpRows.children).forEach(row => {
+    row.className = 'cp-row';
+    const e = CP_ENTRIES.find(x => x.i === Number(row.dataset.i));
+    row.querySelector('.cp-res').textContent = e.kind === 'const' ? 'const' : 'symbolic';
+  });
+  cpState2.textContent = 'symbolic names';
+  cpState2.style.color = 'var(--amber)';
+  cpResolvedN.textContent = '0 / ' + CP_HOT;
+  cpTag.textContent = '37 entries';
+  cpDetail.innerHTML = 'Click a row above to trace how that entry is built out of other entries.';
+}
+
+buildCP();
+cpReset();
+$('cpResolveBtn').addEventListener('click', cpResolve);
+$('cpResetBtn').addEventListener('click', cpReset);
+
+clPlay.addEventListener('click', clPlayAll);
+clNext.addEventListener('click', ()=>{ clSeq.cancel(); clAdvance(); });
+clReplay.addEventListener('click', clResetTheater);
+$('vfGoodBtn').addEventListener('click', ()=>runVerify('good'));
+$('vfBadBtn').addEventListener('click', ()=>runVerify('bad'));
+
+buildRibbon();
+clResetTheater();
+</script>
+</body>
+</html>

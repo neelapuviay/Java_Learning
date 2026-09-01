@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>09 · Garbage Collection — Inside the JVM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/jvm-theme.css">
+  <style>
+    .gc-box { margin-bottom: 24px; padding: 22px; }
+  </style>
+</head>
+<body>
+
+<div class="stage-container">
+  <header class="stage-head">
+    <span class="stage-num-badge">STAGE 09</span>
+    <h1>Garbage Collection — Reachability Tracing, Generations &amp; Modern Collectors</h1>
+    <span class="stage-tag">automatic memory management</span>
+  </header>
+
+  <p class="stage-desc">
+    Java memory management relies on two core principles: <b>Root Reachability Tracing</b> (which completely eliminates circular reference leaks) and the <b>Weak Generational Hypothesis</b> (most objects die young). Explore how modern collectors trade pause latency against throughput across different heap architectures.
+  </p>
+
+
+  <div class="mental">
+    <span class="lbl">Mental model — hold this picture</span>
+    <p>A library does not track which books are rubbish. Instead, once in a while, a librarian starts from the <b>front desk records</b> — the loans, the reading-room lists, the reservation slips — and follows every reference: this record points to a shelf, that book cites another book, and so on. Everything reached gets a chalk mark. <b>Everything unmarked is, by definition, unreachable by any reader</b>, and the shelves it occupies are simply declared empty.</p>
+    <p>Two consequences fall straight out of this, and both are interview answers. First, <b>a pile of books that only cite each other, with no front-desk record pointing in, is unreachable</b> — which is why Java has no reference-counting cycle problem. Second, the librarian's work is proportional to <b>what survives</b>, not to what is thrown away. Creating and discarding a million short-lived objects is nearly free; keeping a million alive is what costs.</p>
+    <p>And the observation that shapes every modern collector: <b>most books are returned within the hour.</b> So do not search the whole library each time — check the returns trolley by the door. That is the <b>weak generational hypothesis</b>, and it is why the heap has a young generation at all.</p>
+  </div>
+  <!-- 9.1 Root Reachability Graph -->
+  <div class="panel gc-box">
+    <div class="panel-head">
+      <span>9.1 · Root Reachability Graph: Tracing vs. Reference Cycles</span>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" id="reachPlay" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+          Play Reachability Tracing
+        </button>
+        <button class="btn btn-danger btn-sm" id="reachCut" type="button">Cut Static Root Reference</button>
+      </div>
+    </div>
+    <p style="font-size:0.88rem; color:var(--text-dim); margin-bottom:12px;">
+      HotSpot traces from live GC Roots (thread stacks, static fields, JNI pointers). Notice that orphaned cycles (E &amp; F) are safely collected without leaking:
+    </p>
+    <div style="background:var(--panel-inset); border:1px solid var(--border); border-radius:8px; padding:12px; overflow-x:auto;">
+      <svg id="gcGraph" viewBox="0 0 710 260" style="width:100%; min-width:650px; height:220px;"></svg>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-family:var(--font-mono); font-size:0.78rem;">
+      <div id="reachPhase" style="color:var(--verdant); font-weight:700;">Press Play to trace live objects from GC roots.</div>
+      <div style="color:var(--text-faint);">Live: <b id="reachLive" style="color:var(--verdant);">—</b> · Reclaimed: <b id="reachDead" style="color:var(--danger);">—</b></div>
+    </div>
+    <div id="reachStatus" style="font-size:0.86rem; color:var(--text-dim); margin-top:8px;"></div>
+  </div>
+
+  <!-- 9.2 Generational Minor GC Simulator -->
+  <div class="panel gc-box">
+    <div class="panel-head">
+      <span>9.2 · Generational Mechanics &amp; Minor GC Simulation</span>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" id="genAlloc" type="button">Allocate in Eden</button>
+        <button class="btn btn-amber btn-sm" id="genPlay" type="button">Play 6 GC Cycles</button>
+        <button class="btn btn-ghost btn-sm" id="genReset" type="button">Reset</button>
+      </div>
+    </div>
+    <p style="font-size:0.88rem; color:var(--text-dim); margin-bottom:14px;">
+      Objects start in <b>Eden</b>. Minor GCs copy live survivors back and forth between <b>Survivor Spaces (S0 / S1)</b>, incrementing age until tenuring threshold promotes them to <b>Old Generation</b>:
+    </p>
+
+    <div class="grid-4" style="margin-bottom:12px;">
+      <div style="background:var(--panel-inset); padding:10px; border-radius:6px; border:1px solid var(--border-soft);">
+        <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--verdant); font-weight:700; margin-bottom:6px;">EDEN SPACE (<span id="genEdenN">0</span>)</div>
+        <div id="cellsEden" style="min-height:50px; display:flex; flex-wrap:wrap;"></div>
+      </div>
+      <div style="background:var(--panel-inset); padding:10px; border-radius:6px; border:1px solid var(--border-soft);">
+        <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--amber); font-weight:700; margin-bottom:6px;">SURVIVOR S0 (<span id="genS0N">0</span>)</div>
+        <div id="cellsS0" style="min-height:50px; display:flex; flex-wrap:wrap;"></div>
+      </div>
+      <div style="background:var(--panel-inset); padding:10px; border-radius:6px; border:1px solid var(--border-soft);">
+        <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--amber); font-weight:700; margin-bottom:6px;">SURVIVOR S1 (<span id="genS1N">0</span>)</div>
+        <div id="cellsS1" style="min-height:50px; display:flex; flex-wrap:wrap;"></div>
+      </div>
+      <div style="background:var(--panel-inset); padding:10px; border-radius:6px; border:1px solid var(--border-soft);">
+        <div style="font-family:var(--font-mono); font-size:0.72rem; color:var(--violet); font-weight:700; margin-bottom:6px;">OLD GEN (<span id="genOldN">0</span>)</div>
+        <div id="cellsOld" style="min-height:50px; display:flex; flex-wrap:wrap;"></div>
+      </div>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:0.78rem; color:var(--text-faint);">
+      <span>GC Cycles: <b id="genCycles" style="color:var(--text);">0</b></span>
+      <span>Reclaimed: <b id="genReclaimed" style="color:var(--verdant);">0</b></span>
+      <span>Promoted: <b id="genPromoted" style="color:var(--violet);">0</b></span>
+      <span>Survival Rate: <b id="genSurvRate" style="color:var(--steel);">—</b></span>
+    </div>
+    <div id="genPhase" style="font-size:0.86rem; color:var(--text); margin-top:10px; font-weight:600;"></div>
+    <div id="genStatus" style="font-size:0.84rem; color:var(--text-dim); margin-top:4px;"></div>
+  </div>
+
+  <!-- 9.3 Four Major Collectors Comparison -->
+  <div class="panel gc-box">
+    <div class="panel-head">
+      <span>9.3 · The Four Major HotSpot Garbage Collectors</span>
+      <button class="btn btn-primary btn-sm" id="gcPlay" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+        Simulate Collector Timeline
+      </button>
+    </div>
+
+    <!-- Collector Tab Bar -->
+    <div class="tab-bar">
+      <button class="tab active" data-gc="serial" type="button">Serial GC</button>
+      <button class="tab" data-gc="parallel" type="button">Parallel GC</button>
+      <button class="tab" data-gc="g1" type="button">G1 GC (Default)</button>
+      <button class="tab" data-gc="zgc" type="button">ZGC (Sub-ms Latency)</button>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;">
+      <h3 style="font-size:1.1rem; color:var(--text);" id="gcTitle">Serial GC</h3>
+      <code id="gcFlag">-XX:+UseSerialGC</code>
+    </div>
+    <p id="gcIntro" style="font-size:0.88rem; color:var(--text-dim); margin-bottom:14px;"></p>
+
+    <!-- Heap Layout Map -->
+    <div style="background:var(--panel-inset); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:14px;">
+      <div id="gcGenView" style="display:block;">
+        <div style="font-family:var(--font-mono); font-size:0.74rem; color:var(--text-faint); margin-bottom:6px;">TRADITIONAL GENERATIONAL HEAP</div>
+        <div style="display:flex; gap:12px;">
+          <div style="flex:1;"><span style="font-size:0.72rem; color:var(--verdant); font-family:var(--font-mono);">Eden:</span> <div id="hCellsEden" style="display:flex; flex-wrap:wrap;"></div></div>
+          <div style="flex:1;"><span style="font-size:0.72rem; color:var(--violet); font-family:var(--font-mono);">Old Gen:</span> <div id="hCellsOld" style="display:flex; flex-wrap:wrap;"></div></div>
+        </div>
+      </div>
+      <div id="gcRegionView" style="display:none;">
+        <div style="font-family:var(--font-mono); font-size:0.74rem; color:var(--text-faint); margin-bottom:6px;">REGION-BASED HEAP (~2048 DYNAMIC REGIONS)</div>
+        <div id="hRegions" style="display:flex; flex-wrap:wrap;"></div>
+      </div>
+    </div>
+
+    <!-- Live Multi-Thread Execution Timeline -->
+    <div style="margin-bottom:12px;">
+      <div style="font-family:var(--font-mono); font-size:0.74rem; color:var(--text-faint); margin-bottom:6px;">
+        CONCURRENCY TIMELINE (<span style="color:var(--steel);">■ App Running</span> · <span style="color:var(--danger);">■ STW Pause</span> · <span style="color:var(--cyan);">■ Concurrent GC</span>)
+      </div>
+      <div id="gcTimelineRows" style="background:var(--panel-inset); border:1px solid var(--border-soft); border-radius:6px; padding:10px;"></div>
+    </div>
+
+    <!-- Collector Telemetry Metrics -->
+    <div class="grid-4" style="margin-bottom:12px;">
+      <div class="metric"><div class="m-lbl">STW Pauses</div><div class="m-val" id="gcPauseCount">0</div></div>
+      <div class="metric bad"><div class="m-lbl">Longest Pause</div><div class="m-val" id="gcLongest">0 ms</div></div>
+      <div class="metric bad"><div class="m-lbl">Total Stopped</div><div class="m-val" id="gcTotalPause">0 ms</div></div>
+      <div class="metric good"><div class="m-lbl">App Throughput</div><div class="m-val" id="gcThroughput">100%</div></div>
+    </div>
+
+    <div id="gcPhase" style="font-family:var(--font-mono); font-size:0.82rem; color:var(--text); padding:8px 12px; background:var(--panel-raised); border-radius:6px; margin-bottom:10px;">
+      Press Play to run one full collection cycle with this collector.
+    </div>
+    <div id="gcTakeaway" class="plain" style="margin-top:10px;">
+      <span class="lbl">Architectural Insight</span>
+      Run each collector to directly observe the trade-off between pause latency and throughput.
+    </div>
+  </div>
+
+
+  <h3 class="sub">
+    <span class="kicker">Read this alongside 9.1 and 9.2</span>
+    How garbage collection actually works
+  </h3>
+  <div class="prose">
+    <h4>Reachability, not "unused"</h4>
+    <p>The GC does not find objects you have finished with. It finds objects that <b>cannot be reached</b> from a <b>GC root</b> — thread stacks and their locals, static fields, JNI references, and a few VM-internal structures. Starting from those roots it walks every reference, and anything it never arrives at is garbage. Object&nbsp;E pointing at F and F pointing back at E changes nothing: if no root reaches either, both are collected. Play 9.1 above and watch exactly that happen.</p>
+    <p>The corollary is the one that matters in production: <b>a "memory leak" in Java is always unintended reachability</b>. The collector is not failing; you can still reach the object, so it is still live by definition.</p>
+
+    <h4>The four primitive operations</h4>
+    <p>Every collector is built from some combination of four steps:</p>
+    <ul>
+      <li><b>Mark</b> — starting from the application's roots, all linked memory blocks that can be reached are "painted".</li>
+      <li><b>Sweep</b> — all the non-live objects are cleared from the heap.</li>
+      <li><b>Compact</b> — surviving objects are brought closer together, defragmenting the heap by relocating them.</li>
+      <li><b>Copy</b> — live objects are moved into a "to" space, leaving the old space entirely empty and reusable in one step.</li>
+    </ul>
+    <p>Combining them gives the familiar families: <b>Mark/Sweep/Compact</b>, <b>Copy</b> (used for the young generation), and <b>Mark/Compact</b>. The crucial economic property of a <b>copying</b> collector is that its cost is proportional to the <b>survivors</b>, not to the size of the space collected — which is what makes young collections cheap when most objects die.</p>
+
+    <h4>Generations, and why the heap is shaped this way</h4>
+    <p>The design rests on two empirical claims: <b>most objects die young</b>, and <b>few references from older to younger objects exist</b>. Both hold for the overwhelming majority of real programs.</p>
+    <p>New objects are allocated in <b>Eden</b>. When Eden fills, a quick young collection runs: survivors are copied into a <b>Survivor</b> space, and objects that have survived enough collections are <b>promoted</b> ("tenured") into the <b>Old Generation</b>. The old generation holds longer-lived objects; it needs collecting far less often, but takes much longer when it does. Step 9.2 above and watch the ages increment.</p>
+    <p>The second claim is what makes it fast to implement. To collect only the young generation, the GC must know about old&rarr;young references without scanning the whole old generation — so the JVM maintains a <b>card table</b> (and, in G1, remembered sets), updated by a tiny <b>write barrier</b> the JIT inserts on every reference store. That barrier is a real, permanent tax on every Java program, and it is the price of never scanning the whole heap for a young collection.</p>
+
+    <h4>Allocation rate: the number to look at first</h4>
+    <p><b>Allocation rate</b>, in MB/sec, tells you how quickly memory is being consumed. A high value indicates a lot of objects are being created, which means a lot of cleanups will be needed — more frequent young collections, more copying, more promotion pressure. It is often a more actionable number than pause time, because it points straight at code: a hot loop building strings, boxing primitives, or creating throwaway collections.</p>
+    <p>For sizing, a good starting guideline is a heap (<code>-Xmx</code>) of <b>2.5 to 5 times the average live set</b> — the amount of data that genuinely survives collections. Below that range the collector runs constantly; far above it, you are paying for memory that only makes full collections slower.</p>
+
+    <h4>Pause time, throughput, and why they fight</h4>
+    <p><b>Most collectors cause GC-related pauses proportional to the size of their heaps</b> — as a rough historical rule of thumb, on the order of a second of pause per gigabyte of live objects for a stop-the-world compacting collector. That single fact is why heap size and latency are not independent choices: a bigger heap buys throughput and costs tail latency.</p>
+    <p>The three shapes of collector:</p>
+    <ul>
+      <li><b>Stop-the-world</b> — halts application execution entirely while collecting. Simple, efficient per unit of work, and unbounded in pause as the heap grows.</li>
+      <li><b>Incremental</b> — breaks the work into smaller chunks with gaps that permit the application to run.</li>
+      <li><b>Concurrent</b> — performs collection <i>while application threads continue running</i>. It costs throughput (barriers, and CPU spent collecting alongside your work) and buys dramatically shorter pauses.</li>
+    </ul>
+    <p>Modern concurrent collectors — <b>C4, ZGC, Shenandoah</b> — bring pause times down to <b>units of milliseconds or lower</b>, and importantly, pauses that no longer scale with heap size. The distinction to be precise about is "mostly concurrent" versus <b>fully concurrent</b>: a mostly-concurrent collector still has a stop-the-world fallback (typically for compaction) that it resorts to under pressure, and that fallback is exactly the pause that ruins your p99 at the worst moment.</p>
+
+    <h4>Why tuning is genuinely hard</h4>
+    <p>Be honest about this in an interview, because it is true: <b>garbage collection tuning for most collectors is hard to get right, even when you understand your application's characteristics.</b> Similar parameter sets produce very different outcomes on different workloads, and there is <b>no "one size fits all" answer</b>. Postponing tuning does not avoid pauses; it only delays when you meet them.</p>
+    <p>Which is why the practical advice is boring and correct: <b>change the collector before you change its knobs.</b> Picking G1 or ZGC to match your latency requirement solves more problems than a dozen tuning flags, and each flag you add is a decision your successor will have to understand.</p>
+  </div>
+
+  <div class="factgrid">
+    <div>minor / young GC</div><div>Collects the young generation only. Frequent, short, copying, always stop-the-world. Cost scales with <b>survivors</b>, not with garbage.</div>
+    <div>major GC</div><div>Collects the old generation. Rare, much longer, mark-sweep(-compact).</div>
+    <div>full GC</div><div>Everything — young + old + metaspace-related work — usually with a long stop-the-world pause, and often a sign of trouble: heap genuinely too small, promotion failure, or an explicit <code>System.gc()</code>.</div>
+    <div>mixed GC (G1)</div><div>A young collection that <b>also</b> evacuates some old regions, chosen by which regions hold the most garbage. This is how G1 avoids ever needing a full collection in the healthy case.</div>
+    <div>Serial GC</div><div>One thread, stop-the-world. Correct for tiny heaps, single-core containers, and short-lived CLI processes. <code>-XX:+UseSerialGC</code></div>
+    <div>Parallel GC</div><div>Multi-threaded stop-the-world. <b>Best raw throughput</b> if you genuinely do not care about pauses — batch jobs and analytics. <code>-XX:+UseParallelGC</code></div>
+    <div>G1 GC</div><div>Default since Java&nbsp;9. Region-based, mostly concurrent marking, evacuating collections chosen to meet a <b>pause-time target</b> (<code>-XX:MaxGCPauseMillis</code>, default 200&nbsp;ms). The right default for most services.</div>
+    <div>ZGC / Shenandoah</div><div>Concurrent compaction using load/store barriers. Sub-millisecond pauses that do <b>not</b> grow with heap size — viable from small heaps to terabytes. Costs some throughput. <code>-XX:+UseZGC</code> (add <code>-XX:+ZGenerational</code> on JDK&nbsp;21+).</div>
+    <div>System.gc()</div><div>A <i>suggestion</i>, not a command, and almost always a mistake — it typically forces a full collection at the worst possible moment. Disable it with <code>-XX:+DisableExplicitGC</code> if a library insists on calling it.</div>
+    <div>finalize()</div><div>Deprecated and removed. It made collection slower, was never guaranteed to run, and could resurrect objects. Use <code>try-with-resources</code>, and <code>Cleaner</code> only as a last-resort safety net.</div>
+  </div>
+
+  <h3 class="sub">
+    <span class="kicker">Interview drill · stage 09</span>
+    Questions they actually ask about garbage collection
+  </h3>
+
+  <details class="qa">
+    <summary>How does the JVM know an object is garbage?</summary>
+    <div class="ans">
+      <p><b>Reachability from GC roots</b>, not reference counting. The collector starts from thread stacks (locals and parameters of every frame), static fields, JNI global references and a handful of VM-internal roots, and traces every reference transitively. Anything not reached is garbage.</p>
+      <p>The follow-up they are angling for: "<b>Why not reference counting?</b>" Because reference counting cannot reclaim cycles — two objects referring to each other keep each other's counts above zero forever. It also imposes a cost on every single pointer write, which is a bad trade in a language that writes pointers constantly. Tracing collects cycles for free, and pays only when it runs.</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>Explain the generational hypothesis and why it is worth designing a heap around.</summary>
+    <div class="ans">
+      <p>Two observations: <b>most objects die young</b>, and <b>few references point from older objects to younger ones</b>.</p>
+      <p>The first means that if you collect only the recently-allocated region, you will find that almost everything in it is garbage — and because young collection is a <b>copying</b> collector, its cost is proportional to what survives. Collecting a nearly-empty Eden is nearly free regardless of how many objects passed through it.</p>
+      <p>The second is what makes it <i>implementable</i>: to collect the young generation independently you must find old&rarr;young references, and there are few enough of them that tracking them with a write barrier and a card table is cheaper than scanning the old generation.</p>
+      <p>The practical takeaway worth stating: <b>allocating short-lived objects in Java is genuinely cheap</b> — a pointer bump in a thread-local allocation buffer, and a death that costs nothing. Object pooling to "help the GC" usually makes things worse, because it converts cheap young garbage into expensive long-lived objects that the old generation must repeatedly trace.</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>Which collector would you choose, and why?</summary>
+    <div class="ans">
+      <p>Answer from the requirement, never from a favourite:</p>
+      <ul>
+        <li><b>Latency-sensitive service, large heap</b> (interactive APIs, trading, gaming) &rarr; <b>ZGC</b> or Shenandoah. Sub-millisecond pauses independent of heap size, at some throughput cost.</li>
+        <li><b>General-purpose service</b> &rarr; <b>G1</b>, the default. Pause-target-driven, good balance, and the one your operations tooling understands best.</li>
+        <li><b>Batch / analytics where only total time matters</b> &rarr; <b>Parallel GC</b>. Highest raw throughput; pauses are irrelevant if nobody is waiting.</li>
+        <li><b>Tiny container, single core, short-lived process</b> &rarr; <b>Serial GC</b>. Less overhead than coordinating parallel threads, and the JVM often selects it automatically on constrained hardware.</li>
+      </ul>
+      <p>Then add the honest caveat: <b>measure</b>. Pick the collector that matches the requirement, run your real workload, and look at total safepoint stop time and p99 latency rather than at GC-log averages.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · p99 latency is 800&nbsp;ms with 40&nbsp;ms average GC pauses on a 32&nbsp;GB heap. The team wants to cut <code>-Xmx</code> to 8&nbsp;GB "so GC has less to do." Right call?</summary>
+    <div class="ans">
+      <p><b>Probably backwards, and the reasoning matters more than the answer.</b> Shrinking the heap does shorten each individual pause — pauses scale with heap and live-set size — but it also makes collections <b>far more frequent</b>, and if the live set does not fit comfortably, you get promotion failures and full collections, which are dramatically worse than what you started with.</p>
+      <p><b>Diagnose before changing anything:</b></p>
+      <ul>
+        <li>What is the <b>live set</b> after a full collection? Guideline: heap of <b>2.5–5× the live set</b>. If the live set is 6&nbsp;GB, an 8&nbsp;GB heap is already too tight.</li>
+        <li>What is the <b>allocation rate</b> (MB/s)? A very high rate means the fix is in the code — reduce garbage — not in the flags.</li>
+        <li>Is the 800&nbsp;ms actually GC? Check <b>total safepoint stop time</b> (<code>-Xlog:safepoint</code>), not just collection duration. A 40&nbsp;ms collection preceded by a 700&nbsp;ms time-to-safepoint is a Stage&nbsp;07 problem wearing a GC costume.</li>
+        <li>Are pauses <b>young or full</b>? Frequent full collections mean a retention problem; long young collections mean a high survival rate, and the fix is usually a larger young generation, not a smaller heap.</li>
+      </ul>
+      <p><b>What actually fixes it, in order:</b></p>
+      <ul>
+        <li><b>Change collector.</b> On a 32&nbsp;GB heap with a latency requirement, ZGC or Shenandoah is the answer — concurrent compaction makes pause time independent of heap size. This is usually a one-flag change that beats weeks of G1 tuning.</li>
+        <li><b>Reduce allocation rate</b> in the top offenders found by an allocation profiler. Less garbage beats faster collection.</li>
+        <li><b>Fix retention.</b> A live set that grew unintentionally is the root cause behind a surprising share of "GC problems".</li>
+        <li>Only then adjust G1's <code>MaxGCPauseMillis</code> — and understand it is a <i>target</i> the collector trades throughput to meet, not a guarantee.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · GC logs show young collections every 2 seconds, each promoting a large volume to old gen, and a full GC every 20 minutes that takes 6 seconds. Diagnose.</summary>
+    <div class="ans">
+      <p>The pattern names itself: <b>premature promotion</b>. Objects that ought to die young are surviving long enough to be tenured, so the old generation fills with short-lived data, and eventually a full collection has to clean it up.</p>
+      <p><b>Why it happens:</b></p>
+      <ul>
+        <li><b>The young generation is too small</b> relative to the allocation rate. Objects are evacuated before they have had time to die, so they are promoted on age rather than on merit. This is the most common cause by a wide margin.</li>
+        <li><b>Survivor spaces are too small</b>, so survivors overflow directly into old gen regardless of age.</li>
+        <li><b>Objects genuinely live longer than one collection cycle</b> — a request whose working set survives a couple of collections under load. Same fix: give the young generation more room so a cycle spans more time.</li>
+        <li><b>Very large objects</b> allocated directly into old gen (humongous allocations in G1: anything over half a region). A stream of large byte arrays or buffers does this.</li>
+      </ul>
+      <p><b>Investigate:</b> <code>-Xlog:gc*,gc+age=trace</code> shows the age distribution of survivors — if most objects are promoted at the maximum tenuring threshold, the young gen is too small; if they are promoted because survivor space overflowed, you will see the survivor overflow directly.</p>
+      <p><b>Fixes:</b> increase the young generation (raise <code>-Xmn</code>, or for G1 raise <code>G1NewSizePercent</code> rather than pinning a fixed size, since G1 sizes adaptively); increase survivor space (<code>-XX:SurvivorRatio</code>); reduce allocation rate at the source; and for humongous allocations either reduce object size or raise <code>G1HeapRegionSize</code>.</p>
+      <p><b>The mental model to state:</b> "<b>Objects should die in the young generation. Every object promoted is a future old-generation collection's problem.</b> Premature promotion converts cheap garbage into expensive garbage."</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · A developer adds <code>System.gc()</code> at the end of each batch job "to keep memory clean." What do you tell them?</summary>
+    <div class="ans">
+      <p>Explain the mechanism rather than just saying no. <code>System.gc()</code> is a <b>suggestion</b>; on HotSpot it normally triggers a <b>full, stop-the-world collection</b> of the entire heap plus Metaspace work — the single most expensive thing the collector can do — at a moment chosen by the calendar rather than by memory pressure.</p>
+      <p><b>Why it does not do what they think:</b></p>
+      <ul>
+        <li>The GC already runs when memory pressure requires it, and it has far better information about when that is than a line of application code does.</li>
+        <li>It does not reduce the <b>live set</b>. If memory is being retained, a full collection frees nothing — it just proves the retention is real, expensively.</li>
+        <li>It disrupts the generational structure: an explicit full GC promotes surviving young objects into old gen, actively making the next collections worse.</li>
+        <li>Returning memory to the OS is a separate concern with its own mechanisms (<code>-XX:+ShrinkHeapInPlace</code>, G1 periodic collection, ZGC uncommit) that do not require a full pause.</li>
+      </ul>
+      <p><b>Where it is defensible:</b> at the end of a batch phase in a process that will now idle for a long time, on a JVM with heap uncommitting enabled, where the goal is explicitly to return RSS to the host — a rare and deliberate case. And in benchmark harnesses between iterations, for isolation.</p>
+      <p><b>What to do instead:</b> find out what is actually being retained (heap dump, dominator tree). If the real goal is bounded memory, bound the cache. If a third-party library calls <code>System.gc()</code> and you cannot change it — <code>DirectByteBuffer</code> cleanup historically did — <code>-XX:+DisableExplicitGC</code> turns the call into a no-op, or <code>-XX:+ExplicitGCInvokesConcurrent</code> makes it concurrent rather than a full pause.</p>
+    </div>
+  </details>
+
+  <div class="trap">
+    <span class="lbl">Common Interview Trap</span>
+    <span class="wrong">"Java can't have memory leaks, the GC handles it."</span>
+    <span class="right">Java leaks constantly — through unintended reachability.</span>
+    The classic four: a <code>static</code> collection that only ever grows; listeners and callbacks registered and never removed; <code>ThreadLocal</code> values on a pooled thread that outlives the request; and <b>ClassLoader leaks</b> where one lingering reference keeps an entire redeployed application's classes alive in Metaspace. All four are "working as designed" — <b>the GC correctly refuses to collect objects you can still reach.</b>
+  </div>
+  <!-- Page Navigation Footer -->
+  <footer class="page-nav-footer">
+    <a href="08-memory-areas.html" class="nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Prev: 08 · Memory Areas
+    </a>
+    <a href="10-how-it-connects.html" class="nav-btn next">
+      Next: 10 · The Big Picture &amp; Lifecycle
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+  </footer>
+</div>
+
+<script src="js/jvm-common.js"></script>
+<script>
+/* 9.1 Root Reachability Graph */
+const G_NODES = [
+  { id:'r1', x:20,  y:50,  w:130, h:32, label:'Root: Stack Frame', root:true },
+  { id:'r2', x:20,  y:160, w:130, h:32, label:'Root: Static Field', root:true },
+  { id:'A',  x:190, y:30,  w:75,  h:30, label:'Order A' },
+  { id:'B',  x:310, y:30,  w:75,  h:30, label:'Item B' },
+  { id:'C',  x:190, y:160, w:75,  h:30, label:'Cache C' },
+  { id:'D',  x:310, y:160, w:75,  h:30, label:'Entry D' },
+  { id:'E',  x:470, y:80,  w:75,  h:30, label:'Node E' },
+  { id:'F',  x:590, y:80,  w:75,  h:30, label:'Node F' },
+  { id:'G',  x:470, y:190, w:75,  h:30, label:'Orphan G' }
+];
+
+let G_EDGES = [ ['r1','A'], ['A','B'], ['r2','C'], ['C','D'], ['E','F'], ['F','E'] ];
+let reachCutDone = false;
+const reachSeq = Seq();
+
+function drawGraph(marks){
+  const N = {}; G_NODES.forEach(n => N[n.id] = n);
+  let g = '';
+  G_EDGES.forEach(([a, b])=>{
+    const A = N[a], B = N[b];
+    const x1 = A.x + A.w, y1 = A.y + A.h/2, x2 = B.x, y2 = B.y + B.h/2;
+    if(a === 'F' && b === 'E'){
+      g += `<path d="M${B.x+B.w/2},${B.y+B.h} C${B.x+B.w/2},${B.y+B.h+24} ${A.x+A.w/2},${A.y+A.h+24} ${A.x+A.w/2},${A.y+A.h}" fill="none" stroke="#334155" stroke-width="1.5"/>`;
+    } else {
+      g += `<path d="M${x1},${y1} C${(x1+x2)/2},${y1} ${(x1+x2)/2},${y2} ${x2},${y2}" fill="none" stroke="#334155" stroke-width="1.5"/>`;
+    }
+  });
+  G_NODES.forEach(n=>{
+    const m = marks[n.id] || (n.root ? 'root' : 'unknown');
+    const col = m === 'live' ? '#34d399' : m === 'dead' ? '#f87171' : m === 'root' ? '#a78bfa' : '#475569';
+    const fill = m === 'live' ? 'rgba(52, 211, 153, 0.15)' : m === 'dead' ? 'rgba(248, 113, 113, 0.15)' : m === 'root' ? 'rgba(167, 139, 250, 0.15)' : '#111726';
+    g += `<g opacity="${m === 'dead' ? 0.45 : 1}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="6" fill="${fill}" stroke="${col}" stroke-width="1.4"/>`;
+    g += `<text x="${n.x+n.w/2}" y="${n.y+n.h/2+4}" text-anchor="middle" fill="${col}" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700">${n.label}</text></g>`;
+  });
+  g += `<text x="470" y="140" fill="#64748b" font-family="JetBrains Mono, monospace" font-size="9">E &amp; F: Isolated reference cycle</text>`;
+  $('gcGraph').innerHTML = g;
+}
+
+function playReach(){
+  const cut = reachCutDone;
+  const live = cut ? ['A','B'] : ['A','B','C','D'];
+  const dead = cut ? ['C','D','E','F','G'] : ['E','F','G'];
+  const marks = {};
+  reachSeq.run([
+    [150, ()=>{
+      marks['r1'] = 'root'; marks['r2'] = 'root'; drawGraph(marks);
+      $('reachPhase').innerHTML = 'Phase 1: Enumerate GC Roots (Thread stack slots, static fields, JNI handles).';
+      $('reachStatus').textContent = 'Root enumeration is STW across all collectors to ensure consistent pointers.';
+    }],
+    [800, ()=>{
+      (cut ? ['A'] : ['A','C']).forEach(id => marks[id] = 'live'); drawGraph(marks);
+      $('reachPhase').innerHTML = 'Phase 2: Mark objects directly reachable from roots.';
+    }],
+    [800, ()=>{
+      (cut ? ['B'] : ['B','D']).forEach(id => marks[id] = 'live'); drawGraph(marks);
+      $('reachPhase').innerHTML = 'Phase 3: Follow reference pointers transitively.';
+    }],
+    [900, ()=>{
+      dead.forEach(id => marks[id] = 'dead'); drawGraph(marks);
+      $('reachPhase').innerHTML = 'Phase 4: Sweep all unmarked nodes. Cycle E&lt;-&gt;F is safely reclaimed.';
+      $('reachLive').textContent = live.length;
+      $('reachDead').textContent = dead.length;
+      $('reachStatus').innerHTML = cut
+        ? '<b>Severing the static root reference caused C and D to die together.</b> Transitive reachability is broken.'
+        : '<b>Isolated cyclic references (E &amp; F) were collected without leaking.</b> Unlike reference counting, tracing from roots is immune to cyclic leaks.';
+    }]
+  ]);
+}
+
+$('reachCut').addEventListener('click', ()=>{
+  reachCutDone = !reachCutDone;
+  G_EDGES = reachCutDone
+    ? [ ['r1','A'], ['A','B'], ['C','D'], ['E','F'], ['F','E'] ]
+    : [ ['r1','A'], ['A','B'], ['r2','C'], ['C','D'], ['E','F'], ['F','E'] ];
+  $('reachCut').textContent = reachCutDone ? 'Restore Static Root Link' : 'Cut Static Root Reference';
+  drawGraph({});
+  $('reachPhase').textContent = reachCutDone ? 'Static root link severed. Press Play to trace reachability.' : 'Static root restored.';
+});
+
+/* 9.2 Generational Minor GC */
+let gen = { eden:[], s0:[], s1:[], old:[], toS:0, cycles:0, reclaimed:0, promoted:0, nextId:0 };
+const TENURE = 3;
+const genSeq = Seq();
+
+function genRender(){
+  const paint = (arr, el, forceCls) => {
+    $(el).innerHTML = arr.map(o => `<div class="cell ${forceCls || o.cls || (o.live ? 'live' : 'dead')}" title="age ${o.age}"></div>`).join('');
+  };
+  paint(gen.eden, 'cellsEden');
+  paint(gen.s0, 'cellsS0');
+  paint(gen.s1, 'cellsS1');
+  paint(gen.old, 'cellsOld', 'old');
+
+  $('genEdenN').textContent = gen.eden.length;
+  $('genS0N').textContent = gen.s0.length;
+  $('genS1N').textContent = gen.s1.length;
+  $('genOldN').textContent = gen.old.length;
+  $('genCycles').textContent = gen.cycles;
+  $('genReclaimed').textContent = gen.reclaimed;
+  $('genPromoted').textContent = gen.promoted;
+}
+
+function genAllocate(){
+  for(let i=0; i<16; i++) gen.eden.push({ id:gen.nextId++, age:0, live:Math.random()<0.2, cls:null });
+  $('genPhase').textContent = 'Allocated objects in Eden via TLAB bump pointer.';
+  genRender();
+}
+
+function genCycle(done){
+  const from = gen.toS === 0 ? gen.s1 : gen.s0;
+  const toName = gen.toS === 0 ? 'S0' : 'S1';
+  genSeq.run([
+    [100, ()=>{
+      if(gen.eden.length === 0) genAllocate();
+      $('genPhase').textContent = 'Eden full → Minor GC initiated (STW pause).';
+    }],
+    [600, ()=>{
+      gen.eden.forEach(o => { if(o.live) o.cls = 'moving'; });
+      from.forEach(o => { if(o.live) o.cls = 'moving'; });
+      genRender();
+      $('genPhase').textContent = `Copying live survivors into ${toName}...`;
+    }],
+    [700, ()=>{
+      const survivors = gen.eden.filter(o => o.live).concat(from.filter(o => o.live));
+      const deadCount = (gen.eden.length - gen.eden.filter(o => o.live).length) + (from.length - from.filter(o => o.live).length);
+      gen.reclaimed += deadCount;
+      let promotedNow = 0;
+      const target = [];
+      survivors.forEach(o => {
+        o.age++;
+        o.cls = null;
+        o.live = Math.random() < 0.7;
+        if(o.age >= TENURE){
+          gen.old.push(o);
+          promotedNow++;
+          gen.promoted++;
+        } else {
+          target.push(o);
+        }
+      });
+      gen.eden = [];
+      if(gen.toS === 0){ gen.s0 = target; gen.s1 = []; } else { gen.s1 = target; gen.s0 = []; }
+      gen.toS = 1 - gen.toS;
+      gen.cycles++;
+      const rate = Math.round(survivors.length / (survivors.length + deadCount || 1) * 100);
+      $('genSurvRate').textContent = rate + '%';
+      genRender();
+      $('genPhase').textContent = `Minor GC #${gen.cycles} completed. Dead objects wiped in one operation. Promoted to Old: ${promotedNow}.`;
+      if(done) done();
+    }]
+  ]);
+}
+
+function genResetAll(){
+  genSeq.cancel();
+  gen = { eden:[], s0:[], s1:[], old:[], toS:0, cycles:0, reclaimed:0, promoted:0, nextId:0 };
+  $('genSurvRate').textContent = '—';
+  $('genPhase').textContent = 'Eden is empty. Press Allocate in Eden.';
+  $('genStatus').textContent = '';
+  genRender();
+}
+
+/* 9.3 4 Collectors */
+const GC_DEFS = {
+  serial: {
+    title:'Serial GC', flag:'-XX:+UseSerialGC', layout:'gen',
+    intro:'Single-threaded mark-sweep-compact. Entire JVM stopped for both Minor and Full GC. Low memory footprint, long STW pauses.',
+    takeaway:'<span class="lbl">Architectural Insight</span>Single GC thread causes multi-second pauses on large heaps. Suitable for small container microservices (&lt;512 MB).',
+    phases:[
+      { label:'Application Running', kind:'run', ms:250 },
+      { label:'STW · Minor GC (Single-threaded copy)', kind:'stw', ms:120 },
+      { label:'Application Running', kind:'run', ms:250 },
+      { label:'STW · Full GC (Mark, sweep, compact)', kind:'stw', ms:650 }
+    ]
+  },
+  parallel: {
+    title:'Parallel GC (Throughput Collector)', flag:'-XX:+UseParallelGC', layout:'gen',
+    intro:'Multi-threaded STW collector. All available CPU cores used for parallel garbage collection. Highest total throughput, but still stops application completely.',
+    takeaway:'<span class="lbl">Architectural Insight</span>Pauses are ~4× shorter than Serial due to multi-core parallelism, but still fully STW. Optimal for batch processing workloads with no latency SLA.',
+    phases:[
+      { label:'Application Running', kind:'run', ms:250 },
+      { label:'STW · Parallel Minor GC (4 threads)', kind:'stw', ms:35 },
+      { label:'Application Running', kind:'run', ms:250 },
+      { label:'STW · Parallel Full GC (4 threads)', kind:'stw', ms:180 }
+    ]
+  },
+  g1: {
+    title:'G1 GC (Garbage First — Default)', flag:'-XX:+UseG1GC', layout:'region',
+    intro:'Heap partitioned into ~2048 regions. Concurrently marks the entire heap while application runs; pauses only to evacuate highest-garbage regions inside bounded pause target.',
+    takeaway:'<span class="lbl">Architectural Insight</span>Pause times become a <b>tunable SLA</b> (<code>-XX:MaxGCPauseMillis=200</code>) rather than a direct consequence of total heap size.',
+    phases:[
+      { label:'Application Running', kind:'run', ms:200 },
+      { label:'STW · Young Evacuation Pause', kind:'stw', ms:20 },
+      { label:'CONCURRENT · Global Mark Cycle', kind:'conc', ms:350 },
+      { label:'STW · Mixed Evacuation Pause (Highest garbage regions)', kind:'stw', ms:35 }
+    ]
+  },
+  zgc: {
+    title:'ZGC (Ultra-Low Latency)', flag:'-XX:+UseZGC', layout:'region',
+    intro:'Colored pointers and load barriers allow both marking AND object relocation to happen concurrently with application threads. Sub-millisecond pauses on terabyte heaps.',
+    takeaway:'<span class="lbl">Architectural Insight</span>Pauses do not grow with heap size (sub-millisecond STW stack scan). Trades ~5–10% throughput for predictable low-latency SLA.',
+    phases:[
+      { label:'Application Running', kind:'run', ms:200 },
+      { label:'STW · Pause Mark Start (Stack scan)', kind:'stw', ms:1, real:0.4 },
+      { label:'CONCURRENT · Concurrent Mark & Relocate', kind:'conc', ms:400 },
+      { label:'STW · Pause Mark End', kind:'stw', ms:1, real:0.3 }
+    ]
+  }
+};
+
+let currentGC = 'serial';
+const gcSeq = Seq();
+
+function gcSetTab(k){
+  currentGC = k;
+  document.querySelectorAll('.tab[data-gc]').forEach(t => t.classList.toggle('active', t.dataset.gc === k));
+  const d = GC_DEFS[k];
+  $('gcTitle').textContent = d.title;
+  $('gcFlag').textContent = d.flag;
+  $('gcIntro').innerHTML = d.intro;
+  $('gcTakeaway').innerHTML = d.takeaway;
+
+  if(d.layout === 'gen'){
+    $('gcGenView').style.display = 'block'; $('gcRegionView').style.display = 'none';
+  } else {
+    $('gcGenView').style.display = 'none'; $('gcRegionView').style.display = 'block';
+    let rh = '';
+    for(let i=0; i<32; i++){
+      const role = i<6 ? 'o' : i<9 ? 's' : i<24 ? 'e' : 'free';
+      rh += `<div class="region ${role}">${role==='free'?'':role.toUpperCase()}</div>`;
+    }
+    $('hRegions').innerHTML = rh;
+  }
+}
+
+function gcPlay(){
+  const def = GC_DEFS[currentGC];
+  const rows = ['App Thread 1','App Thread 2','App Thread 3','GC Workers'];
+  $('gcTimelineRows').innerHTML = rows.map((n, i) => `
+    <div class="tlrow"><span class="tl-name">${n}</span><div class="tltrack" id="tlt${i}"></div></div>
+  `).join('');
+
+  let pauses = 0, longest = 0, totalPause = 0, elapsed = 0;
+  const total = def.phases.reduce((a, p) => a + p.ms, 0);
+
+  const steps = def.phases.map((ph, i) => [ i===0 ? 100 : Math.min(1000, ph.ms * 1.5), ()=>{
+    const w = (ph.ms / total * 100);
+    for(let r=0; r<4; r++){
+      const seg = document.createElement('div');
+      seg.className = 'tlseg ' + (r === 3
+        ? (ph.kind === 'stw' ? 'gcwork' : ph.kind === 'conc' ? 'gcconc' : 'idle')
+        : (ph.kind === 'stw' ? 'pause' : 'run'));
+      seg.style.width = w + '%';
+      $('tlt' + r).appendChild(seg);
+    }
+    const rms = ph.real != null ? ph.real : ph.ms;
+    if(ph.kind === 'stw'){ pauses++; totalPause += rms; longest = Math.max(longest, rms); }
+    elapsed += rms;
+    $('gcPauseCount').textContent = pauses;
+    $('gcLongest').textContent = longest.toFixed(1) + ' ms';
+    $('gcTotalPause').textContent = totalPause.toFixed(1) + ' ms';
+    $('gcThroughput').textContent = Math.round((1 - totalPause / elapsed) * 1000) / 10 + '%';
+    $('gcPhase').textContent = (ph.kind === 'stw' ? '⛔ ' : ph.kind === 'conc' ? '⇄ ' : '▶ ') + ph.label;
+  }]);
+
+  steps.push([300, ()=>{
+    $('gcPhase').innerHTML = `<b>Simulation Complete:</b> ${pauses} STW pauses, total stopped: ${totalPause.toFixed(1)} ms.`;
+  }]);
+
+  gcSeq.run(steps);
+}
+
+$('reachPlay').addEventListener('click', playReach);
+$('genAlloc').addEventListener('click', genAllocate);
+$('genPlay').addEventListener('click', () => {
+  let count = 0;
+  const runNext = () => {
+    if(count++ >= 6) return;
+    genAllocate();
+    setTimeout(() => genCycle(() => setTimeout(runNext, 400)), 300);
+  };
+  genResetAll();
+  runNext();
+});
+$('genReset').addEventListener('click', genResetAll);
+
+document.querySelectorAll('.tab[data-gc]').forEach(t => t.addEventListener('click', () => gcSetTab(t.dataset.gc)));
+$('gcPlay').addEventListener('click', gcPlay);
+
+drawGraph({});
+genResetAll();
+gcSetTab('serial');
+</script>
+</body>
+</html>

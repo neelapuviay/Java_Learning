@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>07 · Native Execution &amp; Deoptimization — Inside the JVM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/jvm-theme.css">
+</head>
+<body>
+
+<div class="stage-container">
+  <header class="stage-head">
+    <span class="stage-num-badge">STAGE 07</span>
+    <h1>Native Execution &amp; Deoptimization — Speculative Optimization Safety Net</h1>
+    <span class="stage-tag">safepoints &amp; frame reconstruction</span>
+  </header>
+
+  <p class="stage-desc">
+    C2 achieves peak speed by making <b>speculative assumptions</b> based on execution telemetry (e.g. assuming an interface call site will only ever see <code>ArrayList</code>). If dynamic class loading or user input violates an assumption, HotSpot triggers <b>deoptimization</b>: it discards the native code, reconstructs interpreter stack frames at the current safepoint, and resumes interpreted execution without crashing.
+  </p>
+
+
+  <div class="mental">
+    <span class="lbl">Mental model — hold this picture</span>
+    <p>A factory retools a line on the assumption that only blue widgets will arrive. Output triples. But the foreman is not reckless: he installs a <b>colour sensor at the entrance</b>. The instant a red widget appears, the line halts, the specialised tooling is scrapped, and production falls back to the slow general-purpose line — which can handle any colour. Nothing is ever built wrong. The bet was aggressive; the <b>safety net was mandatory</b>.</p>
+    <p>That sensor is the guard C2 emits. Scrapping the tooling is <b>deoptimization</b>. The general-purpose line is the interpreter. And the reason the whole scheme is safe is that C2 recorded, at every point where it could possibly stop, <b>exactly how to translate its optimized state back into plain interpreter state</b> — which register holds which local variable, what was on the operand stack, which bytecode index we are at.</p>
+    <p>Say this in an interview and you have said the whole stage: <b>speculation is only sound because deoptimization exists.</b> Without it, the JIT could not make a single one of the optimizations that make it worth having.</p>
+  </div>
+  <!-- Interactive Controls Bar -->
+  <div class="panel" style="margin-bottom:20px; padding:16px 20px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div class="btn-row">
+        <button class="btn btn-danger" id="deoptBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/></svg>
+          Simulate Deoptimization (Invalidate Assumption)
+        </button>
+        <button class="btn btn-primary" id="playBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>
+          Run Loop
+        </button>
+        <button class="btn btn-sm" id="skipEventBtn" type="button">Next JIT Event</button>
+        <button class="btn btn-ghost btn-sm" id="resetBtn" type="button">Reset</button>
+      </div>
+
+      <div style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-faint);">
+        Deopt Count: <b id="deoptCount" style="color:var(--danger);">0</b> · Tier: <b id="tierLabel" style="color:var(--verdant);">Tier 4 · C2 Native</b>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <!-- Deoptimization Visualizer -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>Speculative Code Safepoint Guard</span>
+        <span>HotSpot Unwind Map</span>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 40px 1fr; gap:10px; align-items:center; margin-bottom:16px;">
+        <div class="dv-box live" id="dvNative">
+          <div style="font-weight:700; color:var(--verdant); margin-bottom:4px;">C2 Native Code</div>
+          <div style="font-size:0.75rem; color:var(--text-dim);" id="dvNativeState">Serving calls at peak hardware speed</div>
+        </div>
+
+        <div id="dvArrow" style="text-align:center; font-family:var(--font-mono); font-size:1.4rem; color:var(--text-faint);">→</div>
+
+        <div class="dv-box" id="dvInterp">
+          <div style="font-weight:700; color:var(--steel); margin-bottom:4px;">Interpreter Frame</div>
+          <div style="font-size:0.75rem; color:var(--text-dim);" id="dvInterpState">idle — compiled code active</div>
+        </div>
+      </div>
+
+      <div style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-faint); margin-bottom:6px; font-weight:700;">
+        ACTIVE SPECULATIVE ASSUMPTIONS (DEPENDENCY GRAPH)
+      </div>
+      <div class="assume-row" id="dvAssume1">✓ Monomorphic Assumption: Target is always <code>ArrayList</code></div>
+      <div class="assume-row" id="dvAssume2">✓ Null Check Elimination: Receiver object never null</div>
+      <div class="assume-row" id="dvAssume3">✓ Branch Pruning: Exceptional error branch is never taken</div>
+    </div>
+
+    <!-- Live Execution Logs -->
+    <div class="panel">
+      <div class="panel-head">
+        <span>JVM Live Telemetry Log</span>
+        <span style="color:var(--steel);">HotSpot Diagnostics</span>
+      </div>
+      <div id="logBox" style="background:var(--panel-inset); border:1px solid var(--border-soft); border-radius:6px; padding:12px; height:240px; overflow-y:auto; font-family:var(--font-mono); font-size:0.78rem; line-height:1.6;"></div>
+    </div>
+  </div>
+
+
+  <h3 class="sub">
+    <span class="kicker">Read this after triggering a deopt</span>
+    Safepoints, guards and the road back to the interpreter
+  </h3>
+  <div class="prose">
+    <h4>What a safepoint is, and why everything depends on it</h4>
+    <p>A <b>safepoint</b> is a point in compiled code where the JVM knows the complete state of the world: every object reference is in a known location, the mapping from machine registers back to bytecode-level locals is recorded, and no operation is half-finished. HotSpot emits safepoint polls at method returns and at loop back-edges — places reached often enough that any thread will hit one soon, but not so often that the polls cost real throughput.</p>
+    <p>Safepoints are the mechanism behind far more than deoptimization: <b>stop-the-world GC pauses, biased-lock revocation, thread dumps, class redefinition by agents, and heap dumps</b> all work by asking every thread to reach a safepoint and stop. That is why "time to safepoint" is a real production metric, and why a single thread running a long counted loop with no poll can stall the entire VM — everyone else is already stopped, waiting for it.</p>
+
+    <h4>How the return journey actually works</h4>
+    <p>When C2 compiles a method it attaches, to every safepoint, a <b>ScopeDesc / debug map</b>: a table describing where each JVM-level local variable and operand-stack slot currently lives — this register, that stack offset, or "it is a constant", or "this object was scalar-replaced and its fields are in these three registers."</p>
+    <p>When a guard fails, the runtime walks that map and <b>materialises a real interpreter frame</b> from it: re-creating locals, re-creating the operand stack, and — remarkably — <b>reallocating any object that escape analysis had eliminated</b>, because the interpreter needs a real object to work with. Execution then resumes at the exact bytecode index the safepoint recorded. The method continues; the program cannot tell.</p>
+
+    <h4>Two different things called "deoptimization"</h4>
+    <ul>
+      <li><b>Uncommon trap.</b> The compiled code hits a path C2 decided was never taken (a null that has never been null, a branch never executed, a type outside the profile). The code for that path does not exist — instead there is a trap that deoptimizes, falls back to the interpreter, and updates the profile so that the next compilation includes it.</li>
+      <li><b>Made not entrant / dependency invalidation.</b> A global assumption broke — usually a class was loaded that adds a second implementation of a method C2 had devirtualized. The JVM finds every compiled method depending on that assumption, marks them <b>not entrant</b> (no new calls enter), lets existing frames finish or deoptimizes them on the spot, and schedules recompilation.</li>
+    </ul>
+    <p>The second kind is why <b>class loading late in a process's life can cause a throughput dip</b> — a plugin loading at hour six can invalidate compilations made at minute one.</p>
+
+    <h4>Deoptimization is normal; deoptimization <i>storms</i> are not</h4>
+    <p>A steady trickle of deopts during warm-up is exactly how the system is supposed to work — it is the feedback loop correcting itself. What you watch for is the pathological case: a method that repeatedly compiles, deoptimizes, recompiles and deoptimizes again, because the profile it is built on is not stable. Each cycle burns compiler CPU, leaves dead code in the code cache, and runs the method interpreted in between. Throughput becomes erratic rather than merely lower — and erratic is much harder to diagnose.</p>
+    <p>HotSpot has a defence: after enough recompilation attempts on the same trap, it gives up speculating there and compiles a conservative version permanently. Slower, but stable.</p>
+  </div>
+
+  <div class="factgrid">
+    <div>-XX:+PrintCompilation</div><div>Watch for <code>made not entrant</code> and <code>made zombie</code>. A method appearing repeatedly with those markers is a recompilation storm.</div>
+    <div>uncommon trap</div><div>Compiled code deliberately containing <i>no</i> implementation for a cold path — just a trapdoor back to the interpreter. Reasons are printed with <code>-XX:+UnlockDiagnosticVMOptions -XX:+LogCompilation</code>.</div>
+    <div>time to safepoint (TTSP)</div><div>How long the slowest thread takes to reach a poll after the VM asks. High TTSP shows up as GC pauses far longer than the GC's own work — visible with <code>-Xlog:safepoint</code>.</div>
+    <div>counted loop pitfall</div><div>A long <code>int</code>-counted loop may have its safepoint poll elided as an optimization. One such loop can hold the whole VM at a safepoint request. <code>-XX:+UseCountedLoopSafepoints</code> exists for exactly this.</div>
+    <div>reallocation on deopt</div><div>Objects removed by scalar replacement are <b>re-created</b> during deoptimization. This means a deopt can allocate — occasionally a surprising source of allocation pressure.</div>
+    <div>class loading &amp; deopt</div><div>Loading a class that adds a second implementer invalidates every compilation that assumed a single implementer. Dynamic plugin loading in a warm process has a real, measurable cost.</div>
+  </div>
+
+  <h3 class="sub">
+    <span class="kicker">Interview drill · stage 07</span>
+    Questions they actually ask about deoptimization &amp; safepoints
+  </h3>
+
+  <details class="qa">
+    <summary>What is a safepoint and why should an application developer care?</summary>
+    <div class="ans">
+      <p>A safepoint is a point where a thread's state is fully known to the VM, so the VM can safely inspect or modify it. Threads reach safepoints voluntarily, by executing polls the compiler inserted.</p>
+      <p>Developers care because <b>every stop-the-world operation is bounded below by the slowest thread's time to reach a safepoint</b>. If your GC log says a 5&nbsp;ms pause but your latency graph shows 300&nbsp;ms, the difference is very often TTSP — one thread grinding through a loop with no poll while every other thread sits stopped. <code>-Xlog:safepoint</code> separates "time to reach the safepoint" from "time spent doing the work", and that split is the diagnosis.</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>Does deoptimization mean something went wrong?</summary>
+    <div class="ans">
+      <p><b>No — it is the mechanism working.</b> The JVM makes optimistic bets precisely because it has a correct way to unwind them. A deopt is a bet being settled, not an error.</p>
+      <p>What is worth alarming on is the <i>pattern</i>: deopts concentrated during warm-up are healthy; the same method deoptimizing repeatedly for hours is a stability problem worth investigating. Frame it that way and you demonstrate you understand the design rather than having memorised a scary word.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · A service runs beautifully for six hours, then throughput drops 40% and stays down. No GC change, no deployment, no traffic change. Where do you look?</summary>
+    <div class="ans">
+      <p>The "stays down" is the clue — this is a <b>state change</b>, not a load change. Candidates, in the order they are worth checking:</p>
+      <ul>
+        <li><b>A call site went megamorphic.</b> Some request type finally arrived carrying a third implementation through a hot interface call. Every compilation that had devirtualized it was invalidated, and the recompiled version cannot inline. Check <code>PrintCompilation</code> for a burst of <code>made not entrant</code> around the transition time.</li>
+        <li><b>Late class loading.</b> A rarely-used feature loaded a class that added a second implementer of a previously-single-implementer method, invalidating dependent compilations across the application. <code>-Xlog:class+load</code> correlated against the timestamp confirms it.</li>
+        <li><b>Code cache exhaustion</b> (Stage&nbsp;05) — same symptom shape, different cause, and trivially checkable with <code>jcmd Compiler.codecache</code>.</li>
+        <li><b>A deoptimization storm</b> from a profile that stopped being representative — e.g. a cache that was 100% hits for six hours started missing, so a branch declared never-taken is now taken constantly.</li>
+        <li>Non-JIT possibilities you should still rule out: heap fragmentation forcing more expensive collections, a connection pool degrading, a downstream dependency slowing.</li>
+      </ul>
+      <p><b>How to be systematic:</b> the JVM's own telemetry answers this faster than guessing. Run with JFR continuously (<code>-XX:StartFlightRecording=disk=true,maxsize=1g</code>) so that when this happens you have the compilation, deoptimization, class-load and GC events for the exact minute it changed. <b>The most valuable thing you can do before the incident is make the data exist.</b></p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · GC logs show a 2&nbsp;ms young collection, but your p99 shows a 400&nbsp;ms stall at the same moment. Reconcile that.</summary>
+    <div class="ans">
+      <p>The GC did 2&nbsp;ms of work. The <b>pause</b> was 400&nbsp;ms because the VM had to wait for every thread to reach a safepoint before it could start, and one thread took ~398&nbsp;ms to get there.</p>
+      <p><b>Confirm:</b> <code>-Xlog:safepoint</code> prints "Reaching safepoint" and "At safepoint" separately. If the first number is large, this is TTSP.</p>
+      <p><b>Common causes:</b></p>
+      <ul>
+        <li>A <b>long counted loop</b> whose safepoint poll was optimized away — the classic. <code>-XX:+UseCountedLoopSafepoints</code> (default on in recent JDKs) or restructuring the loop fixes it.</li>
+        <li>A thread blocked in a long <b>JNI call</b> or a slow <code>System.arraycopy</code> over a huge array.</li>
+        <li>Page faults / swap — the thread is genuinely not running. Check that the container is not being throttled by its CPU quota, which produces exactly this signature.</li>
+        <li>Safepoint <i>operations</i> other than GC piling up: repeated thread dumps, JMX polling, biased-lock revocation storms on older JDKs.</li>
+      </ul>
+      <p>The senior framing: <b>"GC pause" and "GC work" are different numbers, and monitoring usually reports the wrong one.</b> Alert on total safepoint stop time, not on collection duration.</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · A method's throughput is erratic — sometimes fast, sometimes 5× slower, alternating within the same run. What would cause that?</summary>
+    <div class="ans">
+      <p><b>A recompilation cycle.</b> The method is compiled with a speculation, the speculation fails, it deoptimizes to the interpreter, is recompiled, and the cycle repeats. Between compilations it runs interpreted — hence the alternation, and hence the <i>bimodal</i> rather than merely degraded timing.</p>
+      <p><b>Typical triggers:</b> a call site oscillating between types (a polymorphic cache alternating hits and misses); a branch whose frequency flips with input data (an exception path taken on ~5% of requests, which is enough to invalidate "never taken" but not enough to be profiled as common); a class-hierarchy assumption invalidated repeatedly by a plugin loader.</p>
+      <p><b>Diagnose:</b> <code>-XX:+PrintCompilation</code> and look for the same method name recurring with <code>made not entrant</code>; then <code>-XX:+LogCompilation</code> and inspect the <code>&lt;uncommon_trap&gt;</code> reasons in the XML output — the <code>reason</code> attribute names the exact speculation that failed (<code>unstable_if</code>, <code>class_check</code>, <code>null_check</code>).</p>
+      <p><b>Fixes are code-shaped, not flag-shaped:</b> stop using exceptions for control flow on a warm path; separate the two workloads so each call site sees a stable type distribution; hoist the varying decision out of the hot region. The flag-based mitigation, <code>-XX:PerMethodRecompilationCutoff</code>, only tells HotSpot to give up speculating sooner — it treats the symptom.</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>How can the JVM switch back to the interpreter mid-method without crashing?</summary>
+    <div class="ans">
+      When C2 compiles a method, it attaches a <b>Debug Map / ScopeDesc metadata table</b> to every generated safepoint instruction. This table records the precise mapping between physical CPU registers/stack offsets and the virtual JVM local variables and operand stack slots. When a guard fails, the JVM runtime uses this map to materialize a full virtual interpreter stack frame on the fly and resumes execution at the exact equivalent bytecode index.
+    </div>
+  </details>
+
+  <div class="trap">
+    <span class="lbl">Common Interview Trap</span>
+    <span class="wrong">"Once a method is JIT-compiled, it stays compiled."</span>
+    <span class="right">Compiled code is provisional. It can be invalidated, discarded, recompiled, or thrown out entirely.</span>
+    A method may be made <b>not entrant</b> when an assumption breaks, deoptimized mid-execution at a safepoint, flushed when the code cache fills, or recompiled at a higher tier — all while the process runs. The same method can even exist in several versions simultaneously, with old frames finishing on the old code. <b>Compiled code is a cache, not a commitment.</b>
+  </div>
+  <!-- Page Navigation Footer -->
+  <footer class="page-nav-footer">
+    <a href="06-jit-c1-c2.html" class="nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Prev: 06 · JIT Compilers
+    </a>
+    <a href="08-memory-areas.html" class="nav-btn next">
+      Next: 08 · Memory Areas &amp; Layout
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </a>
+  </footer>
+</div>
+
+<script src="js/jvm-common.js"></script>
+<script>
+const state = {
+  tier: 2, // starts in C2 for stage 7
+  iteration: 10000,
+  deoptCount: 0,
+  running: false,
+  timer: null
+};
+
+const dvNative = $('dvNative');
+const dvNativeState = $('dvNativeState');
+const dvInterp = $('dvInterp');
+const dvInterpState = $('dvInterpState');
+const dvArrow = $('dvArrow');
+const dvAssume1 = $('dvAssume1');
+const deoptCount = $('deoptCount');
+const tierLabel = $('tierLabel');
+const logBox = $('logBox');
+const playBtn = $('playBtn');
+
+const deoptSeq = Seq();
+
+function addLog(msg, type){
+  const row = document.createElement('div');
+  row.style.marginBottom = '6px';
+  row.style.color = type === 'deopt' ? 'var(--danger)' : type === 'c2' ? 'var(--verdant)' : 'var(--text-dim)';
+  row.innerHTML = `<span style="color:var(--text-faint);">[iter ${state.iteration.toLocaleString()}]</span> ${msg}`;
+  logBox.appendChild(row);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function simulateDeopt(){
+  if (state.tier === 0) {
+    addLog('Cannot deoptimize: Code is currently in Tier 0 (Interpreter).', 'info');
+    return;
+  }
+  state.deoptCount++;
+  deoptCount.textContent = state.deoptCount;
+  addLog('⚠ <b>Deoptimization Triggered:</b> Receiver check failed! A second subtype (LinkedList) appeared at monomorphic call site.', 'deopt');
+
+  deoptSeq.run([
+    [0, () => {
+      dvAssume1.className = 'assume-row broken';
+      dvAssume1.textContent = '✗ INVALIDATED: Second receiver subtype appeared at call site!';
+      dvNative.className = 'dv-box invalid';
+      dvNativeState.textContent = 'nmethod marked NOT ENTRANT';
+      dvArrow.textContent = '⤵';
+      dvArrow.style.color = 'var(--danger)';
+    }],
+    [400, () => {
+      dvInterp.className = 'dv-box receiving';
+      dvInterpState.textContent = 'Safepoint frame materialized from ScopeDesc debug map';
+      state.tier = 0;
+      tierLabel.textContent = 'Tier 0 · Interpreter';
+      tierLabel.style.color = 'var(--steel)';
+    }],
+    [1600, () => {
+      dvInterp.className = 'dv-box';
+      dvInterpState.textContent = 'Re-profiling bimorphic call site at Tier 3…';
+      dvArrow.textContent = '→';
+      dvArrow.style.color = 'var(--text-faint)';
+      addLog('Interpreter will collect bimorphic telemetry and trigger C2 recompile with a 2-way type guard.', 'c2');
+    }]
+  ]);
+}
+
+function toggleRun(){
+  if (state.running) {
+    state.running = false;
+    clearInterval(state.timer);
+    playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Run Loop';
+    return;
+  }
+  state.running = true;
+  playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>Pause';
+  state.timer = setInterval(() => {
+    state.iteration += 100;
+    if (state.tier === 0 && state.iteration > 11500) {
+      state.tier = 2;
+      tierLabel.textContent = 'Tier 4 · C2 Native (Bimorphic Recompile)';
+      tierLabel.style.color = 'var(--verdant)';
+      dvNative.className = 'dv-box live';
+      dvNativeState.textContent = 'Serving calls with 2-way type guard';
+      dvAssume1.className = 'assume-row';
+      dvAssume1.textContent = '✓ Bimorphic Guard Active (ArrayList + LinkedList)';
+      addLog('Tier 4 recompile completed. Code re-installed in CodeCache.', 'c2');
+    }
+  }, 100);
+}
+
+function resetAll(){
+  clearInterval(state.timer);
+  state.running = false;
+  state.tier = 2;
+  state.iteration = 10000;
+  state.deoptCount = 0;
+  deoptCount.textContent = '0';
+  tierLabel.textContent = 'Tier 4 · C2 Native';
+  tierLabel.style.color = 'var(--verdant)';
+  playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9V3z"/></svg>Run Loop';
+  dvNative.className = 'dv-box live';
+  dvNativeState.textContent = 'Serving calls at peak hardware speed';
+  dvInterp.className = 'dv-box';
+  dvInterpState.textContent = 'idle — compiled code active';
+  dvAssume1.className = 'assume-row';
+  dvAssume1.textContent = '✓ Monomorphic Assumption: Target is always ArrayList';
+  logBox.innerHTML = '';
+  addLog('Simulator initialized in Tier 4 steady state.', 'c2');
+}
+
+$('deoptBtn').addEventListener('click', simulateDeopt);
+playBtn.addEventListener('click', toggleRun);
+$('skipEventBtn').addEventListener('click', () => { state.iteration += 500; addLog('Advanced +500 iterations.', 'info'); });
+$('resetBtn').addEventListener('click', resetAll);
+
+addLog('Tier 4 C2 speculative machine code active.', 'c2');
+</script>
+</body>
+</html>

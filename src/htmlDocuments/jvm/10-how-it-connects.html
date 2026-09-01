@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10 · End-to-End Lifecycle — Inside the JVM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/jvm-theme.css">
+</head>
+<body>
+
+<div class="stage-container">
+  <header class="stage-head">
+    <span class="stage-num-badge">STAGE 10</span>
+    <h1>The Big Picture — How the Whole Machine Connects</h1>
+    <span class="stage-tag">synthesis &amp; lifetime phases</span>
+  </header>
+
+  <p class="stage-desc">
+    From the moment you type <code>java MyApp</code> to hours of continuous high-throughput production execution, the JVM constantly shifts its internal machinery. Select each lifecycle phase below to understand what dominates each era of execution.
+  </p>
+
+
+  <div class="mental">
+    <span class="lbl">Mental model — hold this picture</span>
+    <p>The JVM is not a program that runs your program. It is a <b>machine that keeps rebuilding itself while your program runs on it</b>. In the first hundred milliseconds it is mostly a file parser. A second later it is mostly an interpreter. Thirty seconds later it is mostly native code that no longer resembles your bytecode at all, running on assumptions it invented by watching you.</p>
+    <p>This is why "how fast is Java?" has no answer without a timestamp. The same method, unchanged, executes as bytecode dispatch, then as C1 code, then as inlined and vectorized C2 code, then possibly back to bytecode when an assumption breaks. <b>The JVM's performance is a function of time, not just of code.</b></p>
+    <p>Every stage in this series is one subsystem of that self-rebuilding machine. This page is where they stop being nine separate topics and become one story.</p>
+  </div>
+  <!-- Interactive Lifetime Segments -->
+  <div class="panel" style="margin-bottom:24px; padding:20px;">
+    <div class="panel-head">
+      <span>Application Lifecycle Phases</span>
+      <span>Click Any Phase</span>
+    </div>
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="lifeseg on" id="seg0">
+        <div class="lifeseg-head">1. Startup</div>
+        <div style="font-size:0.75rem; color:var(--text-faint); margin-top:4px;">0–200 ms</div>
+      </div>
+      <div class="lifeseg" id="seg1">
+        <div class="lifeseg-head">2. Warm-up</div>
+        <div style="font-size:0.75rem; color:var(--text-faint); margin-top:4px;">0.2–30 s</div>
+      </div>
+      <div class="lifeseg" id="seg2">
+        <div class="lifeseg-head">3. Steady State</div>
+        <div style="font-size:0.75rem; color:var(--text-faint); margin-top:4px;">Minutes to Days</div>
+      </div>
+      <div class="lifeseg" id="seg3">
+        <div class="lifeseg-head">4. Degradation</div>
+        <div style="font-size:0.75rem; color:var(--text-faint); margin-top:4px;">Failure Modes</div>
+      </div>
+    </div>
+
+    <div style="background:var(--panel-inset); border:1px solid var(--border); border-radius:8px; padding:18px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <h3 id="lifeTitle" style="font-size:1.1rem; color:var(--verdant);">Startup · 0–200 ms</h3>
+        <span id="lifeTag" class="stage-tag" style="margin:0;">stages 01–03 dominate</span>
+      </div>
+      <div id="lifeBody" style="font-size:0.92rem; color:var(--text-dim); line-height:1.65;"></div>
+    </div>
+  </div>
+
+  <!-- End-to-End Execution Pipeline Map -->
+  <div class="panel" style="margin-bottom:24px;">
+    <div class="panel-head">
+      <span>End-to-End JVM Execution Architecture</span>
+      <span>Unified Pipeline</span>
+    </div>
+    <div class="grid-3" style="font-family:var(--font-mono); font-size:0.8rem; gap:12px;">
+      <div style="background:var(--panel-inset); padding:14px; border-radius:6px; border:1px solid var(--border-soft);">
+        <div style="color:var(--steel); font-weight:700; margin-bottom:6px;">1. INGESTION</div>
+        <div style="color:var(--text-dim);">• Source (.java) → javac</div>
+        <div style="color:var(--text-dim);">• Bytecode (.class) in disk/jar</div>
+        <div style="color:var(--text-dim);">• Parent-first ClassLoader lookup</div>
+      </div>
+      <div style="background:var(--panel-inset); padding:14px; border-radius:6px; border:1px solid var(--border-soft);">
+        <div style="color:var(--amber); font-weight:700; margin-bottom:6px;">2. VERIFY &amp; EXECUTE</div>
+        <div style="color:var(--text-dim);">• Structural Verifier proving types</div>
+        <div style="color:var(--text-dim);">• Metaspace Klass descriptors</div>
+        <div style="color:var(--text-dim);">• Tier 0 Template Interpreter</div>
+      </div>
+      <div style="background:var(--panel-inset); padding:14px; border-radius:6px; border:1px solid var(--border-soft);">
+        <div style="color:var(--verdant); font-weight:700; margin-bottom:6px;">3. JIT &amp; MEMORY</div>
+        <div style="color:var(--text-dim);">• Tier 3 (C1) + Tier 4 (C2) JIT</div>
+        <div style="color:var(--text-dim);">• CodeCache Native nmethods</div>
+        <div style="color:var(--text-dim);">• Generational / Concurrent GC</div>
+      </div>
+    </div>
+  </div>
+
+
+  <h3 class="sub">
+    <span class="kicker">The synthesis</span>
+    How the nine stages fit into one sentence each
+  </h3>
+  <div class="prose">
+    <p>If you can produce this chain from memory, you can answer almost any JVM question by locating it on the chain and expanding that link.</p>
+    <ol>
+      <li><b>Compile</b> — <code>javac</code> emits bytecode for an imaginary stack machine, deliberately committing to nothing about the real hardware. Everything downstream exists because of that deliberate gap.</li>
+      <li><b>Class loaders</b> — a parent-first chain finds the bytes, and a class's identity becomes <i>name + defining loader</i>. That identity rule causes most exotic class-loading bugs.</li>
+      <li><b>Load, link, initialize</b> — bytes become a type in Metaspace, the verifier proves it safe so the fast path can skip checks, static slots get zero defaults, symbolic names get resolved lazily to pointers, and finally <code>&lt;clinit&gt;</code> runs once under a class lock.</li>
+      <li><b>Interpret</b> — execution starts at Tier&nbsp;0, push/operate/pop, one frame per invocation on a thread-private stack. Slow by design, and it is where the profile begins.</li>
+      <li><b>Profile</b> — invocation and back-edge counters find the hot 20% of code, while richer telemetry records receiver types, branch frequencies and trip counts.</li>
+      <li><b>JIT</b> — C1 compiles fast and keeps profiling; C2 compiles slowly and brilliantly, using that profile to inline through virtual calls, delete unreached paths, remove allocations and vectorize loops.</li>
+      <li><b>Deoptimize</b> — every speculation carries a guard and a debug map, so when reality changes the JVM walks back to the interpreter mid-method rather than being wrong. <b>Speculation is only sound because this exists.</b></li>
+      <li><b>Memory areas</b> — stacks are private and cheap; the heap is shared and collected; Metaspace, code cache, thread stacks and direct buffers are all native and all outside <code>-Xmx</code>.</li>
+      <li><b>Garbage collection</b> — trace from roots, exploit the fact that most objects die young, and trade pause time against throughput according to which collector you chose.</li>
+    </ol>
+
+    <h4>The three loops that run forever</h4>
+    <p>Underneath the linear story, three feedback loops run continuously, and most production surprises are one of them changing state:</p>
+    <ul>
+      <li><b>The compilation loop.</b> Execute &rarr; profile &rarr; compile &rarr; speculate &rarr; guard fails &rarr; deoptimize &rarr; re-profile &rarr; recompile. Healthy during warm-up, pathological when it never settles.</li>
+      <li><b>The allocation loop.</b> Allocate in Eden &rarr; young collection &rarr; survivors age &rarr; promotion &rarr; old generation fills &rarr; old/mixed collection. Healthy when almost everything dies young.</li>
+      <li><b>The loading loop.</b> First active use &rarr; load &rarr; verify &rarr; initialize &rarr; resolve on first touch. Mostly front-loaded, but never finished — and late loading can invalidate compilations made hours earlier.</li>
+    </ul>
+
+    <h4>Where the connections actually bite</h4>
+    <p>The genuinely valuable knowledge is where stages interact, because that is where symptoms appear in one subsystem and causes live in another:</p>
+    <ul>
+      <li><b>Class loading &rarr; JIT.</b> Loading a class that adds a second implementer invalidates every compilation that assumed one. A plugin loaded at hour six can cost throughput permanently.</li>
+      <li><b>JIT &rarr; GC.</b> Escape analysis removes allocations entirely; when a refactor breaks it, allocation rate triples with no new <code>new</code> in the diff.</li>
+      <li><b>GC &rarr; latency &rarr; safepoints.</b> A "5&nbsp;ms GC pause" can be a 400&nbsp;ms stall, because the pause is bounded by the slowest thread's time to reach a safepoint.</li>
+      <li><b>Class loading &rarr; native memory.</b> A leaked loader pins every class it defined in Metaspace — invisible on every heap dashboard, fatal to the container.</li>
+      <li><b>JIT &rarr; concurrency.</b> A missing <code>volatile</code> can be invisible under the interpreter and appear the moment C2 hoists a read out of a loop. The compiler revealed the race; it did not create it.</li>
+    </ul>
+  </div>
+
+  <h3 class="sub">
+    <span class="kicker">Interview drill · the whole machine</span>
+    Cross-cutting questions that span every stage
+  </h3>
+
+  <details class="qa">
+    <summary>"Walk me through everything that happens when I run <code>java MyApp</code>." — the classic opener.</summary>
+    <div class="ans">
+      <p>Structure it as <b>launch &rarr; first instruction &rarr; steady state</b>, and keep each step to one sentence. Interviewers are testing organisation, not trivia.</p>
+      <ol>
+        <li>The launcher creates the VM: reserves the heap, initialises the memory subsystems, starts the GC and compiler threads, and creates the main thread.</li>
+        <li>The <b>Bootstrap</b> loader initialises the core JDK classes; then the Application loader is asked for <code>MyApp</code>, delegating parent-first up the chain.</li>
+        <li><code>MyApp</code> is <b>loaded</b> (bytes parsed into an InstanceKlass in Metaspace), <b>linked</b> (verified, static slots prepared to zero defaults, references resolved lazily) and <b>initialized</b> (<code>&lt;clinit&gt;</code> runs under a class lock).</li>
+        <li><code>main()</code> begins executing in the <b>interpreter at Tier&nbsp;0</b>, one frame on the main thread's stack. Every class it touches repeats step&nbsp;3 on first active use — <b>this dominates startup</b>, more than GC or JIT.</li>
+        <li>Objects are allocated in <b>Eden</b>; when Eden fills, a young collection copies survivors and ages them; long-lived objects are promoted to the old generation.</li>
+        <li>Invocation and back-edge counters accumulate; hot methods are queued for <b>C1 (Tier 3)</b>, which runs fast and keeps profiling, then <b>C2 (Tier 4)</b>, which uses that profile to inline, devirtualize, unroll and vectorize.</li>
+        <li>C2's speculations are guarded; if one breaks — a new class loaded, an unexpected type — the method <b>deoptimizes</b> back to the interpreter at a safepoint and is recompiled with a better profile.</li>
+        <li>Steady state: nearly everything hot is Tier&nbsp;4 native code in the code cache, GC is periodic and mostly young, and class loading has largely stopped.</li>
+      </ol>
+      <p>Then offer a hook: "I can go deeper on any of those — verification, the tier ladder, or how deoptimization reconstructs a frame." That turns a monologue into a conversation and lets you steer toward what you know best.</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>Why does the JVM's performance change over time, and what does that mean for how you measure it?</summary>
+    <div class="ans">
+      <p>Because <b>three things are still converging</b> after the process starts: classes are still being loaded and initialised; methods are still being promoted up the tier ladder; and the GC has not yet reached a steady live set, so its cycle time is not representative.</p>
+      <p><b>What follows for measurement:</b></p>
+      <ul>
+        <li>Discard warm-up. A benchmark without warm-up iterations measures the compiler. Use <b>JMH</b>, which does this by construction — and use <code>Blackhole</code>s, because otherwise the optimizer deletes the work you are timing.</li>
+        <li>Measure for long enough that the GC has run many cycles, or you are measuring the interval before the first collection.</li>
+        <li>In production, expect the first minute after deploy to be unrepresentative, and either warm instances before they take traffic or exclude that window from alerting.</li>
+        <li>Report <b>percentiles</b>, not averages. GC pauses and deoptimizations live entirely in the tail, and an average hides exactly the thing you are trying to see.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · "Our Java service is slow." That is the entire ticket. How do you proceed?</summary>
+    <div class="ans">
+      <p>Refuse to guess, and make the first move measurement rather than tuning. A defensible order:</p>
+      <ol>
+        <li><b>Define "slow".</b> Throughput or latency? Average or tail? Always, or since a specific change? A p99 problem and a throughput problem have almost disjoint causes.</li>
+        <li><b>Rule out the non-JVM world first.</b> Most "JVM performance problems" are a database query, an N+1, a downstream timeout, a thread pool sized wrongly, or CPU throttling in the container. Check those before touching a flag.</li>
+        <li><b>Look at the whole process, not the heap.</b> CPU, RSS versus limit, thread count, safepoint stop time.</li>
+        <li><b>Profile.</b> A CPU profile (async-profiler, JFR) tells you where time goes; an allocation profile tells you where garbage comes from. This step answers the question far more often than any flag does.</li>
+        <li><b>Then the JVM subsystems, using the symptom to pick one:</b>
+          <ul>
+            <li>Slow only after deploy &rarr; warm-up / class loading (Stages 03, 05).</li>
+            <li>Erratic and bimodal &rarr; deoptimization churn (Stage 07).</li>
+            <li>Sudden permanent collapse &rarr; code cache full (Stage 05).</li>
+            <li>Tail-latency spikes &rarr; GC pauses or time-to-safepoint (Stages 07, 09).</li>
+            <li>Steady degradation over days &rarr; retention leak (Stages 08, 09).</li>
+            <li>Killed by the kernel with a calm heap &rarr; off-heap growth (Stage 08).</li>
+          </ul>
+        </li>
+        <li><b>Change one thing, measure, keep or revert.</b> Every flag you keep is a decision someone must understand later.</li>
+      </ol>
+      <p>The sentence that demonstrates seniority: "<b>I would want the data to exist before the next incident</b> — continuous JFR, GC logs with rotation, safepoint logging, and code-cache and Metaspace on the dashboard alongside heap. Most of these questions are trivial with the data and nearly unanswerable without it."</p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · Design the JVM configuration for a latency-sensitive API service in a 4-core, 8&nbsp;GB container. Justify every flag.</summary>
+    <div class="ans">
+      <p>Start with as little as possible, and be able to defend each line.</p>
+      <ul>
+        <li><b><code>-XX:MaxRAMPercentage=70</code></b> — not a fixed <code>-Xmx</code>, so the heap scales with the container and leaves headroom for Metaspace, code cache, ~200&nbsp;MB of thread stacks and any direct buffers. Sizing <code>-Xmx</code> to the container limit is how pods get OOM-killed.</li>
+        <li><b><code>-XX:+UseG1GC</code></b> (explicit, even though it is the default) — pause-target-driven and well understood operationally. Consider <b>ZGC</b> instead if measurement shows G1's pauses are the p99 problem; on a heap this small, G1 usually suffices.</li>
+        <li><b><code>-XX:MaxMetaspaceSize=256m</code></b> — so a ClassLoader leak fails fast and diagnosably instead of consuming the container silently.</li>
+        <li><b><code>-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/dumps</code></b> on a volume that survives restarts. Costs nothing until it saves an investigation.</li>
+        <li><b><code>-XX:StartFlightRecording=disk=true,maxsize=512m,settings=profile</code></b> — continuous JFR so the data exists when something happens. Low single-digit percent overhead.</li>
+        <li><b><code>-Xlog:gc*,safepoint:file=/logs/gc.log:time,uptime:filecount=5,filesize=20m</code></b> — GC <i>and</i> safepoint logging, because the difference between them is the diagnosis for most tail-latency questions.</li>
+        <li><b>Warm-up on startup</b> — a readiness probe that only passes after synthetic traffic has exercised the main endpoints, so a cold instance never takes production load.</li>
+      </ul>
+      <p><b>What you deliberately leave out, and why:</b> no hand-tuned generation sizes (G1 sizes adaptively and does it better than a guess); no <code>MaxGCPauseMillis</code> until you have evidence, since lowering it trades throughput for a target that may not be met anyway; no threshold tuning; no <code>-XX:+AggressiveOpts</code>-style grab-bags. <b>Every flag is a hypothesis. Ship only the ones you have tested, plus the observability ones — those pay for themselves.</b></p>
+    </div>
+  </details>
+
+  <details class="qa scenario">
+    <summary>Scenario · A junior developer asks: "Should I worry about creating objects in a loop?" Give the honest answer.</summary>
+    <div class="ans">
+      <p><b>Usually no, and the reason is worth teaching.</b> Allocation in Java is a pointer bump in a thread-local allocation buffer — a handful of instructions, no lock. And an object that dies before the next young collection costs the collector <b>nothing at all</b>, because copying collectors pay for survivors, not for garbage. On top of that, escape analysis may delete the allocation entirely.</p>
+      <p><b>When it does matter:</b></p>
+      <ul>
+        <li><b>Allocation rate</b> in the hundreds of MB/s or more — the young collections themselves become frequent enough to matter, and survivors start being promoted prematurely.</li>
+        <li><b>Boxing in hot data structures</b> — <code>Long[]</code> versus <code>long[]</code> is a 3–4× footprint difference plus catastrophic cache locality.</li>
+        <li><b>Objects that escape the loop</b> and accumulate — that is not allocation cost, it is <b>retention</b>, and retention is the expensive thing.</li>
+        <li><b>Sub-millisecond latency requirements</b>, where even short young pauses are unacceptable and allocation-free hot paths are a genuine design constraint.</li>
+      </ul>
+      <p><b>What to tell them to do:</b> write the clear version; if it turns out to be hot, <i>measure</i> with an allocation profiler and fix the specific site. <b>Object pooling to "help the GC" is usually counterproductive</b> — it converts cheap young garbage into long-lived objects the old generation must trace repeatedly, and adds a lifetime-management bug surface for free.</p>
+    </div>
+  </details>
+
+  <details class="qa">
+    <summary>Why do microbenchmarks without warm-up iterations produce completely misleading numbers?</summary>
+    <div class="ans">
+      During the first few seconds of execution (Phase 2), the JVM is actively compiling methods, collecting profiling data, competing for CPU cores with application code, and triggering speculative deoptimizations. Measuring execution time during this warm-up phase benchmarks the JIT compiler itself rather than steady-state application performance. Harnesses like <b>JMH (Java Microbenchmark Harness)</b> explicitly discard initial warm-up iterations to measure only settled Tier 4 steady-state throughput.
+    </div>
+  </details>
+
+  <div class="trap">
+    <span class="lbl">Common Interview Trap</span>
+    <span class="wrong">"The JVM is a black box — you just tune the flags."</span>
+    <span class="right">Almost every JVM performance problem is a <b>code</b> or <b>architecture</b> problem visible through JVM telemetry.</span>
+    Flags move a workload along a trade-off curve; they rarely move the curve. A retention leak, a megamorphic hot call site, an unbounded cache, an allocation-heavy inner loop, a thread pool sized for a different machine — <b>the JVM reports these faithfully, and no flag fixes any of them.</b> Knowing the internals is what lets you read the report.
+  </div>
+
+  <h3 class="sub">
+    <span class="kicker">Where the explanations came from</span>
+    Further reading
+  </h3>
+  <div class="prose">
+    <p>The prose across these ten stages leans on a handful of unusually clear write-ups. If a section here was too compressed, these are the places to go deeper:</p>
+    <ul>
+      <li><a href="https://foojay.io/today/what-does-a-modern-jvm-look-like-and-how-does-it-work/" target="_blank" rel="noopener">What does a modern JVM look like and how does it work?</a> — JVM internals, execution engine, runtime data areas (Foojay).</li>
+      <li><a href="https://foojay.io/today/java-performance-ahead-of-time-versus-just-in-time/" target="_blank" rel="noopener">Java Performance: Ahead-of-Time versus Just-in-Time</a> — the AOT/JIT trade-off and speculative optimization (Foojay, Frank Delporte).</li>
+      <li>Java Bytecode Simplified — parts <a href="https://foojay.io/today/java-bytecode-simplified-journey-to-the-wonderland-part-1/" target="_blank" rel="noopener">1</a>, <a href="https://foojay.io/today/java-bytecode-simplified-journey-to-the-wonderland-part-2/" target="_blank" rel="noopener">2</a> and <a href="https://foojay.io/today/java-bytecode-simplified-journey-to-the-wonderland-part-3/" target="_blank" rel="noopener">3</a> — opcodes, the stack machine, descriptors, the constant pool, and bytecode manipulation (Foojay).</li>
+      <li><a href="https://www.azul.com/blog/what-should-i-know-about-garbage-collection-as-a-java-developer/" target="_blank" rel="noopener">What Should I Know About Garbage Collection as a Java Developer?</a> — generational heaps, mark/sweep/copy/compact, allocation rate, modern collectors (Azul).</li>
+      <li><a href="https://www.azul.com/blog/why-should-i-care-about-java-garbage-collection/" target="_blank" rel="noopener">Why Should I Care About Java Garbage Collection?</a> — pause times versus heap size, stop-the-world versus concurrent, why tuning is hard (Azul).</li>
+      <li>The primary source for anything ambiguous: the <b>JVM Specification</b>, chapters 2 (structure), 4 (the class file format) and 5 (loading, linking and initializing).</li>
+    </ul>
+  </div>
+  <!-- Page Navigation Footer -->
+  <footer class="page-nav-footer">
+    <a href="09-garbage-collection.html" class="nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Prev: 09 · Garbage Collection
+    </a>
+    <a href="01-compile.html" class="nav-btn next">
+      Restart: 01 · Compile
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>
+    </a>
+  </footer>
+</div>
+
+<script src="js/jvm-common.js"></script>
+<script>
+const LIFE = [
+  { t:'Startup · 0–200 ms', tag:'stages 01–03 dominate',
+    body:'Almost nothing is executing your business logic. The JVM is <b>loading, verifying and initializing classes</b> — several thousand before your first line of code runs. Everything is interpreted at Tier 0. Metaspace grows rapidly, the heap is nearly empty, and the JIT compiler has barely started. Class loading, not GC or JIT, dominates JVM startup time (which is why CDS / AppCDS class-data sharing is so effective for serverless).' },
+  { t:'Warm-up · 0.2–30 s', tag:'stages 05–06 dominate',
+    body:'Telemetry counters cross thresholds, C1 compiles hundreds of methods, branch profiles accumulate, C2 starts recompiling the hottest loops with inlining and vectorization, and <b>speculative deoptimizations occur frequently</b> as early guesses are corrected. CPU usage is elevated because compiler worker threads are competing with business code. Minor GCs begin as Eden fills.' },
+  { t:'Steady state · Minutes to Days', tag:'stages 07 + 09 dominate',
+    body:'The hottest 1% of methods is fully C2-compiled in the CodeCache and stays that way. JIT compiler activity drops to near zero. <b>Garbage collection is the primary source of latency variance:</b> minor collections every few seconds, occasional concurrent marking. Escape analysis reduces heap allocations, throughput reaches its maximum, and p99 latency is governed by your GC pause target.' },
+  { t:'Degradation · Any Time (Failure Modes)', tag:'the failure modes',
+    body:'Threats to steady state: <b>CodeCache fills up</b> → JIT silently disables and execution collapses to interpreted speed; <b>a megamorphic call site appears</b> → deoptimization storms and lost inlining; <b>memory retention creeps up</b> → old generation fills, leading to <code>GC overhead limit exceeded</code>; <b>ClassLoader leak</b> → Metaspace exhausts native memory across redeployments.' }
+];
+
+function setLife(i){
+  document.querySelectorAll('.lifeseg').forEach((s, k) => s.classList.toggle('on', k === i));
+  $('lifeTitle').textContent = LIFE[i].t;
+  $('lifeTag').textContent = LIFE[i].tag;
+  $('lifeBody').innerHTML = LIFE[i].body;
+}
+
+document.querySelectorAll('.lifeseg').forEach((s, i) => {
+  s.addEventListener('click', () => setLife(i));
+});
+
+setLife(0);
+</script>
+</body>
+</html>
