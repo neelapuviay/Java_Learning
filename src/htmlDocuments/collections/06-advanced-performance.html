@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 06: Mechanical Sympathy & Caching — Java Collections</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="reader.js"></script>
+</head>
+<body>
+
+<div class="module-header-bar">
+  <div class="module-header-breadcrumb">
+    <span class="badge badge-amber">MODULE 06</span> <span>Mechanical Sympathy &amp; High-Performance Caching</span>
+  </div>
+  <a href="index.html" target="_top" class="page-btn" style="padding:4px 10px;font-size:11px;">⊞ Full Portal View</a>
+</div>
+
+<div class="shell single-col">
+  <main>
+    <div class="hero">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+        <span class="badge badge-amber">MODULE 06</span>
+        <span class="badge badge-cyan">⏱️ 16 min read</span>
+        <span class="badge badge-green">Hardware &amp; Caching</span>
+      </div>
+      <h1>Mechanical Sympathy &amp; <em>High-Performance Caching</em>.</h1>
+      <p class="lede">Two data structures with identical Big-O complexity can perform radically differently in production — because Big-O assumes flat memory access, while physical CPUs rely on hierarchical caches, 64-byte lines, and cache-coherency protocols.</p>
+      <div class="promise">
+        <div><b>False Sharing</b>how the pizza-box analogy explains hidden CPU stalls</div>
+        <div><b>32 GB Cliff</b>why crossing 32 GB heap doubles reference memory overhead</div>
+        <div><b>W-TinyLFU</b>the Caffeine caching architecture that obsoleted plain LRU</div>
+      </div>
+    </div>
+
+    <!-- ================= SECTION: MECHANICAL SYMPATHY ================= -->
+    <section id="mechsym">
+      <div class="eyebrow">13 — WHY HARDWARE SHAPES THE "RIGHT" ANSWER</div>
+      <h2>Cache lines, false sharing, and compressed pointers</h2>
+      <div class="sub">Two structures with identical Big-O can perform completely differently — because Big-O doesn't know your CPU has caches.</div>
+
+      <div id="cache-lines"></div>
+      <h3>Cache lines</h3>
+      <p>CPUs never fetch a single byte from memory. They fetch in fixed 64-byte blocks called <b>cache lines</b>, on the assumption that if you touched one byte, you'll probably touch its neighbors soon (this is why ArrayList's contiguous layout wins — one cache-line fetch grabs several elements at once).</p>
+
+      <div id="false-sharing"></div>
+      <h3>False sharing: contention on memory nobody's actually fighting over</h3>
+      <div class="analogy">
+        <div class="icon">🍕</div>
+        <div>
+          <div class="k">Analogy: two people sharing one pizza box, eating different slices</div>
+          Two threads increment two <i>completely unrelated</i> counters — Variable A and Variable B — that just happen to have been placed next to each other in memory, inside the same 64-byte cache line (the "pizza box"). Under the CPU's cache-coherence protocol (MESI), when Core 1 writes to Variable A, the <i>entire</i> cache line is invalidated in Core 2's cache — even though Core 2 was only ever touching Variable B. Core 2 now has to reload the whole line from a slower shared cache, purely because of where A happened to sit in memory. Nobody is actually contending for the same data — just the same delivery box.
+        </div>
+      </div>
+
+      <div id="contended"></div>
+      <p>The JDK's fix is the <code class="inline">@Contended</code> annotation, which pads a field with extra bytes so it lands on its own private cache line, immune to a neighbor's writes. <code class="inline">ConcurrentHashMap.CounterCell</code> and <code class="inline">Striped64</code> (which backs <code class="inline">LongAdder</code>) both use it — it's precisely why striped counters actually deliver the scalability they promise.</p>
+
+      <div id="compressed-oops"></div>
+      <h3>Compressed OOPs: the 32 GB cliff</h3>
+      <p>On a 64-bit JVM, a plain object reference is normally 8 bytes. But HotSpot aligns every object to an 8-byte boundary, which means the lowest 3 bits of any object's address are always zero — genuinely wasted information. Below a 32 GB heap, the JVM exploits this: it stores references as 32-bit numbers and shifts them left by 3 bits whenever they're loaded into a register, recovering the full 8-byte address cheaply. This is <b>Compressed OOPs</b>, and it's on by default.</p>
+      
+      <div class="callout danger">
+        <div class="k">The cliff</div>
+        The instant your heap crosses roughly 32 GB, this trick stops working and compressed OOPs turn off automatically. Every reference field across your entire heap silently doubles from 4 to 8 bytes. For pointer-dense structures — HashMap nodes, LinkedList nodes, TreeMap entries — this alone can inflate memory use by 30–50%, with zero new data stored. Sizing a heap to sit just under 32 GB is often a deliberate, informed choice rather than an accident.
+      </div>
+
+      <!-- Quick Knowledge Check Accordion -->
+      <div class="quiz-box">
+        <div class="quiz-header">
+          <span class="quiz-badge">💡 Quick Knowledge Check</span>
+          <button type="button" class="quiz-toggle" aria-expanded="false">Test Your Intuition <span class="quiz-toggle-icon">▼</span></button>
+        </div>
+        <div class="quiz-question">Why can increasing your JVM heap from 31 GB to 33 GB actually REDUCE the number of collection objects you can fit in memory?</div>
+        <div class="quiz-answer">
+          <b>Answer:</b> Crossing the ~32 GB threshold disables Compressed Ordinary Object Pointers (Compressed OOPs). Hotspot shifts from 32-bit (4-byte) reference representations to full 64-bit (8-byte) pointers. Because pointer-rich collections (like <code>HashMap</code>, <code>TreeMap</code>, and <code>LinkedList</code>) store millions of pointer references, losing compressed OOPs increases heap footprint by 30% to 50% overnight, negating the extra 2 GB of memory!
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION: CAFFEINE / W-TINYLFU ================= -->
+    <section id="caffeine">
+      <div class="eyebrow">14 — MODERN CACHING</div>
+      <h2>Why LinkedHashMap and bare ConcurrentHashMap both fail as caches</h2>
+      <div class="sub">A cache needs two things neither built-in structure gives you for free: bounded size, and eviction of the <i>right</i> item.</div>
+
+      <div id="cache-fail"></div>
+      <ul class="max">
+        <li><code class="inline">LinkedHashMap</code> in access-order mode <i>can</i> track recency and evict the least-recently-used item — but it does so by locking on every single read to reposition the accessed entry, which is a serialization bottleneck under concurrent traffic.</li>
+        <li>A bare <code class="inline">ConcurrentHashMap</code> has no eviction policy at all. Bolt one on with a periodic background scan and you've turned eviction into an O(n) sweep that can stall the whole application.</li>
+      </ul>
+
+      <div id="wtinylfu"></div>
+      <p>Modern caches (Caffeine, built by Ben Manes) solve this with <b>Window TinyLFU (W-TinyLFU)</b>, which separates "is this cache full" from "did anyone actually look at this item recently" into two independent, cheap mechanisms:</p>
+
+      <div id="sketch" class="grid3">
+        <div class="card">
+          <h4>Lock-free read buffering</h4>
+          <p class="dim" style="margin:0;">A cache read is a plain <code class="inline">ConcurrentHashMap.get()</code> — no lock. The read event is separately dropped into a small ring buffer. A background thread drains that buffer in batches later, so recency bookkeeping never sits on the hot read path.</p>
+        </div>
+        <div class="card">
+          <h4>Count-Min Sketch filter</h4>
+          <p class="dim" style="margin:0;">A tiny probabilistic structure (a few megabytes for millions of entries) estimates how often each key has been seen recently. A new candidate only evicts an existing item if its estimated frequency is actually higher — protecting the cache from being flushed by one big one-off scan.</p>
+        </div>
+        <div class="card">
+          <h4>Segmented LRU</h4>
+          <p class="dim" style="margin:0;">Space splits into a small "Window" (catches short-term bursty access) and a larger "Main" cache (Probational + Protected). An adaptive algorithm shifts the boundary between them based on live hit-rate feedback.</p>
+        </div>
+      </div>
+      <p class="dim">The net effect: near-lock-free reads, bounded memory, and materially higher hit rates than a plain LRU under real-world access patterns.</p>
+    </section>
+
+    <!-- Module Complete Card -->
+    <div class="chapter-complete-card">
+      <div class="chapter-complete-info">
+        <h4>Completed Module 06?</h4>
+        <p>Mark Performance &amp; Caching as complete to update your curriculum progress.</p>
+      </div>
+      <button type="button" class="btn-mark-complete" data-module="06">
+        <span>○</span> Mark as Completed
+      </button>
+    </div>
+
+    <!-- Pagination Footer -->
+    <div class="module-pagination">
+      <a href="05-concurrency.html" class="page-btn">← Module 05 · Concurrency</a>
+      <a href="07-recipes-and-practice.html" class="page-btn primary">Next: Module 07 · Practice &amp; Matrix →</a>
+    </div>
+
+    <footer>Built for lead-level Java interview preparation · every mechanism traced to the JDK source behavior it describes</footer>
+  </main>
+</div>
+
+</body>
+</html>

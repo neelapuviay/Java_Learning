@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 03: Map & Set Internals — Hashing, Buckets & Trees</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="reader.js"></script>
+</head>
+<body>
+
+<div class="module-header-bar">
+  <div class="module-header-breadcrumb">
+    <span class="badge badge-green">MODULE 03</span> <span>Map &amp; Set Internals: Hashing, Buckets &amp; Trees</span>
+  </div>
+  <a href="index.html" target="_top" class="page-btn" style="padding:4px 10px;font-size:11px;">⊞ Full Portal View</a>
+</div>
+
+<div class="shell single-col">
+  <main>
+    <div class="hero">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+        <span class="badge badge-green">MODULE 03</span>
+        <span class="badge badge-cyan">⏱️ 18 min read</span>
+        <span class="badge badge-amber">Core Internals</span>
+      </div>
+      <h1>HashMap, Sets &amp; <em>Red-Black Trees</em>.</h1>
+      <p class="lede">HashMap's entire job is answering one question fast: <em>"given this key, which internal bucket should I look in?"</em> Learn the exact mathematical steps from key to bucket, how treeification stops denial-of-service attacks, and why HashSet and LinkedHashMap are just HashMaps in disguise.</p>
+      <div class="promise">
+        <div><b>Bitwise Math</b>why power-of-two masking replaces division</div>
+        <div><b>Treeification</b>the 8/6 threshold and Red-Black tree self-balancing</div>
+        <div><b>Order Differences</b>bucket index vs insertion order vs sorted comparator</div>
+      </div>
+    </div>
+
+    <!-- ================= SECTION: HASHMAP ================= -->
+    <section id="hashmap">
+      <div class="eyebrow">04 — THE MOST-ASKED INTERVIEW TOPIC</div>
+      <h2>HashMap: how a key finds its shelf</h2>
+      <div class="sub">HashMap's entire job is answering one question fast: "given this key, which of my internal buckets should I look in?" Everything below is in service of that one question.</div>
+
+      <div id="hashmap-hash"></div>
+      <h3>Step 1 — turn the key into a number</h3>
+      <p>Every Java object has a <code class="inline">hashCode()</code> method that reduces it to a single 32-bit integer. Think of it as a meaningless-looking fingerprint — two equal objects <i>must</i> produce the same fingerprint, but the fingerprint itself carries no readable meaning.</p>
+
+      <div class="analogy">
+        <div class="icon">📇</div>
+        <div>
+          <div class="k">Analogy: hashCode is a librarian's shelving code, not the book's title</div>
+          A librarian doesn't file 10,000 books alphabetically by full title (slow to search). She converts each title into a short shelving code and stores books by that code. HashMap does the same: it never compares your key against every stored key. It uses the key's fingerprint to jump straight to the one shelf (bucket) it must be on.
+        </div>
+      </div>
+
+      <div id="hashmap-spread"></div>
+      <h3>Step 2 — spread the fingerprint's bits</h3>
+      <p>A raw <code class="inline">hashCode()</code> can be a bad fit for a small bucket array — many hash codes differ only in their high bits, which get thrown away by the next step. So HashMap runs a cheap "spreading" step first:</p>
+      <pre><span class="kw">static final int</span> hash(Object key) {
+    <span class="kw">int</span> h = key.hashCode();
+    <span class="c1">// shift the top 16 bits down, XOR them into the bottom 16</span>
+    <span class="kw">return</span> h ^ (h &gt;&gt;&gt; 16);
+}</pre>
+      <p class="dim">This mixes high-order bits into the low-order bits, so differences that only show up "way up high" in the number still influence which bucket gets picked.</p>
+
+      <div id="hashmap-mask"></div>
+      <h3>Step 3 — mask it down to a bucket index</h3>
+      <p>HashMap's internal array (<code class="inline">Node&lt;K,V&gt;[] table</code>) always has a size that's a power of two (16, 32, 64…). This is deliberate: for a power-of-two size <var>n</var>, <code class="inline">hash % n</code> gives exactly the same answer as <code class="inline">hash & (n - 1)</code> — a bitwise AND — but AND is a single, near-free CPU instruction, while <code class="inline">%</code> (division) is dozens of times slower.</p>
+
+      <div class="viz">
+        <div class="viz-controls">
+          <input id="hm-key" placeholder="type a key…" style="font-family:var(--mono);background:#080D18;border:1px solid var(--line);color:#E7EDF7;padding:8px 10px;border-radius:4px;width:180px;">
+          <button class="btn" onclick="hmDemo.go()">compute bucket →</button>
+        </div>
+        <div id="hm-steps" style="font-family:var(--mono);font-size:13px;line-height:2;"></div>
+        <div class="viz-caption">Table capacity fixed at 16 for this demo, so the mask is <code>&amp; 15</code> (binary <code>1111</code>) — it simply keeps the lowest 4 bits of the spread hash.</div>
+      </div>
+
+      <div id="hashmap-collisions"></div>
+      <h3>Collisions: two keys, one bucket</h3>
+      <p>Different keys can land on the same bucket index — that's a <b>collision</b>, and it's expected, not a bug. HashMap handles it with <b>separate chaining</b>: the bucket holds a linked list of every entry that landed there, and a lookup walks that short list comparing keys with <code class="inline">equals()</code>.</p>
+
+      <div class="viz">
+        <div class="viz-controls">
+          <button class="btn" onclick="bucketDemo.insertRandom()">insert random key →</button>
+          <button class="btn alt" onclick="bucketDemo.reset()">reset table</button>
+        </div>
+        <div id="bucket-table"></div>
+        <div class="viz-caption" id="bucket-caption">16 buckets. Insert a few keys and watch collisions form chains.</div>
+      </div>
+
+      <div id="hashmap-tree"></div>
+      <h3>When a chain gets long: treeification</h3>
+      <p>A linked-list bucket is fine at 1–3 entries — a short walk. But imagine an attacker deliberately crafts thousands of keys that all hash to the <i>same</i> bucket (a "hash-flooding" attack): that bucket's list balloons, and every lookup degrades toward O(n). Since Java 8, HashMap defends against this:</p>
+
+      <div class="callout">
+        <div class="k">The 8/6 rule</div>
+        If a single bucket's chain reaches <b>8</b> entries <i>and</i> the table has at least <b>64</b> buckets total, that one bucket converts from a linked list into a small <b>Red-Black tree</b> (self-balancing binary search tree). Worst-case lookup in that bucket drops from O(n) to O(log n). If the bucket later shrinks to <b>6</b> or fewer entries, it converts back to a plain list. The 8-vs-6 gap (not both set to 7) is deliberate — it stops a bucket from flapping back and forth between tree and list every time one key is added or removed near the threshold.
+        <br><br>Below 64 total buckets, HashMap prefers to just grow the whole table instead of building a tree — a bigger table usually spreads the same 8 entries across separate buckets anyway, so building a tree would be wasted work.
+      </div>
+
+      <svg viewBox="0 0 760 190" width="100%" style="max-width:760px;margin:20px 0;">
+        <style>
+          .tn{ fill:#101B30; stroke:#3E8E88; stroke-width:1.3; }
+          .tt{ font-family:'IBM Plex Mono',monospace; font-size:12px; fill:#E7EDF7; }
+          .te{ stroke:#5D6D8A; stroke-width:1.2; fill:none; }
+        </style>
+        <text x="20" y="24" class="tt" style="fill:#F5B563;">chain (0–7 entries)</text>
+        <rect x="20" y="40" width="60" height="34" rx="4" class="tn"/><text x="50" y="61" text-anchor="middle" class="tt">K1</text>
+        <path class="te" d="M80,57 L110,57"/>
+        <rect x="110" y="40" width="60" height="34" rx="4" class="tn"/><text x="140" y="61" text-anchor="middle" class="tt">K2</text>
+        <path class="te" d="M170,57 L200,57"/>
+        <rect x="200" y="40" width="60" height="34" rx="4" class="tn"/><text x="230" y="61" text-anchor="middle" class="tt">K3</text>
+        <path class="te" d="M260,57 L285,57" marker-end="url(#arrow)"/>
+        <text x="270" y="45" class="tt" style="fill:#5D6D8A;font-size:11px;">…</text>
+
+        <text x="420" y="24" class="tt" style="fill:#F5B563;">≥8 entries &amp; table≥64 → tree</text>
+        <rect x="500" y="30" width="60" height="30" rx="4" class="tn" style="stroke:#B39DFB;"/><text x="530" y="50" text-anchor="middle" class="tt">K4●</text>
+        <path class="te" d="M510,60 C500,80 470,90 460,100"/>
+        <path class="te" d="M550,60 C560,80 590,90 600,100"/>
+        <rect x="420" y="100" width="60" height="30" rx="4" class="tn" style="stroke:#B39DFB;"/><text x="450" y="120" text-anchor="middle" class="tt">K1○</text>
+        <rect x="590" y="100" width="60" height="30" rx="4" class="tn" style="stroke:#B39DFB;"/><text x="620" y="120" text-anchor="middle" class="tt">K7○</text>
+        <path class="te" d="M430,130 C420,150 400,160 390,170"/>
+        <path class="te" d="M470,130 C480,150 500,160 510,170"/>
+        <rect x="350" y="170" width="60" height="20" rx="4" class="tn" style="stroke:#B39DFB;"/><text x="380" y="184" text-anchor="middle" class="tt" style="font-size:10px;">K2</text>
+        <rect x="480" y="170" width="60" height="20" rx="4" class="tn" style="stroke:#B39DFB;"/><text x="510" y="184" text-anchor="middle" class="tt" style="font-size:10px;">K5</text>
+        <text x="670" y="60" class="tt" style="fill:#5D6D8A;font-size:11px;">● black</text>
+        <text x="670" y="120" class="tt" style="fill:#5D6D8A;font-size:11px;">○ red</text>
+      </svg>
+      <p class="dim">If two keys land in the same tree bucket and don't implement <code class="inline">Comparable</code> (or compare equal), Java can't decide tree order from the key's value alone — so it breaks the tie using <code class="inline">System.identityHashCode()</code>, essentially "which object was created first in memory," just to guarantee the tree stays consistently ordered.</p>
+
+      <div id="hashmap-resize"></div>
+      <h3>Resizing: doubling without starting over</h3>
+      <p>HashMap resizes (doubles its table) once occupancy passes <b>capacity × load factor</b> — by default <code class="inline">0.75</code>, so a 16-bucket table resizes after its 13th entry. A smaller load factor wastes memory on empty buckets; a larger one causes more collisions. 0.75 is Java's measured sweet spot.</p>
+      <p>Here's the elegant part: because capacity always doubles (16→32→64…), the bitmask only ever grows by <b>one bit</b> at a time. That means every existing entry has only two possible destinations in the new table: its <i>same</i> index, or its <i>same index + old capacity</i> — depending on whether that one new bit happens to be 0 or 1 in its hash. HashMap never has to recompute a full hash during resize; it just checks one bit and splits each chain into a "stays low" list and a "moves high" list.</p>
+
+      <div class="viz">
+        <svg viewBox="0 0 780 210" width="100%" style="max-width:780px;">
+          <style> .rt{font-family:'IBM Plex Mono',monospace;font-size:12px;fill:#E7EDF7;} </style>
+          <text x="10" y="20" class="rt" style="fill:#93A3BE;">capacity 16 → bucket 5 chain: [K1, K2, K3]</text>
+          <rect x="10" y="34" width="90" height="30" rx="4" fill="#101B30" stroke="#3E8E88"/><text x="55" y="54" text-anchor="middle" class="rt">bucket 5</text>
+          <path d="M100,49 L140,49" stroke="#5D6D8A" marker-end="url(#arrow)"/>
+          <rect x="140" y="34" width="230" height="30" rx="4" fill="#101B30" stroke="#3E8E88"/><text x="255" y="54" text-anchor="middle" class="rt">K1 → K2 → K3</text>
+
+          <text x="10" y="110" class="rt" style="fill:#F5B563;">resize to capacity 32 — new bit checked: bit 4</text>
+          <path d="M255,64 C255,90 100,90 100,120" stroke="#5D6D8A" fill="none"/>
+          <path d="M255,64 C255,90 500,90 500,120" stroke="#5D6D8A" fill="none"/>
+
+          <rect x="20" y="120" width="180" height="30" rx="4" fill="#101B30" stroke="#7FD99B"/>
+          <text x="110" y="140" text-anchor="middle" class="rt" style="fill:#7FD99B;">bucket 5 (bit=0): K1, K3</text>
+          <rect x="420" y="120" width="200" height="30" rx="4" fill="#101B30" stroke="#F0837A"/>
+          <text x="520" y="140" text-anchor="middle" class="rt" style="fill:#F0837A;">bucket 5+16=21 (bit=1): K2</text>
+
+          <text x="10" y="185" class="rt" style="fill:#5D6D8A;font-size:11px;">No rehashing needed — only the new high bit decides low-list vs high-list.</text>
+        </svg>
+      </div>
+
+      <div class="callout danger">
+        <div class="k">Interview trap</div>
+        Always construct a HashMap (or ConcurrentHashMap) with an expected size up front — <code class="inline">new HashMap&lt;&gt;(expectedSize)</code> — when you know roughly how many entries are coming. Skipping this means the table silently resizes (and fully re-buckets) <i>log₂(finalSize/16)</i> times during a big bulk load, each one a stop-and-copy pause.
+      </div>
+
+      <!-- Quick Knowledge Check Accordion -->
+      <div class="quiz-box">
+        <div class="quiz-header">
+          <span class="quiz-badge">💡 Quick Knowledge Check</span>
+          <button type="button" class="quiz-toggle" aria-expanded="false">Test Your Intuition <span class="quiz-toggle-icon">▼</span></button>
+        </div>
+        <div class="quiz-question">When a HashMap bucket reaches 8 elements, why does Java convert the linked list into a Red-Black Tree (TreeNode), and what happens if the keys do not implement <code>Comparable</code>?</div>
+        <div class="quiz-answer">
+          <b>Answer:</b> A linked list degenerates to O(N) lookup under hash collision attacks (e.g. malicious duplicate hash codes). A Red-Black tree guarantees O(log N) worst-case lookup. If keys don't implement <code>Comparable&lt;K&gt;</code>, Java breaks ties using <code>tieBreakOrder()</code> which compares the keys' class names and native <code>System.identityHashCode()</code> to maintain a deterministic search tree!
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION: SET/MAP FAMILY ================= -->
+    <section id="setmap">
+      <div class="eyebrow">05 — YOU ALREADY KNOW THESE, YOU JUST DON'T KNOW IT YET</div>
+      <h2>HashSet, LinkedHashSet, TreeSet, LinkedHashMap, TreeMap</h2>
+      <div class="sub">Good news first: none of these five classes are a new data structure. Every single one is either a HashMap wearing a costume, or the same Red-Black tree you just met a moment ago. Once you see the trick, you can never un-see it.</div>
+
+      <div id="setmap-hashset"></div>
+      <h3>HashSet: a HashMap wearing a costume</h3>
+      <p>Open the real Java source code for <code class="inline">HashSet</code> and this is almost the entire class:</p>
+      <pre><span class="kw">public class</span> HashSet&lt;E&gt; {
+    <span class="c1">// a HashSet does not have its own buckets — it hides a HashMap inside itself</span>
+    <span class="kw">private</span> HashMap&lt;E, Object&gt; map;
+
+    <span class="c1">// one single dummy object, shared by every element, in every HashSet, in the whole program</span>
+    <span class="kw">private static final</span> Object PRESENT = <span class="kw">new</span> Object();
+
+    <span class="kw">public boolean</span> add(E e) {
+        <span class="kw">return</span> map.put(e, PRESENT) == <span class="kw">null</span>;   <span class="c1">// your element becomes the KEY</span>
+    }
+    <span class="kw">public boolean</span> contains(Object o) {
+        <span class="kw">return</span> map.containsKey(o);
+    }
+}</pre>
+      <p>Read that slowly, in plain words: <b>add(x) really just means map.put(x, PRESENT)</b>, and <b>contains(x) really just means map.containsKey(x)</b>. There is no separate hashing logic, no separate bucket array, no separate collision handling written anywhere for HashSet — because it doesn't need any. It borrows all of it from HashMap.</p>
+
+      <div class="analogy">
+        <div class="icon">🎭</div>
+        <div>
+          <div class="k">Simple picture: a coat rack with one spare coat</div>
+          Imagine a coat rack (the HashMap) with a labeled hook for every item. A HashSet doesn't build its own coat rack — it uses the same one, and it hangs the exact same spare coat (the shared <code class="inline">PRESENT</code> object) on every hook, no matter what the hook's label is. The label is the only thing anyone actually cares about — that's your element.
+        </div>
+      </div>
+
+      <p>This one fact means every rule you already learned in the HashMap section above is <i>automatically</i> true for HashSet too: <code class="inline">hashCode()</code> turns your object into a number, that number gets its bits spread and masked down to a bucket index, two elements landing in the same bucket form a chain, and a chain that grows past 8 entries (in a table of 64+ buckets) quietly turns into the same Red-Black tree. You did not learn a second data structure just now — you learned that HashSet <i>is</i> HashMap, minus the values.</p>
+
+      <div class="callout">
+        <div class="k">On memory, specifically</div>
+        A HashSet object on the heap doesn't hold a bucket array of its own — it holds one reference to a hidden HashMap object, which is the thing that actually holds the bucket array. So creating a HashSet costs one small extra object compared to creating a HashMap directly. The <code class="inline">PRESENT</code> placeholder costs almost nothing, because Java creates it exactly once, ever, and every HashSet in your entire program reuses that same single object — it is never duplicated per element.
+      </div>
+
+      <div id="setmap-linked"></div>
+      <h3>LinkedHashSet and LinkedHashMap: one hidden chain, threaded through the buckets</h3>
+      <p>A plain HashMap makes you no promises at all about the order you'll see when you loop over it — the order just falls out of which bucket each key happened to land in, and that looks completely random to a human. <code class="inline">LinkedHashMap</code> fixes exactly that one problem, with one small addition.</p>
+      <p>Every entry in a LinkedHashMap carries two extra fields that a normal HashMap entry does not have: <code class="inline">before</code> and <code class="inline">after</code> — references pointing to the entry that was inserted right before it, and the entry inserted right after it. Line all of those up, and you get a second, invisible linked list running through the entries, completely separate from the bucket array underneath. When you iterate, Java ignores the buckets entirely and just walks this hidden chain from the oldest entry to the newest — which is exactly why the order you see matches the order you inserted things in.</p>
+
+      <div class="analogy">
+        <div class="icon">🧵</div>
+        <div>
+          <div class="k">Simple picture: numbered raffle tickets on a shelf of unlabeled boxes</div>
+          The boxes (buckets) are still scattered around in whatever order hashing puts them in — nothing changes there. But now imagine a piece of thread tied from the first box you filled, to the second, to the third, and so on. To read things back "in the order I added them," you don't look at the shelf at all — you just follow the thread.
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <div class="k">This costs real memory — which is the whole point of this guide</div>
+        Two extra references per entry sounds small, but it is not free: on most 64-bit JVMs that's around 16 extra bytes <i>per entry</i>, and two more fields the garbage collector must trace every time it scans that object. This is a direct, measurable trade: you are spending heap memory to buy yourself a predictable iteration order. <code class="inline">LinkedHashSet</code> is to <code class="inline">LinkedHashMap</code> exactly what <code class="inline">HashSet</code> is to <code class="inline">HashMap</code> — a thin wrapper hiding a private <code class="inline">LinkedHashMap&lt;E,Object&gt;</code> field inside, reusing the exact same <code class="inline">PRESENT</code> trick.</div>
+
+      <div id="setmap-lru"></div>
+      <h3>Building an LRU Cache: The Magic of <code class="inline">accessOrder = true</code></h3>
+
+      <div class="analogy">
+        <div class="icon">📚</div>
+        <div>
+          <div class="k">Simple picture: A 3-book shelf (The LRU eviction rule)</div>
+          Imagine a small bookshelf that only holds <b>3 books</b>. You want to keep your favorite, most popular books on this shelf. When the shelf is full and you buy a new book, which one do you throw away?<br><br>
+          The smartest choice is usually: <b>throw away the book you haven't touched for the longest time.</b><br><br>
+          In computer science, this strategy is called an <b>LRU Cache</b> (<b>L</b>east <b>R</b>ecently <b>U</b>sed cache).
+        </div>
+      </div>
+
+      <div class="card" style="margin: 20px 0;">
+        <h4 style="color:var(--cyan); margin-bottom:12px;">Part 1: How <code class="inline">accessOrder = true</code> Works</h4>
+        <p>A standard map in Java just remembers data (key and value pairs). A <code class="inline">LinkedHashMap</code> is special because it also ties all the items together with an invisible chain in a specific line.</p>
+        <ul style="margin: 10px 0 18px 20px; line-height: 1.8;">
+          <li><b>Normal behavior (<code class="inline">accessOrder = false</code>):</b> The line is organized strictly by when items were first put into the map (insertion order).</li>
+          <li><b>Special behavior (<code class="inline">accessOrder = true</code>):</b> The line updates <b>every time you touch an item</b> (both reads and writes).</li>
+        </ul>
+
+        <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:16px; margin:16px 0;">
+          <div class="mono-label" style="color:var(--amber); margin-bottom:12px; font-weight:600; font-size:13px;">Step-by-Step Lifecycle (Capacity = 3):</div>
+          
+          <div style="margin-bottom:16px;">
+            <b>1. You put in 3 items:</b> <code class="inline">A</code>, <code class="inline">B</code>, and <code class="inline">C</code>
+            <div style="display:flex; align-items:center; gap:8px; margin:8px 0; font-family:var(--mono); font-size:13px;">
+              <div class="cell hot">A</div> <span>→</span>
+              <div class="cell">B</div> <span>→</span>
+              <div class="cell filled">C</div>
+            </div>
+            <p class="dim" style="margin:4px 0 0 0;">• <code class="inline">A</code> is at the front (oldest, least recently used / eldest).<br>• <code class="inline">C</code> is at the back (newest, most recently used).</p>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <b>2. Now, you only <i>read</i> item A (<code class="inline">map.get("A")</code>):</b>
+            <div style="display:flex; align-items:center; gap:8px; margin:8px 0; font-family:var(--mono); font-size:13px;">
+              <div class="cell hot">B</div> <span>→</span>
+              <div class="cell">C</div> <span>→</span>
+              <div class="cell filled">A</div>
+            </div>
+            <p class="dim" style="margin:4px 0 0 0;">Normally, reading a book doesn't change anything. But because <code class="inline">accessOrder = true</code>, Java unlinks <code class="inline">A</code> and moves it all the way to the end as the newest accessed item: <code class="inline">[B] → [C] → [A]</code>.</p>
+          </div>
+
+          <div>
+            <b>3. What happens next? (Eviction when the shelf fills up)</b>
+            <div style="display:flex; align-items:center; gap:8px; margin:8px 0; font-family:var(--mono); font-size:13px;">
+              <div class="cell ghost" style="text-decoration:line-through; color:var(--coral); border-color:var(--coral);">B (evicted)</div> <span>→</span>
+              <div class="cell hot">C</div> <span>→</span>
+              <div class="cell">A</div> <span>→</span>
+              <div class="cell filled">D</div>
+            </div>
+            <p class="dim" style="margin:4px 0 0 0;">If your shelf fills up and you must insert <code class="inline">D</code>, Java kicks out the item at the very front of the line — which is now <code class="inline">B</code>, because <code class="inline">A</code> was recently protected by your read!</p>
+          </div>
+        </div>
+
+        <p style="margin-top:14px;">In Java, you turn this into a functioning LRU cache by overriding <code class="inline">removeEldestEntry()</code>:</p>
+        <pre><span class="c1">// Textbook JDK LRU Cache (Max capacity: 3)</span>
+<span class="ty">Map</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt; lruCache = <span class="kw">new</span> <span class="ty">LinkedHashMap</span>&lt;&gt;(<span class="st">16</span>, <span class="st">0.75f</span>, <span class="kw">true</span> <span class="c1">/* accessOrder = true */</span>) {
+    <span class="kw">@Override</span>
+    <span class="kw">protected boolean</span> <span class="fn">removeEldestEntry</span>(<span class="ty">Map.Entry</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt; eldest) {
+        <span class="kw">return</span> size() &gt; <span class="st">3</span>; <span class="c1">// Evict the head entry once size exceeds 3</span>
+    }
+};</pre>
+      </div>
+
+      <div class="callout danger" style="margin:22px 0;">
+        <div class="k">Part 2: The Hidden Catch (Why it fails under heavy traffic)</div>
+        <p>Most of the time in programming, <b>reading</b> data is completely safe to do with multiple people at once. Ten people can look at the same webpage or read the same book at the exact same second without bumping into each other.</p>
+        <p><b>Writing</b> (changing) data is different. If two people try to rewrite the same page at the same time, it causes chaos. So programmers put a <b>lock</b> on the book: only one person can write at a time while everyone else waits.</p>
+        <p>Here is the critical problem with <code class="inline">accessOrder = true</code>:</p>
+        <ul style="margin:8px 0 12px 20px; line-height:1.75;">
+          <li><b>Because of that flag, a read is secretly a write.</b></li>
+          <li>When you call <code class="inline">get()</code>, Java isn't just looking at the value. It is actively unhooking pointers (<code class="inline">before</code> and <code class="inline">after</code>) and rearranging the doubly linked chain behind the scenes.</li>
+          <li>If two computer threads try to rearrange the chain at the exact same millisecond, the chain breaks, cyclic references are formed, and the program crashes or loops infinitely.</li>
+          <li><b>The consequence:</b> You must force every reader to wait in a single line using a lock (such as <code class="inline">Collections.synchronizedMap</code>). If thousands of users are reading data at the same second, everything slows to a crawl because nobody can read at the same time.</li>
+        </ul>
+        <p style="margin-bottom:0;">In high-speed, multi-user systems, engineers avoid this flag and use specialized concurrent caches (like <b>Caffeine</b> or custom striped rings) that don't need to rebuild internal chains on every simple read. (See <a href="06-advanced-performance.html#cache-fail">Module 06 · Advanced Performance &amp; Caching</a> for how W-TinyLFU and asynchronous ring buffers solve this without read locks).</p>
+      </div>
+
+      <div id="setmap-tree"></div>
+      <h3>TreeSet and TreeMap: the same Red-Black tree, used from the very first entry</h3>
+      <p>You already met the Red-Black tree a moment ago — it's the shape a HashMap bucket turns itself into once its chain grows past 8 entries. TreeMap and TreeSet don't wait for that to happen. They use a Red-Black tree as their <i>entire</i> storage, starting from the very first entry you insert.</p>
+
+      <p>Here's the plain-English version of "self-balancing," since that word gets thrown around a lot without being explained: a normal binary search tree can accidentally turn into a straight line. If you insert 1, 2, 3, 4, 5 in that exact order into a plain BST, each new number is bigger than the last, so each one becomes the right child of the one before it — you end up with something that behaves exactly like a LinkedList, and looking something up costs O(n), a full walk. A Red-Black tree refuses to let this happen. Every time a node is inserted, the tree checks a small set of coloring rules (every node is marked red or black, and a few simple rules about which colors can sit next to each other must always hold), and if inserting the new node broke a rule, it performs a <b>rotation</b> — a quick local swap of a few pointers — to restore balance immediately.</p>
+
+      <div class="callout">
+        <div class="k">The one guarantee that matters</div>
+        A Red-Black tree guarantees the longest path from root to leaf is never more than roughly twice the length of the shortest path. That single guarantee is what keeps <code class="inline">put()</code>, <code class="inline">get()</code>, and <code class="inline">remove()</code> at O(log n) <b>even in the worst case</b> — unlike HashMap's O(1), which is only true <i>on average</i> and can degrade if hashing goes badly.
+      </div>
+
+      <svg viewBox="0 0 700 220" width="100%" style="max-width:700px;margin:20px 0;">
+        <style>
+          .bn{ fill:#101B30; stroke:#F0837A; stroke-width:1.3; }
+          .bt{ font-family:'IBM Plex Mono',monospace; font-size:12px; fill:#E7EDF7; }
+          .be{ stroke:#5D6D8A; stroke-width:1.2; }
+          .bl{ font-family:'Space Grotesk',sans-serif; font-size:12px; fill:#93A3BE; }
+        </style>
+        <text x="10" y="20" class="bl">Insert 1,2,3,4,5 in order — no balancing</text>
+        <line class="be" x1="40" y1="40" x2="40" y2="70"/>
+        <circle cx="40" cy="35" r="16" class="bn"/><text x="40" y="39" text-anchor="middle" class="bt">1</text>
+        <line class="be" x1="60" y1="80" x2="80" y2="110"/>
+        <circle cx="60" cy="75" r="16" class="bn"/><text x="60" y="79" text-anchor="middle" class="bt">2</text>
+        <line class="be" x1="100" y1="150" x2="120" y2="180"/>
+        <circle cx="100" cy="115" r="16" class="bn"/><text x="100" y="119" text-anchor="middle" class="bt">3</text>
+        <circle cx="140" cy="155" r="16" class="bn"/><text x="140" y="159" text-anchor="middle" class="bt">4</text>
+        <line class="be" x1="100" y1="130" x2="140" y2="140"/>
+        <circle cx="180" cy="195" r="16" class="bn"/><text x="180" y="199" text-anchor="middle" class="bt">5</text>
+        <line class="be" x1="140" y1="170" x2="180" y2="180"/>
+        <text x="30" y="215" class="bl" style="fill:#F0837A;">a straight line — finding "5" means walking past 1,2,3,4 first. O(n).</text>
+
+        <text x="400" y="20" class="bl">Same 5 values — Red-Black balanced</text>
+        <line class="ge" x1="500" y1="55" x2="450" y2="105"/>
+        <line class="ge" x1="500" y1="55" x2="550" y2="105"/>
+        <circle cx="500" cy="40" r="17" class="gn"/><text x="500" y="45" text-anchor="middle" class="bt">3</text>
+        <line class="ge" x1="450" y1="120" x2="420" y2="160"/>
+        <circle cx="450" cy="105" r="16" class="gn"/><text x="450" y="109" text-anchor="middle" class="bt">2</text>
+        <circle cx="420" cy="175" r="15" class="gn"/><text x="420" y="179" text-anchor="middle" class="bt">1</text>
+        <line class="ge" x1="550" y1="120" x2="580" y2="160"/>
+        <circle cx="550" cy="105" r="16" class="gn"/><text x="550" y="109" text-anchor="middle" class="bt">4</text>
+        <circle cx="580" cy="175" r="15" class="gn"/><text x="580" y="179" text-anchor="middle" class="bt">5</text>
+        <text x="400" y="215" class="bl" style="fill:#7FD99B;">a rotation kept it short and wide — finding any value takes at most 2 hops. O(log n).</text>
+      </svg>
+
+      <p>TreeSet follows the same pattern as HashSet and LinkedHashSet: it's a thin wrapper hiding a private <code class="inline">TreeMap&lt;E,Object&gt;</code> field, reusing the same one-shared-dummy-value trick. What you get in exchange for O(log n) instead of O(1) average is real ordering power a HashMap can never offer: <code class="inline">first()</code> / <code class="inline">last()</code> (smallest / largest), <code class="inline">ceiling(x)</code> / <code class="inline">floor(x)</code> (smallest ≥x / largest ≤x), <code class="inline">higher(x)</code> / <code class="inline">lower(x)</code> (strictly greater / strictly less), and whole range views like <code class="inline">headMap()</code>, <code class="inline">tailMap()</code>, and <code class="inline">subMap()</code>. None of this is possible on a HashMap — a HashMap doesn't track order, so it has no concept of "what comes just after this key."</p>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>Set family — one glance</h4>
+          <table style="margin:8px 0 0;">
+            <tr><th>Class</th><th>Backed by</th><th>Order</th><th>add/contains</th></tr>
+            <tr><td class="mono">HashSet</td><td class="mono">HashMap</td><td>none — looks random</td><td>O(1) avg</td></tr>
+            <tr><td class="mono">LinkedHashSet</td><td class="mono">LinkedHashMap</td><td>insertion order</td><td>O(1) avg</td></tr>
+            <tr><td class="mono">TreeSet</td><td class="mono">Red-Black tree</td><td>sorted order</td><td>O(log n)</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h4>Map family — one glance</h4>
+          <table style="margin:8px 0 0;">
+            <tr><th>Class</th><th>Extra cost vs HashMap</th><th>Order</th><th>get/put</th></tr>
+            <tr><td class="mono">HashMap</td><td>—</td><td>none — looks random</td><td>O(1) avg</td></tr>
+            <tr><td class="mono">LinkedHashMap</td><td>2 refs / entry</td><td>insertion (or access) order</td><td>O(1) avg</td></tr>
+            <tr><td class="mono">TreeMap</td><td>tree, not array</td><td>sorted order</td><td>O(log n)</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div id="setmap-demo"></div>
+      <div class="viz">
+        <div class="viz-controls">
+          <input id="set-word" placeholder="type a word…" style="font-family:var(--mono);background:#080D18;border:1px solid var(--line);color:#E7EDF7;padding:8px 10px;border-radius:4px;width:180px;">
+          <button class="btn" onclick="setDemo.add()">add to all three →</button>
+          <button class="btn alt" onclick="setDemo.reset()">reset</button>
+        </div>
+        <div class="grid3">
+          <div class="card"><h4>HashSet</h4><div id="set-hash" class="mono" style="font-size:12.5px;line-height:2;"></div></div>
+          <div class="card"><h4>LinkedHashSet</h4><div id="set-linked" class="mono" style="font-size:12.5px;line-height:2;"></div></div>
+          <div class="card"><h4>TreeSet</h4><div id="set-tree" class="mono" style="font-size:12.5px;line-height:2;"></div></div>
+        </div>
+        <div class="viz-caption" id="set-caption">Same words, added in the same order, into all three. Watch the iteration order come out different for each one — because each one stores it differently underneath. HashSet's order isn't random, by the way — it's just the bucket index, which looks arbitrary to us but is 100% determined by the hash.</div>
+      </div>
+    </section>
+
+    <!-- Module Complete Card -->
+    <div class="chapter-complete-card">
+      <div class="chapter-complete-info">
+        <h4>Completed Module 03?</h4>
+        <p>Mark Map &amp; Set Internals as complete to update your curriculum progress.</p>
+      </div>
+      <button type="button" class="btn-mark-complete" data-module="03">
+        <span>○</span> Mark as Completed
+      </button>
+    </div>
+
+    <!-- Pagination Footer -->
+    <div class="module-pagination">
+      <a href="02-lists.html" class="page-btn">← Module 02 · Lists in Depth</a>
+      <a href="04-queues-and-sequenced.html" class="page-btn primary">Next: Module 04 · Queues &amp; Sequenced →</a>
+    </div>
+
+    <footer>Built for lead-level Java interview preparation · every mechanism traced to the JDK source behavior it describes</footer>
+  </main>
+</div>
+
+<script>
+  // simple deterministic string hash (mimics java String.hashCode direction) for demo purposes
+  function demoHash(str){
+    let h = 0;
+    for(let i=0;i<str.length;i++){ h = (Math.imul(31,h) + str.charCodeAt(i))|0; }
+    return h;
+  }
+  function spread(h){ return (h ^ (h >>> 16)) | 0; }
+
+  const hmDemo = (function(){
+    const el = document.getElementById('hm-steps');
+    function go(){
+      const key = document.getElementById('hm-key').value || 'sampleKey';
+      const raw = demoHash(key);
+      const sp = spread(raw);
+      const idx = (sp & 15) >>> 0;
+      el.innerHTML = `
+        <div>key.hashCode() &nbsp;→&nbsp; <span style="color:#F5B563">${raw}</span></div>
+        <div>spread: h ^ (h &gt;&gt;&gt; 16) &nbsp;→&nbsp; <span style="color:#B39DFB">${sp}</span></div>
+        <div>bucket = spread &amp; (16-1) &nbsp;→&nbsp; <span style="color:#6EE7D8;font-size:18px;">bucket ${idx}</span></div>`;
+    }
+    return {go};
+  })();
+
+  const bucketDemo = (function(){
+    const N = 16;
+    let buckets = Array.from({length:N}, ()=>[]);
+    const sampleWords = ['orderId','userToken','sessionKey','cacheEntry','productSku','regionCode','deviceId','apiKey','txnRef','shardKey','nodeId','eventType'];
+    const el = document.getElementById('bucket-table');
+    const cap = document.getElementById('bucket-caption');
+    function render(){
+      el.innerHTML = buckets.map((b,i)=>{
+        const chain = b.map(k=>`<div class="cell filled" style="min-width:80px;">${k}</div>`).join('<span style="color:#5D6D8A;margin:0 4px;">→</span>');
+        const treeified = b.length >= 8;
+        return `<div style="display:flex;align-items:center;margin-bottom:6px;">
+          <div class="cell${b.length?' hot':''}" style="min-width:34px;">${i}</div>
+          <span style="color:#5D6D8A;margin:0 8px;">|</span>
+          ${b.length ? chain : '<span style="color:#5D6D8A;font-family:var(--mono);font-size:12px;">empty</span>'}
+          ${treeified ? '<span style="color:#B39DFB;font-family:var(--mono);font-size:11px;margin-left:10px;">⚠ treeified (≥8)</span>' : ''}
+        </div>`;
+      }).join('');
+    }
+    function insertRandom(){
+      const w = sampleWords[Math.floor(Math.random()*sampleWords.length)] + Math.floor(Math.random()*90+10);
+      const idx = (spread(demoHash(w)) & (N-1)) >>> 0;
+      buckets[idx].push(w);
+      cap.textContent = `"${w}" hashed to bucket ${idx}` + (buckets[idx].length>1 ? ` — collision! chain length now ${buckets[idx].length}.` : '.');
+      render();
+    }
+    function reset(){ buckets = Array.from({length:N}, ()=>[]); cap.textContent='16 buckets. Insert a few keys and watch collisions form chains.'; render(); }
+    render();
+    return {insertRandom, reset};
+  })();
+
+  // ---- HashSet vs LinkedHashSet vs TreeSet ordering demo ----
+  const setDemo = (function(){
+    let items = [];
+    const hashEl = document.getElementById('set-hash');
+    const linkedEl = document.getElementById('set-linked');
+    const treeEl = document.getElementById('set-tree');
+    const cap = document.getElementById('set-caption');
+    function render(){
+      // LinkedHashSet: pure insertion order
+      linkedEl.innerHTML = items.length
+        ? items.map((w,i)=>`${i+1}. ${w}`).join('<br>')
+        : '<span style="color:#5D6D8A;">empty</span>';
+      // TreeSet: natural (alphabetical) order
+      const sorted = [...items].sort();
+      treeEl.innerHTML = sorted.length
+        ? sorted.map(w=>w).join('<br>')
+        : '<span style="color:#5D6D8A;">empty</span>';
+      // HashSet: order by bucket index
+      const withBucket = items.map(w => ({ w, b: (spread(demoHash(w)) & 15) >>> 0 }));
+      withBucket.sort((a,b) => a.b - b.b);
+      hashEl.innerHTML = withBucket.length
+        ? withBucket.map(x => `${x.w} <span style="color:#5D6D8A;">(bucket ${x.b})</span>`).join('<br>')
+        : '<span style="color:#5D6D8A;">empty</span>';
+    }
+    function add(){
+      const input = document.getElementById('set-word');
+      const w = (input.value || '').trim();
+      if(!w) return;
+      if(!items.includes(w)){
+        items.push(w);
+        cap.textContent = `"${w}" added. Same insert, three different iteration orders below — none of them are wrong, they're just answering different questions.`;
+      } else {
+        cap.textContent = `"${w}" is already in the set — a Set silently ignores duplicate add() calls (add() returns false).`;
+      }
+      input.value = '';
+      render();
+    }
+    function reset(){ items = []; cap.textContent = "Same words, added in the same order, into all three. Watch the iteration order come out different for each one — because each one stores it differently underneath."; render(); }
+    render();
+    return {add, reset};
+  })();
+</script>
+
+</body>
+</html>

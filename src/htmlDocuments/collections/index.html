@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="sepia" data-font="sans" data-size="md" data-width="focus">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JVM Collections Field Guide — Interactive Documentation Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="reader.js"></script>
+</head>
+<body style="overflow: hidden;">
+
+<div class="portal-container">
+  <!-- Left Side: Comprehensive Index Menu -->
+  <nav class="portal-sidebar" id="portal-sidebar">
+    <div class="portal-sidebar-header">
+      <a href="overview.html" target="content-frame" class="portal-sidebar-brand">
+        <span style="color:var(--accent); font-size:16px;">◆</span> JVM Collections
+      </a>
+      <div class="portal-search-box">
+        <span class="portal-search-icon">🔍</span>
+        <input type="text" id="sidebar-search" class="portal-search-input" placeholder="Search topics, structures..." autocomplete="off">
+      </div>
+    </div>
+
+    <!-- Course Progress Tracker -->
+    <div class="sidebar-progress-card">
+      <div class="sidebar-progress-header">
+        <span style="font-family:var(--mono); font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.06em;">Course Progress</span>
+        <span id="progress-counter" style="font-family:var(--mono); font-size:11px; font-weight:600; color:var(--accent);">0 of 7 Completed</span>
+      </div>
+      <div class="sidebar-progress-track">
+        <div id="progress-fill-bar" class="sidebar-progress-fill" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <div class="portal-menu" id="portal-menu">
+      <!-- Hub & Overview -->
+      <div class="menu-group">
+        <a href="overview.html" target="content-frame" class="portal-link active">
+          <span>❖ Curriculum Overview</span>
+          <span class="badge badge-cyan" style="font-size:9px;">HUB</span>
+        </a>
+      </div>
+
+      <!-- MODULE 01 -->
+      <div class="menu-group">
+        <div class="menu-group-title">
+          <span>01 · Memory &amp; Foundations</span>
+        </div>
+        <a href="01-jvm-memory-and-foundations.html" target="content-frame" class="portal-link" data-module-id="01">
+          <span>Memory &amp; Big-O Intro</span>
+        </a>
+        <a href="01-jvm-memory-and-foundations.html#memory-heap" target="content-frame" class="portal-link lvl2">Stack vs. Heap</a>
+        <a href="01-jvm-memory-and-foundations.html#memory-gc" target="content-frame" class="portal-link lvl2">Garbage Collection</a>
+        <a href="01-jvm-memory-and-foundations.html#foundations-mem" target="content-frame" class="portal-link lvl2">Memory Street Analogy</a>
+        <a href="01-jvm-memory-and-foundations.html#big-o" target="content-frame" class="portal-link lvl2">Big-O Visual Guide 🖼️</a>
+        <a href="01-jvm-memory-and-foundations.html#family" target="content-frame" class="portal-link lvl2">Collection vs. Map Tree</a>
+      </div>
+
+      <!-- MODULE 02 -->
+      <div class="menu-group">
+        <div class="menu-group-title">
+          <span>02 · Lists in Depth</span>
+        </div>
+        <a href="02-lists.html" target="content-frame" class="portal-link" data-module-id="02">
+          <span>Arrays, ArrayList, LinkedList &amp; COW</span>
+        </a>
+        <a href="02-lists.html#jargon-buster" target="content-frame" class="portal-link lvl2">0. Plain-English Glossary</a>
+        <a href="02-lists.html#arrays-hardware" target="content-frame" class="portal-link lvl2">1. RAM &amp; O(1) Hardware Math</a>
+        <a href="02-lists.html#stack-heap-arrays" target="content-frame" class="portal-link lvl2">2. Stack vs. Heap Arrays</a>
+        <a href="02-lists.html#primitive-vs-reference" target="content-frame" class="portal-link lvl2">3. Primitive vs. Object Arrays</a>
+        <a href="02-lists.html#why-collections" target="content-frame" class="portal-link lvl2">4. Limits of Plain Arrays</a>
+        <a href="02-lists.html#lists-array" target="content-frame" class="portal-link lvl2">5. ArrayList &amp; 1.5× Resizing</a>
+        <a href="02-lists.html#al-sim" target="content-frame" class="portal-link lvl2">⚡ Interactive Shift Demo</a>
+        <a href="02-lists.html#lists-linked" target="content-frame" class="portal-link lvl2">6. LinkedList &amp; Node Bloat</a>
+        <a href="02-lists.html#cpu-cache" target="content-frame" class="portal-link lvl2">7. CPU Cache Lines &amp; Speed</a>
+        <a href="02-lists.html#list-iteration" target="content-frame" class="portal-link lvl2">8. Iterator &amp; modCount Engine</a>
+        <a href="02-lists.html#lists-vector" target="content-frame" class="portal-link lvl2">9. Vector &amp; The 3 Eras</a>
+        <a href="02-lists.html#cow-list" target="content-frame" class="portal-link lvl2">10. CopyOnWriteArrayList ⚡</a>
+        <a href="02-lists.html#decision-matrix" target="content-frame" class="portal-link lvl2">11. Architectural Decision Guide</a>
+        <a href="02-lists.html#interview-prep" target="content-frame" class="portal-link lvl2" style="color: var(--accent); font-weight: 700;">12. ⚡ Rapid Interview Revision</a>
+        <a href="02-lists.html#interview-qa" target="content-frame" class="portal-link lvl2">13. Interview Q&amp;A Cheatsheet</a>
+      </div>
+
+      <!-- MODULE 03 -->
+      <div class="menu-group">
+        <div class="menu-group-title">
+          <span>03 · Maps &amp; Sets Internals</span>
+        </div>
+        <a href="03-maps-and-sets.html" target="content-frame" class="portal-link" data-module-id="03">
+          <span>HashMap &amp; Sets Overview</span>
+        </a>
+        <a href="03-maps-and-sets.html#hashmap-hash" target="content-frame" class="portal-link lvl2">1. Turn Key to Number</a>
+        <a href="03-maps-and-sets.html#hashmap-spread" target="content-frame" class="portal-link lvl2">2. Bit Spreading (XOR)</a>
+        <a href="03-maps-and-sets.html#hashmap-mask" target="content-frame" class="portal-link lvl2">3. Power-of-2 Masking ⚡</a>
+        <a href="03-maps-and-sets.html#hashmap-collisions" target="content-frame" class="portal-link lvl2">Collisions &amp; Chaining ⚡</a>
+        <a href="03-maps-and-sets.html#hashmap-tree" target="content-frame" class="portal-link lvl2">Treeification (8/6 Rule)</a>
+        <a href="03-maps-and-sets.html#hashmap-resize" target="content-frame" class="portal-link lvl2">Resizing Mechanics</a>
+        <a href="03-maps-and-sets.html#setmap-hashset" target="content-frame" class="portal-link lvl2">HashSet (Hidden Map)</a>
+        <a href="03-maps-and-sets.html#setmap-linked" target="content-frame" class="portal-link lvl2">LinkedHashSet &amp; Map</a>
+        <a href="03-maps-and-sets.html#setmap-lru" target="content-frame" class="portal-link lvl2">LRU Cache &amp; accessOrder</a>
+        <a href="03-maps-and-sets.html#setmap-tree" target="content-frame" class="portal-link lvl2">TreeSet &amp; TreeMap</a>
+        <a href="03-maps-and-sets.html#setmap-demo" target="content-frame" class="portal-link lvl2">Set Ordering Comparison ⚡</a>
+      </div>
+
+      <!-- MODULE 04 -->
+      <div class="menu-group">
+        <div class="menu-group-title">
+          <span>04 · Queues &amp; Sequenced</span>
+        </div>
+        <a href="04-queues-and-sequenced.html" target="content-frame" class="portal-link" data-module-id="04">
+          <span>Queues &amp; Deques</span>
+        </a>
+        <a href="04-queues-and-sequenced.html#queues-deque" target="content-frame" class="portal-link lvl2">ArrayDeque Circular Buffer</a>
+        <a href="04-queues-and-sequenced.html#queues-heap" target="content-frame" class="portal-link lvl2">PriorityQueue Min-Heap</a>
+        <a href="04-queues-and-sequenced.html#heap-sim" target="content-frame" class="portal-link lvl2">Heap SiftUp/Down Demo ⚡</a>
+        <a href="04-queues-and-sequenced.html#sequenced" target="content-frame" class="portal-link lvl2">Java 21 Sequenced</a>
+        <a href="04-queues-and-sequenced.html#reversed-view" target="content-frame" class="portal-link lvl2">reversed() Zero-Copy</a>
+      </div>
+
+      <!-- MODULE 05 -->
+      <div class="menu-group">
+        <div class="menu-group-title">
+          <span>05 · Concurrency</span>
+        </div>
+        <a href="05-concurrency.html" target="content-frame" class="portal-link" data-module-id="05">
+          <span>Thread Safety Foundations</span>
+        </a>
+        <a href="05-concurrency.html#cas-sim" target="content-frame" class="portal-link lvl2">CAS vs. Race Demo ⚡</a>
+        <a href="05-concurrency.html#chm" target="content-frame" class="portal-link lvl2">ConcurrentHashMap</a>
+        <a href="05-concurrency.html#chm-resize" target="content-frame" class="portal-link lvl2">Cooperative Resizing</a>
+        <a href="05-concurrency.html#chm-null" target="content-frame" class="portal-link lvl2">Why Null is Banned</a>
+        <a href="05-concurrency.html#cow" target="content-frame" class="portal-link lvl2">CopyOnWriteArrayList</a>
+        <a href="05-concurrency.html#bqueues" target="content-frame" class="portal-link lvl2">Blocking Queues</a>
+        <a href="05-concurrency.html#skiplist" target="content-frame" class="portal-link lvl2">ConcurrentSkipListMap</a>
+      </div>
+
+      <!-- MODULE 06 -->
+      <div class="menu-group">
+        <div class="menu-group-title">
+          <span>06 · Performance &amp; Caching</span>
+        </div>
+        <a href="06-advanced-performance.html" target="content-frame" class="portal-link" data-module-id="06">
+          <span>Mechanical Sympathy</span>
+        </a>
+        <a href="06-advanced-performance.html#cache-lines" target="content-frame" class="portal-link lvl2">64-Byte Cache Lines</a>
+        <a href="06-advanced-performance.html#false-sharing" target="content-frame" class="portal-link lvl2">False Sharing (Pizza Box)</a>
+        <a href="06-advanced-performance.html#contended" target="content-frame" class="portal-link lvl2">@Contended &amp; LongAdder</a>
+        <a href="06-advanced-performance.html#compressed-oops" target="content-frame" class="portal-link lvl2">32 GB Cliff (OOPs)</a>
+        <a href="06-advanced-performance.html#caffeine" target="content-frame" class="portal-link lvl2">Caffeine Caching</a>
+        <a href="06-advanced-performance.html#wtinylfu" target="content-frame" class="portal-link lvl2">W-TinyLFU Architecture</a>
+      </div>
+
+      <!-- MODULE 07 -->
+      <div class="menu-group">
+        <div class="menu-group-title">
+          <span>07 · Recipes &amp; Decision Matrix</span>
+        </div>
+        <a href="07-recipes-and-practice.html" target="content-frame" class="portal-link" data-module-id="07">
+          <span>Hands-On Methods</span>
+        </a>
+        <a href="07-recipes-and-practice.html#handson-list" target="content-frame" class="portal-link lvl2">List Recipes &amp; Gotchas</a>
+        <a href="07-recipes-and-practice.html#handson-map" target="content-frame" class="portal-link lvl2">merge() &amp; computeIfAbsent()</a>
+        <a href="07-recipes-and-practice.html#streams" target="content-frame" class="portal-link lvl2">Stream API Idioms</a>
+        <a href="07-recipes-and-practice.html#practice" target="content-frame" class="portal-link lvl2">24 LeetCode Patterns</a>
+        <a href="07-recipes-and-practice.html#scenarios" target="content-frame" class="portal-link lvl2">4 System Design Scenarios</a>
+        <a href="07-recipes-and-practice.html#cheatsheet" target="content-frame" class="portal-link lvl2">Master Decision Matrix</a>
+      </div>
+
+      <!-- Original Document Reference -->
+      <div class="menu-group" style="margin-top: 30px; border-top: 1px solid var(--line); padding-top: 16px;">
+        <a href="java-collections (1).html" target="_blank" class="portal-link" style="color:var(--text-faint); font-size:12px;">
+          <span>📄 Full Single-Page Doc</span>
+          <span>↗</span>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Right Side: Content Frame with Top Reader Bar -->
+  <main class="portal-main">
+    <header class="portal-top-bar">
+      <div class="portal-cur-title">
+        <span style="color:var(--accent); font-size:15px;">◆</span> JVM Collections Field Guide
+      </div>
+      <div class="reader-toolbar">
+        <!-- Theme Switcher -->
+        <div class="reader-btn-group" title="Reading Theme Mode">
+          <button type="button" class="reader-btn" data-theme-set="sepia" title="Warm Paper / Sepia Mode (Eye-friendly)">📜 Paper</button>
+          <button type="button" class="reader-btn" data-theme-set="light" title="Clean Editorial Light">☀️ Light</button>
+          <button type="button" class="reader-btn" data-theme-set="dark" title="Soothing Slate Dark">🌙 Dark</button>
+          <button type="button" class="reader-btn" data-theme-set="midnight" title="OLED Midnight">🌑 Midnight</button>
+        </div>
+        <!-- Font Switcher -->
+        <div class="reader-btn-group" title="Typography">
+          <button type="button" class="reader-btn" data-font-set="sans" title="Modern Sans (Inter/Jakarta)">Aa Sans</button>
+          <button type="button" class="reader-btn" data-font-set="serif" title="Editorial Book Serif (Source Serif)">Aa Serif</button>
+        </div>
+        <!-- Font Sizer -->
+        <div class="reader-btn-group" title="Font Size">
+          <button type="button" class="reader-btn" data-size-btn="down" title="Smaller font">A−</button>
+          <button type="button" class="reader-btn" data-size-btn="up" title="Larger font">A+</button>
+        </div>
+        <!-- Focus Width -->
+        <div class="reader-btn-group" title="Reading Width">
+          <button type="button" class="reader-btn" data-width-toggle title="Toggle between 74ch reading focus and full width">📖 Focus</button>
+        </div>
+      </div>
+    </header>
+    <iframe id="content-frame" name="content-frame" class="portal-frame" src="overview.html" title="Curriculum Content"></iframe>
+  </main>
+</div>
+
+<script>
+  // Link active state and click handler
+  const links = document.querySelectorAll('.portal-link');
+  links.forEach(link => {
+    link.addEventListener('click', function(e) {
+      if(this.getAttribute('target') === '_blank') return;
+      links.forEach(l => l.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+  // Filter search bar in left sidebar
+  const searchInput = document.getElementById('sidebar-search');
+  searchInput.addEventListener('input', function() {
+    const q = this.value.toLowerCase().trim();
+    const groups = document.querySelectorAll('.menu-group');
+
+    groups.forEach(group => {
+      let groupHasMatch = false;
+      const groupLinks = group.querySelectorAll('.portal-link');
+      groupLinks.forEach(link => {
+        const text = link.textContent.toLowerCase();
+        if(!q || text.includes(q)) {
+          link.style.display = 'flex';
+          groupHasMatch = true;
+        } else {
+          link.style.display = 'none';
+        }
+      });
+
+      const title = group.querySelector('.menu-group-title');
+      if(title) {
+        title.style.display = (!q || groupHasMatch) ? 'flex' : 'none';
+      }
+    });
+  });
+
+  // Sync active link when frame navigates
+  const frame = document.getElementById('content-frame');
+  frame.addEventListener('load', () => {
+    try {
+      const currentUrl = frame.contentWindow.location.href;
+      const filename = currentUrl.substring(currentUrl.lastIndexOf('/') + 1);
+      const hash = frame.contentWindow.location.hash;
+      const targetHref = hash ? filename : filename.split('#')[0];
+
+      links.forEach(l => {
+        const href = l.getAttribute('href');
+        if (href === targetHref || (!hash && href.split('#')[0] === targetHref)) {
+          links.forEach(other => other.classList.remove('active'));
+          l.classList.add('active');
+        }
+      });
+
+      // Synchronize reader settings to newly loaded frame
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'sepia';
+      const currentFont = document.documentElement.getAttribute('data-font') || 'sans';
+      const currentSize = document.documentElement.getAttribute('data-size') || 'md';
+      const currentWidth = document.documentElement.getAttribute('data-width') || 'focus';
+      frame.contentWindow.postMessage({
+        type: 'JVM_READER_SETTINGS_CHANGE',
+        settings: { theme: currentTheme, font: currentFont, size: currentSize, width: currentWidth }
+      }, '*');
+    } catch(e) {
+      // fallback for file:// origin policies
+    }
+  });
+</script>
+
+</body>
+</html>

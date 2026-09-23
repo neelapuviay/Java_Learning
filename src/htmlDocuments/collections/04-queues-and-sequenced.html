@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 04: Queues, Heaps & Sequenced Collections — Java Collections</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="reader.js"></script>
+</head>
+<body>
+
+<div class="module-header-bar">
+  <div class="module-header-breadcrumb">
+    <span class="badge badge-violet">MODULE 04</span> <span>Queues, Heaps &amp; Sequenced Collections</span>
+  </div>
+  <a href="index.html" target="_top" class="page-btn" style="padding:4px 10px;font-size:11px;">⊞ Full Portal View</a>
+</div>
+
+<div class="shell single-col">
+  <main>
+    <div class="hero">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+        <span class="badge badge-violet">MODULE 04</span>
+        <span class="badge badge-amber">⏱️ 15 min read</span>
+        <span class="badge badge-cyan">Modern Java</span>
+      </div>
+      <h1>Queues, Heaps &amp; <em>Sequenced Collections</em>.</h1>
+      <p class="lede">A List cares about positional index. A Queue cares about <em>order of extraction</em> — who gets served next. Explore the pointerless array math of ArrayDeque, binary min-heaps, and Java 21's long-awaited uniform SequencedCollection hierarchy.</p>
+      <div class="promise">
+        <div><b>ArrayDeque</b>why circular pointer masking beats LinkedList for queues and stacks</div>
+        <div><b>Binary Min-Heap</b>live interactive siftUp() and siftDown() visualization</div>
+        <div><b>Java 21 Sequenced</b>zero-copy O(1) reversed() views across Lists, Sets, and Maps</div>
+      </div>
+    </div>
+
+    <!-- ================= SECTION: QUEUES & HEAPS ================= -->
+    <section id="queues">
+      <div class="eyebrow">06 — ORDERED EXTRACTION</div>
+      <h2>Queue, Deque, and the binary heap</h2>
+      <div class="sub">A List cares about position. A Queue cares about <i>order of extraction</i> — who gets served next.</div>
+
+      <div id="queues-deque"></div>
+      <h3>ArrayDeque: the modern default</h3>
+      <p><code class="inline">ArrayDeque</code> ("double-ended queue") is a circular array with a <code class="inline">head</code> and <code class="inline">tail</code> index. It supports adding/removing from <i>either</i> end in O(1) without ever allocating a node object — so it plays FIFO queue, LIFO stack, and deque all at once, and generally beats both <code class="inline">LinkedList</code> and the ancient <code class="inline">Stack</code> class for these roles.</p>
+
+      <div class="analogy">
+        <div class="icon">🔄</div>
+        <div>
+          <div class="k">Analogy: a circular parking lot</div>
+          Picture a row of parking spaces bent into a circle. Cars enter at one marker (tail) and leave from another (head). When the lot fills, instead of building a longer street, the whole ring just doubles in size. When the head pointer would run off the end of the array, it silently wraps back to index 0 — that's the bitwise trick <code class="inline">head = (head - 1) & (capacity - 1)</code>, the same power-of-two masking trick HashMap uses.
+        </div>
+      </div>
+
+      <div id="queues-heap"></div>
+      <h3>PriorityQueue: a binary heap, not a sorted list</h3>
+      <p>A common misconception: <code class="inline">PriorityQueue</code> does <b>not</b> keep its elements fully sorted. It keeps one guarantee only — <b>the smallest element is always at the front</b> — using a shape called a <b>binary min-heap</b>, stored compactly inside a plain array.</p>
+      <p>The trick is a pure-arithmetic tree: for any array index <var>i</var>, its parent lives at <code class="inline">(i-1)/2</code>, and its children live at <code class="inline">2i+1</code> and <code class="inline">2i+2</code>. No pointers at all — the shape is implied entirely by position.</p>
+
+      <div id="heap-sim"></div>
+      <div class="viz" style="padding: 0; overflow: hidden; background: var(--panel-2); border: 1px solid var(--line);">
+        <iframe id="heap-viz-frame" src="min-heap-visualizer.html" style="width: 100%; height: 600px; border: none; display: block; border-radius: 8px; background: transparent;" title="Interactive Binary Min-Heap Visualizer"></iframe>
+        <div class="viz-caption" style="padding: 12px 18px 16px; margin: 0; border-top: 1px solid var(--line);"><b>Interactive Binary Min-Heap:</b> SiftUp (bubble up on insert) and SiftDown (sink down on poll) animated step-by-step with real-time tree structure and flat backing array index mapping. Both operations run in O(log n).</div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION: SEQUENCED COLLECTIONS ================= -->
+    <section id="sequenced">
+      <div class="eyebrow">07 — JAVA 21</div>
+      <h2>Sequenced Collections: one missing interface, finally added</h2>
+      <div class="sub">A real gap existed for years: every ordered collection had a "first" and "last" element, but there was no common way to say so.</div>
+
+      <div id="sequenced-prob"></div>
+      <div class="callout warn">
+        <div class="k">The problem, before Java 21</div>
+        Getting the last element required a different idiom per type: <code class="inline">list.get(list.size()-1)</code> for a List, <code class="inline">deque.getLast()</code> for a Deque, <code class="inline">sortedSet.last()</code> for a SortedSet — and for a <code class="inline">LinkedHashSet</code>, there was no shortcut at all; you had to iterate the entire set just to reach the end.
+      </div>
+
+      <p><b>JEP 431</b> introduced <code class="inline">SequencedCollection&lt;E&gt;</code>, sitting between <code class="inline">Collection&lt;E&gt;</code> and both <code class="inline">List&lt;E&gt;</code> and <code class="inline">Deque&lt;E&gt;</code>. It standardizes six methods every ordered collection can now share:</p>
+      <pre>interface SequencedCollection&lt;E&gt; extends Collection&lt;E&gt; {
+    void addFirst(E e);
+    void addLast(E e);
+    E getFirst();
+    E getLast();
+    E removeFirst();
+    E removeLast();
+    SequencedCollection&lt;E&gt; reversed();  <span class="c1">// O(1) view, no copying</span>
+}</pre>
+      
+      <div id="reversed-view"></div>
+      <p><code class="inline">reversed()</code> is the elegant part: it doesn't build a new reversed copy. It returns a thin <i>view</i> object that reads the same backing data back-to-front — so it's O(1) in time and memory, no matter the collection's size.</p>
+
+      <div id="sequenced-types" class="grid2">
+        <div class="card">
+          <h4>SequencedSet&lt;E&gt;</h4>
+          <p class="dim" style="margin:0;">Extends both Set and SequencedCollection. <code class="inline">LinkedHashSet</code> now supports <code class="inline">addFirst</code>/<code class="inline">addLast</code> in O(1). <code class="inline">SortedSet</code> also implements this interface, but throws <code class="inline">UnsupportedOperationException</code> on <code class="inline">addFirst</code> — its order is dictated by a Comparator, not insertion, so "add at the front" is a contradiction it correctly refuses.</p>
+        </div>
+        <div class="card">
+          <h4>SequencedMap&lt;K,V&gt;</h4>
+          <p class="dim" style="margin:0;">Adds <code class="inline">firstEntry()</code>, <code class="inline">lastEntry()</code>, <code class="inline">pollFirstEntry()</code>, <code class="inline">pollLastEntry()</code>, plus sequenced views <code class="inline">sequencedKeySet()</code> and <code class="inline">sequencedEntrySet()</code>. Implemented by <code class="inline">LinkedHashMap</code> and <code class="inline">TreeMap</code>.</p>
+        </div>
+      </div>
+
+      <!-- Quick Knowledge Check Accordion -->
+      <div class="quiz-box">
+        <div class="quiz-header">
+          <span class="quiz-badge">💡 Quick Knowledge Check</span>
+          <button type="button" class="quiz-toggle" aria-expanded="false">Test Your Intuition <span class="quiz-toggle-icon">▼</span></button>
+        </div>
+        <div class="quiz-question">Why does <code>ArrayDeque</code> consistently outperform <code>LinkedList</code> when used as a Queue or Stack (LIFO/FIFO), and why does <code>ArrayDeque</code> forbid null elements?</div>
+        <div class="quiz-answer">
+          <b>Answer:</b> <code>ArrayDeque</code> uses a circular power-of-two array with head/tail pointers wrapped via bitwise <code>(tail + 1) &amp; (elements.length - 1)</code>. It has zero per-element Node object allocations and excellent CPU cache locality. It forbids <code>null</code> elements because methods like <code>poll()</code> and <code>peek()</code> return <code>null</code> as a sentinel value indicating that the deque is empty.
+        </div>
+      </div>
+    </section>
+
+    <!-- Module Complete Card -->
+    <div class="chapter-complete-card">
+      <div class="chapter-complete-info">
+        <h4>Completed Module 04?</h4>
+        <p>Mark Queues &amp; Sequenced Collections as complete to update your curriculum progress.</p>
+      </div>
+      <button type="button" class="btn-mark-complete" data-module="04">
+        <span>○</span> Mark as Completed
+      </button>
+    </div>
+
+    <!-- Pagination Footer -->
+    <div class="module-pagination">
+      <a href="03-maps-and-sets.html" class="page-btn">← Module 03 · Maps &amp; Sets</a>
+      <a href="05-concurrency.html" class="page-btn primary">Next: Module 05 · Concurrency →</a>
+    </div>
+
+    <footer>Built for lead-level Java interview preparation · every mechanism traced to the JDK source behavior it describes</footer>
+  </main>
+</div>
+
+<script>
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'widget-resize') {
+      const frame = document.getElementById('heap-viz-frame');
+      if (frame && e.data.height) {
+        frame.style.height = Math.max(e.data.height + 20, 520) + 'px';
+      }
+    }
+  });
+</script>
+
+</body>
+</html>

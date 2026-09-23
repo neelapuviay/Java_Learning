@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java Collections & Concurrency — Built From Zero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0A111F;
+    --bg-alt: #0D1526;
+    --panel: #101B30;
+    --panel-2: #0C1626;
+    --grid: rgba(140,170,220,0.07);
+    --line: rgba(140,170,220,0.16);
+    --text: #E7EDF7;
+    --text-dim: #93A3BE;
+    --text-faint: #5D6D8A;
+    --cyan: #6EE7D8;
+    --cyan-dim: #3E8E88;
+    --amber: #F5B563;
+    --coral: #F0837A;
+    --green: #7FD99B;
+    --violet: #B39DFB;
+    --mono: 'IBM Plex Mono', monospace;
+    --serif: 'Source Serif 4', serif;
+    --sans: 'Space Grotesk', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0/40px 40px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0/40px 40px,
+      var(--bg);
+    color:var(--text);
+    font-family:var(--serif);
+    font-size:17px;
+    line-height:1.65;
+  }
+  h1,h2,h3,h4,.mono-label{ font-family:var(--sans); }
+  code, .code, .mono{ font-family:var(--mono); }
+  a{ color:var(--cyan); }
+  ::selection{ background:var(--cyan); color:#04201C; }
+
+  /* ---------- layout shell ---------- */
+  .shell{
+    display:grid;
+    grid-template-columns: 260px minmax(0,1fr);
+    max-width:1320px;
+    margin:0 auto;
+  }
+  nav.toc{
+    position:sticky; top:0; align-self:start;
+    height:100vh; overflow-y:auto;
+    padding:28px 18px 40px 28px;
+    border-right:1px solid var(--line);
+  }
+  nav.toc .brand{
+    font-family:var(--mono); font-size:12px; letter-spacing:.04em;
+    color:var(--cyan); text-transform:uppercase; margin-bottom:22px;
+  }
+  nav.toc a{
+    display:block; color:var(--text-dim); text-decoration:none;
+    font-size:13.5px; padding:5px 0 5px 12px; border-left:2px solid transparent;
+    transition:color .15s, border-color .15s;
+  }
+  nav.toc a.lvl2{ padding-left:24px; font-size:12.5px; }
+  nav.toc a:hover{ color:var(--text); border-color:var(--text-faint); }
+  nav.toc a.active{ color:var(--cyan); border-color:var(--cyan); }
+
+  main{ padding:0 0 120px; min-width:0; }
+
+  /* ---------- hero ---------- */
+  .hero{
+    padding:88px 64px 56px;
+    border-bottom:1px solid var(--line);
+    position:relative;
+  }
+  .hero .tag{
+    font-family:var(--mono); font-size:12.5px; color:var(--amber);
+    letter-spacing:.03em; margin-bottom:18px;
+  }
+  .hero h1{
+    font-size:52px; line-height:1.08; margin:0 0 22px; font-weight:600;
+    max-width:14ch; color:#fff;
+  }
+  .hero h1 em{ font-style:normal; color:var(--cyan); }
+  .hero p.lede{
+    font-size:19px; color:var(--text-dim); max-width:62ch; margin:0 0 8px;
+  }
+  .hero .promise{
+    margin-top:28px; display:flex; gap:22px; flex-wrap:wrap;
+  }
+  .hero .promise div{
+    font-family:var(--mono); font-size:12px; color:var(--text-faint);
+    border:1px solid var(--line); padding:10px 14px; border-radius:2px;
+  }
+  .hero .promise b{ color:var(--text); font-weight:500; display:block; font-size:13px; margin-bottom:2px;}
+
+  section{ padding:64px; border-bottom:1px solid var(--line); }
+  section.tight{ padding-top:40px; padding-bottom:40px; }
+  .eyebrow{
+    font-family:var(--mono); font-size:12px; color:var(--cyan);
+    margin-bottom:10px;
+  }
+  h2{ font-size:32px; color:#fff; margin:0 0 6px; font-weight:600; }
+  h2 + .sub{ color:var(--text-dim); font-size:16px; max-width:70ch; margin-bottom:34px; }
+  h3{ font-size:21px; color:#fff; margin:36px 0 14px; font-weight:600; }
+  h4{ font-size:16px; color:var(--cyan); margin:26px 0 10px; font-weight:600; }
+  p{ max-width:74ch; color:var(--text); }
+  p.dim{ color:var(--text-dim); }
+  .max{ max-width:74ch; }
+
+  .callout{
+    border-left:3px solid var(--cyan); background:var(--panel);
+    padding:16px 20px; margin:22px 0; max-width:70ch; border-radius:0 4px 4px 0;
+  }
+  .callout.warn{ border-color:var(--amber); }
+  .callout.danger{ border-color:var(--coral); }
+  .callout .k{ font-family:var(--mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--cyan); margin-bottom:6px; }
+  .callout.warn .k{ color:var(--amber); }
+  .callout.danger .k{ color:var(--coral); }
+
+  .analogy{
+    display:flex; gap:16px; align-items:flex-start;
+    background:var(--panel-2); border:1px solid var(--line);
+    padding:18px 22px; margin:22px 0; max-width:70ch; border-radius:6px;
+  }
+  .analogy .icon{ font-size:22px; line-height:1; margin-top:2px; }
+  .analogy .k{ font-family:var(--sans); font-weight:600; color:var(--amber); font-size:13.5px; margin-bottom:4px; }
+
+  pre{
+    background:#080D18; border:1px solid var(--line); border-radius:6px;
+    padding:18px 20px; overflow-x:auto; font-family:var(--mono); font-size:13.2px;
+    line-height:1.55; max-width:78ch; color:#D7E2F2;
+  }
+  pre .c1{ color:var(--text-faint); } /* comment */
+  pre .kw{ color:var(--violet); }
+  pre .ty{ color:var(--cyan); }
+  pre .st{ color:var(--green); }
+  pre .fn{ color:var(--amber); }
+  code.inline{ background:var(--panel); padding:1px 6px; border-radius:3px; font-size:.92em; color:var(--cyan); }
+
+  table{ border-collapse:collapse; width:100%; margin:20px 0; font-size:14px; }
+  th,td{ text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th{ font-family:var(--mono); font-size:11.5px; text-transform:uppercase; color:var(--text-faint); letter-spacing:.03em; font-weight:500;}
+  td.mono, th.mono{ font-family:var(--mono); font-size:12.5px; }
+  tr:hover td{ background:rgba(255,255,255,.02); }
+
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  .grid3{ display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
+  @media (max-width:900px){ .grid2,.grid3{grid-template-columns:1fr;} }
+
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:20px 22px; }
+  .card h4{ margin-top:0; }
+
+  .tocbox{ font-family:var(--mono); font-size:12px; color:var(--text-faint); margin:8px 0 26px;}
+
+  /* viz panel shared */
+  .viz{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    padding:24px; margin:24px 0; max-width:900px;
+  }
+  .viz .viz-caption{ font-family:var(--mono); font-size:11.5px; color:var(--text-faint); margin-top:14px; }
+  .viz-controls{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+  button.btn{
+    font-family:var(--mono); font-size:12.5px; background:transparent;
+    border:1px solid var(--cyan-dim); color:var(--cyan); padding:8px 14px;
+    border-radius:4px; cursor:pointer; transition:background .15s, color .15s;
+  }
+  button.btn:hover{ background:rgba(110,231,216,.1); }
+  button.btn:disabled{ opacity:.35; cursor:default; }
+  button.btn.alt{ border-color:rgba(240,131,122,.5); color:var(--coral); }
+  button.btn.alt:hover{ background:rgba(240,131,122,.1); }
+
+  .cell{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:46px; height:38px; border:1px solid var(--line); background:var(--panel);
+    font-family:var(--mono); font-size:13px; color:var(--text); margin-right:2px;
+    border-radius:3px; position:relative; transition:all .25s;
+  }
+  .cell.filled{ border-color:var(--cyan-dim); background:rgba(110,231,216,.08); color:var(--cyan); }
+  .cell.hot{ border-color:var(--amber); background:rgba(245,181,99,.15); color:var(--amber); }
+  .cell.ghost{ opacity:.25; }
+  .idx{ font-family:var(--mono); font-size:10px; color:var(--text-faint); text-align:center; margin-top:4px; }
+
+  footer{ padding:48px 64px; text-align:center; color:var(--text-faint); font-family:var(--mono); font-size:12px; }
+
+  @media (max-width:1000px){
+    .shell{ grid-template-columns:1fr; }
+    nav.toc{ position:relative; height:auto; border-right:none; border-bottom:1px solid var(--line); }
+    .hero, section{ padding:40px 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="brand">◆ JVM COLLECTIONS FIELD GUIDE</div>
+    <a href="#memory">1 · JVM Memory Basics</a>
+    <a href="#memory-heap" class="lvl2">Stack vs heap</a>
+    <a href="#memory-gc" class="lvl2">Garbage collection</a>
+    <a href="#foundations">2 · Foundations</a>
+    <a href="#foundations-mem" class="lvl2">Memory & Big-O</a>
+    <a href="#family" class="lvl2">The family tree</a>
+    <a href="#lists">3 · Lists</a>
+    <a href="#lists-array" class="lvl2">ArrayList</a>
+    <a href="#lists-linked" class="lvl2">LinkedList</a>
+    <a href="#lists-vector" class="lvl2">Vector & Stack</a>
+    <a href="#hashmap">4 · HashMap</a>
+    <a href="#hashmap-hash" class="lvl2">Hashing & buckets</a>
+    <a href="#hashmap-tree" class="lvl2">Treeification</a>
+    <a href="#hashmap-resize" class="lvl2">Resizing</a>
+    <a href="#setmap">5 · The Rest of the Map/Set Family</a>
+    <a href="#setmap-hashset" class="lvl2">HashSet</a>
+    <a href="#setmap-linked" class="lvl2">LinkedHashSet/Map</a>
+    <a href="#setmap-tree" class="lvl2">TreeSet/Map</a>
+    <a href="#queues">6 · Queues & Heaps</a>
+    <a href="#sequenced">7 · Sequenced Collections</a>
+    <a href="#concurrency">8 · Concurrency Basics</a>
+    <a href="#chm">9 · ConcurrentHashMap</a>
+    <a href="#chm-cas" class="lvl2">CAS + monitors</a>
+    <a href="#chm-resize" class="lvl2">Cooperative resize</a>
+    <a href="#cow">10 · Copy-On-Write</a>
+    <a href="#bqueues">11 · Blocking Queues</a>
+    <a href="#skiplist">12 · ConcurrentSkipListMap</a>
+    <a href="#mechsym">13 · Mechanical Sympathy</a>
+    <a href="#caffeine">14 · Caching: W-TinyLFU</a>
+    <a href="#handson">15 · Hands-On Methods</a>
+    <a href="#streams">16 · Streams + Collections</a>
+    <a href="#practice">17 · Practice Problems</a>
+    <a href="#scenarios">18 · Interview Scenarios</a>
+    <a href="#cheatsheet">19 · Cheat Sheet</a>
+  </nav>
+
+  <main>
+    <div class="hero">
+      <div class="tag">// FOR SOMEONE WHO HAS NEVER SEEN A COLLECTION BEFORE</div>
+      <h1>Java Collections, rebuilt from <em>first principles</em>.</h1>
+      <p class="lede">Every internal — hashing, treeification, CAS, cooperative resizing, skip lists — explained with the plain idea underneath it first, then the mechanism, then a picture you can watch move. Nothing is assumed.</p>
+      <div class="promise">
+        <div><b>No jargon left unexplained</b>every term is defined the moment it appears</div>
+        <div><b>Visual first</b>interactive diagrams for every hard mechanism</div>
+        <div><b>Interview-shaped</b>ends in real system-design scenarios & trade-offs</div>
+      </div>
+    </div>
+
+    <!-- ================= SECTION 1: JVM MEMORY BASICS ================= -->
+    <section id="memory">
+      <div class="eyebrow">01 — READ THIS FIRST</div>
+      <h2>Every collection is just a memory management trick</h2>
+      <div class="sub">Before we open ArrayList or HashMap, let's look at what "memory" means inside a running Java program. Once you see this clearly, every collection becomes easy — because a collection is nothing but a smart way of storing and finding data in memory.</div>
+
+      <div id="memory-heap"></div>
+      <h3>Two areas of memory: Stack and Heap</h3>
+      <p>When your Java program runs, the JVM (Java Virtual Machine) gives it two main areas of memory to work with.</p>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>Stack — small, fast, temporary</h4>
+          <p class="dim" style="margin:0;">Each thread gets its own stack. Every time you call a method, a new "frame" is placed on top of the stack. That frame holds the method's local variables and primitives (<code class="inline">int</code>, <code class="inline">boolean</code>, <code class="inline">char</code>...). When the method finishes, its frame is thrown away instantly. The stack is very fast, but very small.</p>
+        </div>
+        <div class="card">
+          <h4>Heap — big, shared, long-lived</h4>
+          <p class="dim" style="margin:0;">Every object you create with <code class="inline">new</code> — including every <code class="inline">ArrayList</code>, <code class="inline">HashMap</code>, and every element inside them — lives on the heap. The heap is shared by all threads in the program. It is much bigger than the stack, but also slower to work with, because objects can be scattered anywhere in it.</p>
+        </div>
+      </div>
+
+      <div class="analogy">
+        <div class="icon">🗒️</div>
+        <div>
+          <div class="k">Simple picture: sticky notes vs a warehouse</div>
+          Think of the stack as sticky notes on your own desk — quick to write, quick to throw away, and only you can see them. The heap is a big shared warehouse where the actual boxes (objects) are stored. Your sticky note doesn't hold the box itself — it just holds the <b>address</b> of the shelf where the box sits in the warehouse. That address is what Java calls a <b>reference</b>.
+        </div>
+      </div>
+
+      <pre><span class="kw">int</span> age = 25;                    <span class="c1">// "25" is stored directly on the stack (a primitive)</span>
+List&lt;String&gt; names = <span class="kw">new</span> ArrayList&lt;&gt;();  <span class="c1">// "names" on the stack holds an ADDRESS</span>
+                                     <span class="c1">// the real ArrayList object lives on the heap</span></pre>
+
+      <p>This is exactly why collections only store <b>objects</b>, never raw primitives. A collection like <code class="inline">List&lt;Integer&gt;</code> cannot hold a plain <code class="inline">int</code> — Java has to wrap it inside an <code class="inline">Integer</code> object first (this automatic wrapping is called <b>autoboxing</b>). That's an extra object on the heap, with extra memory overhead, for every single number you put into a collection. Knowing this now will make the "memory overhead per element" numbers later in this guide make a lot more sense.</p>
+
+      <div id="memory-gc"></div>
+      <h3>What happens to old data: Garbage Collection</h3>
+      <p>In many languages, you must manually free memory when you're done with an object, or your program slowly runs out of memory (a "memory leak"). Java does this for you automatically with a background process called the <b>Garbage Collector (GC)</b>.</p>
+      <p>The rule is simple: if <b>nothing on the stack (and nothing reachable from it) still points to an object on the heap</b>, that object is garbage. The GC finds these unreachable objects and reclaims their memory.</p>
+
+      <div class="callout">
+        <div class="k">Why this matters for collections</div>
+        This is the real reason <code class="inline">LinkedList</code> feels "heavier" than <code class="inline">ArrayList</code>: every node it creates is a separate heap object that the GC must later track and clean up. This is also why <code class="inline">CopyOnWriteArrayList</code> can cause GC pressure on every write — it throws away and recreates a whole array each time. When this guide later says a design choice "creates GC pressure," it simply means: <i>this approach makes a lot of short-lived heap objects, and the garbage collector has to work harder to clean them all up, which can pause your program for a moment.</i>
+      </div>
+
+      <h3>Putting it together: what a collection actually does</h3>
+      <p>With stack, heap, references, and garbage collection in mind, here is the one-sentence idea behind this entire guide:</p>
+      <div class="callout warn">
+        <div class="k">The core idea</div>
+        A Java collection is just an object on the heap that organizes a group of <b>references</b> (addresses) to other objects, using some clever layout — a straight row (array), a chain of pointers (linked list), or a mathematical shortcut (hashing) — so that adding, finding, and removing items is as fast as possible for the way you plan to use them.
+      </div>
+    </section>
+
+    <!-- ================= SECTION 2: FOUNDATIONS ================= -->
+    <section id="foundations">
+      <div class="eyebrow">02 — START HERE</div>
+      <h2>What a "collection" even is</h2>
+      <div class="sub">Before HashMap or ConcurrentHashMap mean anything, you need three ideas: what memory looks like, what Big-O is actually measuring, and why Java splits "collections" from "maps."</div>
+
+      <div id="foundations-mem"></div>
+      <h3>Memory, in one picture</h3>
+      <p>Your computer's memory (RAM) is one enormous numbered street of boxes. Every box holds one small piece of data, and every box has an address — a house number. A variable in your program is just a label taped to one of these boxes.</p>
+
+      <div class="analogy">
+        <div class="icon">🏘️</div>
+        <div>
+          <div class="k">Analogy: memory is a street of numbered mailboxes</div>
+          If a data structure keeps its items in <b>consecutive</b> mailboxes (house #100, #101, #102…), the postman can predict exactly where the next one is without asking. If it scatters items across <b>random</b> houses across town and each house has a note saying "next item lives at house #4471," the postman must walk to each house, read the note, and only then learn where to go next. The first approach is an <code class="inline">array</code>. The second is a <code class="inline">linked list</code>. This one distinction explains almost every performance difference in this whole guide.
+        </div>
+      </div>
+
+      <h3>Big-O, in plain terms</h3>
+      <p>Big-O answers one question: <b>as the collection grows, how does the work grow?</b> It deliberately ignores constants and hardware speed — it's about shape, not seconds.</p>
+
+      <div class="grid3">
+        <div class="card">
+          <h4>O(1) — constant</h4>
+          <p class="dim" style="margin:0;">Same effort no matter how big the collection gets. Reading array index <code class="inline">arr[500]</code> costs the same whether the array has 501 or 5,000,001 elements.</p>
+        </div>
+        <div class="card">
+          <h4>O(log n) — logarithmic</h4>
+          <p class="dim" style="margin:0;">Effort grows, but very slowly — each step eliminates half the remaining work. A balanced tree with a billion items needs about 30 steps to find anything.</p>
+        </div>
+        <div class="card">
+          <h4>O(n) — linear</h4>
+          <p class="dim" style="margin:0;">Effort grows exactly as fast as the data. Double the elements, double the work. Scanning a list looking for a value is O(n).</p>
+        </div>
+      </div>
+
+      <div class="viz" style="margin: 22px 0 32px; padding: 18px;">
+        <a href="Gemini_Generated_Image_mak1ptmak1ptmak1%20(1).png" target="_blank" title="Click to view full image in a new tab" style="display: block; cursor: zoom-in; text-decoration: none;">
+          <div style="border-radius: 6px; overflow: hidden; border: 1px solid var(--line); line-height: 0;">
+            <img src="Gemini_Generated_Image_mak1ptmak1ptmak1%20(1).png" alt="Big-O Complexity Visualized: O(1) Constant, O(log n) Logarithmic, and O(n) Linear" style="width: 100%; height: auto; display: block;" loading="lazy">
+          </div>
+        </a>
+        <div class="viz-caption" style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <span><b>Visual comparison:</b> <b>O(1) Constant</b> (direct offset math accessing <code class="inline">arr[500]</code> with fixed effort), <b>O(log n) Logarithmic</b> (halving remaining work each step), and <b>O(n) Linear</b> (sequential scan).</span>
+          <span style="font-size: 11px; opacity: 0.7;">🔍 Click image to expand</span>
+        </div>
+      </div>
+
+      <div id="family"></div>
+      <h3>Why Collection and Map are cousins, not siblings</h3>
+      <p>Java's collections split into two families that look similar but solve different problems:</p>
+
+      <div class="analogy">
+        <div class="icon">🎒</div>
+        <div>
+          <div class="k">A Collection is a bag. A Map is a phonebook.</div>
+          A <b>Collection</b> (List, Set, Queue) just holds items — you throw one thing in with <code class="inline">add(item)</code>. A <b>Map</b> stores <i>pairs</i> — a name and a phone number — so adding requires two things: <code class="inline">put(key, value)</code>. Because "add one thing" and "add two linked things" are fundamentally different actions, Java never forces Map to pretend it's a Collection. Instead, a Map exposes <i>views</i> — <code class="inline">keySet()</code> (just the names), <code class="inline">values()</code> (just the numbers), <code class="inline">entrySet()</code> (the pairs) — each of which <i>is</i> a real Collection you can loop over.
+        </div>
+      </div>
+
+      <div class="viz">
+        <style>
+          .fam-tree ul{ list-style:none; margin:0; padding-left:22px; border-left:1px dashed var(--line); }
+          .fam-tree > ul{ padding-left:0; border-left:none; }
+          .fam-tree li{ margin:7px 0; position:relative; }
+          .fam-tree .node{ font-family:var(--mono); font-size:13px; color:var(--text); }
+          .fam-tree .node.root{ color:var(--cyan); font-size:14px; }
+          .fam-tree .impl{ color:var(--text-faint); font-size:11.5px; margin-left:8px; }
+          .fam-tree .legacy{ color:var(--coral); font-size:11px; margin-left:8px; }
+        </style>
+        <div class="grid2">
+          <div class="fam-tree">
+            <div class="mono" style="color:#F5B563;font-size:12px;margin-bottom:10px;">COLLECTION FAMILY</div>
+            <ul>
+              <li><span class="node root">Iterable&lt;E&gt;</span>
+                <ul><li><span class="node root">Collection&lt;E&gt;</span>
+                  <ul>
+                    <li><span class="node">List&lt;E&gt;</span> → <span class="impl">SequencedCollection</span>
+                      <ul>
+                        <li><span class="node">ArrayList</span></li>
+                        <li><span class="node">LinkedList</span></li>
+                        <li><span class="node">Vector</span> <span class="legacy">legacy, synchronized</span>
+                          <ul><li><span class="node">Stack</span> <span class="legacy">legacy</span></li></ul>
+                        </li>
+                      </ul>
+                    </li>
+                    <li><span class="node">Set&lt;E&gt;</span>
+                      <ul>
+                        <li><span class="node">HashSet</span></li>
+                        <li><span class="node">LinkedHashSet</span> → <span class="impl">SequencedSet</span></li>
+                        <li><span class="node">SortedSet</span> → <span class="node">NavigableSet</span>
+                          <ul><li><span class="node">TreeSet</span></li></ul>
+                        </li>
+                      </ul>
+                    </li>
+                    <li><span class="node">Queue&lt;E&gt;</span>
+                      <ul>
+                        <li><span class="node">PriorityQueue</span></li>
+                        <li><span class="node">Deque&lt;E&gt;</span> → <span class="impl">SequencedCollection</span>
+                          <ul>
+                            <li><span class="node">ArrayDeque</span></li>
+                            <li><span class="node">LinkedList</span> <span class="impl">(also a List)</span></li>
+                          </ul>
+                        </li>
+                      </ul>
+                    </li>
+                  </ul>
+                </li></ul>
+              </li>
+            </ul>
+          </div>
+          <div class="fam-tree">
+            <div class="mono" style="color:#B39DFB;font-size:12px;margin-bottom:10px;">MAP FAMILY (separate root)</div>
+            <ul>
+              <li><span class="node root">Map&lt;K,V&gt;</span>
+                <ul>
+                  <li><span class="node">HashMap</span>
+                    <ul><li><span class="node">LinkedHashMap</span> → <span class="impl">SequencedMap</span></li></ul>
+                  </li>
+                  <li><span class="node">SortedMap&lt;K,V&gt;</span> → <span class="node">NavigableMap</span>
+                    <ul><li><span class="node">TreeMap</span></li></ul>
+                  </li>
+                  <li><span class="node">Hashtable</span> <span class="legacy">legacy, synchronized</span></li>
+                </ul>
+              </li>
+            </ul>
+            <div class="mono" style="color:#F5B563;font-size:12px;margin:22px 0 10px;">CONCURRENT SIBLINGS (java.util.concurrent)</div>
+            <ul>
+              <li><span class="node">ConcurrentMap&lt;K,V&gt;</span>
+                <ul>
+                  <li><span class="node">ConcurrentHashMap</span></li>
+                  <li><span class="node">ConcurrentNavigableMap</span>
+                    <ul><li><span class="node">ConcurrentSkipListMap</span></li></ul>
+                  </li>
+                </ul>
+              </li>
+              <li><span class="node">BlockingQueue&lt;E&gt;</span>
+                <ul>
+                  <li><span class="node">ArrayBlockingQueue</span></li>
+                  <li><span class="node">LinkedBlockingQueue</span></li>
+                  <li><span class="node">SynchronousQueue</span></li>
+                  <li><span class="node">LinkedTransferQueue</span></li>
+                </ul>
+              </li>
+              <li><span class="node">CopyOnWriteArrayList</span> <span class="impl">implements List</span></li>
+            </ul>
+          </div>
+        </div>
+        <div class="viz-caption">Map and its concurrent cousins are drawn separately on purpose — as the analogy above explains, Map is never a Collection. Legacy classes (red) are shown because interviewers still ask about them, not because you should reach for them.</div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 3: LISTS ================= -->
+    <section id="lists">
+      <div class="eyebrow">03 — SEQUENTIAL DATA</div>
+      <h2>ArrayList vs. LinkedList</h2>
+      <div class="sub">Same interface (<code class="inline">List&lt;E&gt;</code>), completely different physical strategy. This is the mailbox-street analogy made concrete — click through the buttons below and watch what each structure actually has to do.</div>
+
+      <div id="lists-array"></div>
+      <h3>ArrayList: one long, contiguous shelf</h3>
+      <p>An <code class="inline">ArrayList</code> is a wrapper around a plain Java array (<code class="inline">Object[] elementData</code>). Every element lives in a numbered slot right next to its neighbors. Reading slot 500 is a single calculation — <i>base address + (500 × slot size)</i> — no walking required. That's why <code class="inline">get(i)</code> is O(1).</p>
+      <p>But arrays have a fixed size at creation. When the shelf fills up, ArrayList can't magically extend it in place — memory right after the array might belong to something else. So it:</p>
+      <ol class="max">
+        <li>Allocates a brand-new array 1.5× the size (<code class="inline">newCapacity = oldCapacity + (oldCapacity &gt;&gt; 1)</code>)</li>
+        <li>Copies every existing element into it via <code class="inline">System.arraycopy()</code> — a highly optimized native memory copy</li>
+        <li>Discards the old array</li>
+      </ol>
+      <p class="dim">This resize is expensive, but it happens rarely and the cost is <i>amortized</i> — spread thin — across many cheap appends, so appending is still called O(1) "on average."</p>
+
+      <div class="viz">
+        <div class="viz-controls">
+          <button class="btn" onclick="alDemo.append()">append(x) →</button>
+          <button class="btn alt" onclick="alDemo.insertFront()">insert at index 0</button>
+          <button class="btn" onclick="alDemo.reset()">reset</button>
+        </div>
+        <div id="al-cells"></div>
+        <div class="viz-caption" id="al-caption">Watch: appending to the end is cheap. Inserting at the front forces every element to shift right by one slot — an O(n) memory shuffle.</div>
+      </div>
+
+      <div id="lists-linked"></div>
+      <h3>LinkedList: a scattered chain of notes</h3>
+      <p>A <code class="inline">LinkedList</code> holds no array at all. Each element is wrapped in its own little object (a "node") allocated somewhere in the heap — possibly nowhere near the previous node. Each node stores three things: the actual value, a pointer to the <i>next</i> node, and a pointer to the <i>previous</i> node (it's <b>doubly</b> linked).</p>
+
+      <div class="viz">
+        <svg viewBox="0 0 820 160" width="100%" style="max-width:820px;">
+          <style>
+            .lln{ fill:#101B30; stroke:#3E8E88; stroke-width:1.3; }
+            .llt{ font-family:'IBM Plex Mono',monospace; font-size:12px; fill:#E7EDF7; }
+            .lle{ stroke:#5D6D8A; stroke-width:1.3; fill:none; marker-end:url(#arrow); }
+          </style>
+          <defs>
+            <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#5D6D8A"/>
+            </marker>
+          </defs>
+          <g transform="translate(30,40)">
+            <rect width="150" height="60" rx="6" class="lln"/>
+            <text x="75" y="24" text-anchor="middle" class="llt">item: "Anna"</text>
+            <text x="75" y="42" text-anchor="middle" class="llt" style="fill:#5D6D8A;">prev · next</text>
+          </g>
+          <g transform="translate(340,90)">
+            <rect width="150" height="60" rx="6" class="lln"/>
+            <text x="75" y="24" text-anchor="middle" class="llt">item: "Ravi"</text>
+            <text x="75" y="42" text-anchor="middle" class="llt" style="fill:#5D6D8A;">prev · next</text>
+          </g>
+          <g transform="translate(630,20)">
+            <rect width="150" height="60" rx="6" class="lln"/>
+            <text x="75" y="24" text-anchor="middle" class="llt">item: "Chen"</text>
+            <text x="75" y="42" text-anchor="middle" class="llt" style="fill:#5D6D8A;">prev · next</text>
+          </g>
+          <path class="lle" d="M180,65 C 260,65 260,115 335,118"/>
+          <path class="lle" d="M340,115 C 260,110 260,68 178,68" style="marker-end:none;marker-start:url(#arrow);"/>
+          <path class="lle" d="M490,115 C 570,90 570,60 625,52"/>
+          <path class="lle" d="M628,55 C 580,65 580,95 493,118" style="marker-end:none;marker-start:url(#arrow);"/>
+        </svg>
+        <div class="viz-caption">Three nodes of the same list, scattered across three unrelated heap addresses. Getting from "Anna" to "Chen" means following two pointers — there is no shortcut.</div>
+      </div>
+
+      <p>This scattering is exactly why <code class="inline">get(500)</code> on a LinkedList is O(n): there's no formula for "where is element 500," so Java must start at one end and follow <code class="inline">next</code> 500 times. But once you're already standing at a node (say, via an iterator), inserting or removing right there is O(1) — you just rewire two pointers, no shifting required.</p>
+
+      <div class="callout">
+        <div class="k">Why this matters more than it sounds</div>
+        Modern CPUs read memory in 64-byte chunks called <b>cache lines</b> and speculatively prefetch the <i>next</i> chunk when they see a pattern of sequential access. ArrayList's contiguous layout plays perfectly into this — iterating it is extremely fast in practice, not just in theory. LinkedList's scattered nodes defeat this prefetching almost entirely, causing a real CPU stall (a "cache miss") at nearly every step. This is why, despite matching Big-O in places, <b>ArrayList outperforms LinkedList for iteration by a wide margin in practice</b> — and why LinkedList is rarely the right default choice today (use <code class="inline">ArrayDeque</code> instead for queue/stack behavior).
+      </div>
+
+      <table>
+        <tr><th>Operation</th><th class="mono">ArrayList</th><th class="mono">LinkedList</th><th>Why</th></tr>
+        <tr><td>get(i) — random access</td><td class="mono">O(1)</td><td class="mono">O(n)</td><td>Array = math. Linked = walk.</td></tr>
+        <tr><td>add(x) — append at end</td><td class="mono">O(1) amortized</td><td class="mono">O(1)</td><td>Both keep a tail pointer.</td></tr>
+        <tr><td>add(0, x) — insert at front</td><td class="mono">O(n)</td><td class="mono">O(1)</td><td>Array must shift everything right.</td></tr>
+        <tr><td>remove via iterator, mid-list</td><td class="mono">O(n)</td><td class="mono">O(1)</td><td>Array shifts to close the gap.</td></tr>
+        <tr><td>Memory per element</td><td class="mono">4–8 bytes</td><td class="mono">24–48 bytes</td><td>Node object header + 2 pointers + padding.</td></tr>
+      </table>
+
+      <div id="lists-vector"></div>
+      <h3>Vector and Stack: the old-timers you'll still see in interviews</h3>
+      <p><code class="inline">Vector</code> is basically an ArrayList that was written back in Java 1.0, before the modern Collections Framework even existed. It stores data exactly the same way — a growing array — but every single method (<code class="inline">add</code>, <code class="inline">get</code>, <code class="inline">size</code>...) is marked <code class="inline">synchronized</code>. That means only one thread can touch it at a time, even if you're running single-threaded code and don't need that protection at all.</p>
+      <p><code class="inline">Stack</code> is even older — it's a subclass of <code class="inline">Vector</code>, adding <code class="inline">push()</code>, <code class="inline">pop()</code>, and <code class="inline">peek()</code> on top. So a <code class="inline">Stack</code> carries all of Vector's baggage: locking on every call, plus it inherits list methods like <code class="inline">add(index, x)</code> that can secretly break the "stack" discipline by letting you insert in the middle.</p>
+
+      <div class="callout warn">
+        <div class="k">Why they're considered legacy today</div>
+        Locking on every single call is expensive, and almost nobody actually needs a <i>growable array</i> that is thread-safe by default — most code is either single-threaded (use <code class="inline">ArrayList</code>) or needs a properly designed concurrent structure (use <code class="inline">ConcurrentHashMap</code>-style tools or <code class="inline">CopyOnWriteArrayList</code>). For stack behavior specifically, the JDK documentation itself recommends <code class="inline">ArrayDeque</code> over <code class="inline">Stack</code> — same push/pop/peek idea, no unnecessary locking, no leftover List methods that don't belong on a stack.
+      </div>
+
+      <table>
+        <tr><th>Class</th><th>Backing structure</th><th>Thread-safe?</th><th>Use today?</th></tr>
+        <tr><td class="mono">Vector</td><td>Growable array</td><td>Yes (every method synchronized)</td><td>No — use ArrayList, or a real concurrent class</td></tr>
+        <tr><td class="mono">Stack</td><td>Growable array (extends Vector)</td><td>Yes (inherited locking)</td><td>No — use ArrayDeque as push()/pop()/peek()</td></tr>
+        <tr><td class="mono">ArrayDeque</td><td>Circular array</td><td>No (not needed for single-thread use)</td><td>Yes — modern stack/queue default</td></tr>
+      </table>
+    </section>
+
+    <!-- ================= SECTION 3: HASHMAP ================= -->
+    <section id="hashmap">
+      <div class="eyebrow">04 — THE MOST-ASKED INTERVIEW TOPIC</div>
+      <h2>HashMap: how a key finds its shelf</h2>
+      <div class="sub">HashMap's entire job is answering one question fast: "given this key, which of my internal buckets should I look in?" Everything below is in service of that one question.</div>
+
+      <div id="hashmap-hash"></div>
+      <h3>Step 1 — turn the key into a number</h3>
+      <p>Every Java object has a <code class="inline">hashCode()</code> method that reduces it to a single 32-bit integer. Think of it as a meaningless-looking fingerprint — two equal objects <i>must</i> produce the same fingerprint, but the fingerprint itself carries no readable meaning.</p>
+
+      <div class="analogy">
+        <div class="icon">📇</div>
+        <div>
+          <div class="k">Analogy: hashCode is a librarian's shelving code, not the book's title</div>
+          A librarian doesn't file 10,000 books alphabetically by full title (slow to search). She converts each title into a short shelving code and stores books by that code. HashMap does the same: it never compares your key against every stored key. It uses the key's fingerprint to jump straight to the one shelf (bucket) it must be on.
+        </div>
+      </div>
+
+      <h3>Step 2 — spread the fingerprint's bits</h3>
+      <p>A raw <code class="inline">hashCode()</code> can be a bad fit for a small bucket array — many hash codes differ only in their high bits, which get thrown away by the next step. So HashMap runs a cheap "spreading" step first:</p>
+      <pre>static final int hash(Object key) {
+    int h = key.hashCode();
+    <span class="c1">// shift the top 16 bits down, XOR them into the bottom 16</span>
+    return h ^ (h &gt;&gt;&gt; 16);
+}</pre>
+      <p class="dim">This mixes high-order bits into the low-order bits, so differences that only show up "way up high" in the number still influence which bucket gets picked.</p>
+
+      <h3>Step 3 — mask it down to a bucket index</h3>
+      <p>HashMap's internal array (<code class="inline">Node&lt;K,V&gt;[] table</code>) always has a size that's a power of two (16, 32, 64…). This is deliberate: for a power-of-two size <var>n</var>, <code class="inline">hash % n</code> gives exactly the same answer as <code class="inline">hash & (n - 1)</code> — a bitwise AND — but AND is a single, near-free CPU instruction, while <code class="inline">%</code> (division) is dozens of times slower.</p>
+
+      <div class="viz">
+        <div class="viz-controls">
+          <input id="hm-key" placeholder="type a key…" style="font-family:var(--mono);background:#080D18;border:1px solid var(--line);color:#E7EDF7;padding:8px 10px;border-radius:4px;width:160px;">
+          <button class="btn" onclick="hmDemo.go()">compute bucket →</button>
+        </div>
+        <div id="hm-steps" style="font-family:var(--mono);font-size:13px;line-height:2;"></div>
+        <div class="viz-caption">Table capacity fixed at 16 for this demo, so the mask is <code>&amp; 15</code> (binary <code>1111</code>) — it simply keeps the lowest 4 bits of the spread hash.</div>
+      </div>
+
+      <h3>Collisions: two keys, one bucket</h3>
+      <p>Different keys can land on the same bucket index — that's a <b>collision</b>, and it's expected, not a bug. HashMap handles it with <b>separate chaining</b>: the bucket holds a linked list of every entry that landed there, and a lookup walks that short list comparing keys with <code class="inline">equals()</code>.</p>
+
+      <div class="viz">
+        <div class="viz-controls">
+          <button class="btn" onclick="bucketDemo.insertRandom()">insert random key →</button>
+          <button class="btn alt" onclick="bucketDemo.reset()">reset table</button>
+        </div>
+        <div id="bucket-table"></div>
+        <div class="viz-caption" id="bucket-caption">16 buckets. Insert a few keys and watch collisions form chains.</div>
+      </div>
+
+      <div id="hashmap-tree"></div>
+      <h3>When a chain gets long: treeification</h3>
+      <p>A linked-list bucket is fine at 1–3 entries — a short walk. But imagine an attacker deliberately crafts thousands of keys that all hash to the <i>same</i> bucket (a "hash-flooding" attack): that bucket's list balloons, and every lookup degrades toward O(n). Since Java 8, HashMap defends against this:</p>
+
+      <div class="callout">
+        <div class="k">The 8/6 rule</div>
+        If a single bucket's chain reaches <b>8</b> entries <i>and</i> the table has at least <b>64</b> buckets total, that one bucket converts from a linked list into a small <b>Red-Black tree</b> (self-balancing binary search tree). Worst-case lookup in that bucket drops from O(n) to O(log n). If the bucket later shrinks to <b>6</b> or fewer entries, it converts back to a plain list. The 8-vs-6 gap (not both set to 7) is deliberate — it stops a bucket from flapping back and forth between tree and list every time one key is added or removed near the threshold.
+        <br><br>Below 64 total buckets, HashMap prefers to just grow the whole table instead of building a tree — a bigger table usually spreads the same 8 entries across separate buckets anyway, so building a tree would be wasted work.
+      </div>
+
+      <svg viewBox="0 0 760 190" width="100%" style="max-width:760px;margin:20px 0;">
+        <style>
+          .tn{ fill:#101B30; stroke:#3E8E88; stroke-width:1.3; }
+          .tt{ font-family:'IBM Plex Mono',monospace; font-size:12px; fill:#E7EDF7; }
+          .te{ stroke:#5D6D8A; stroke-width:1.2; fill:none; }
+        </style>
+        <text x="20" y="24" class="tt" style="fill:#F5B563;">chain (0–7 entries)</text>
+        <rect x="20" y="40" width="60" height="34" rx="4" class="tn"/><text x="50" y="61" text-anchor="middle" class="tt">K1</text>
+        <path class="te" d="M80,57 L110,57"/>
+        <rect x="110" y="40" width="60" height="34" rx="4" class="tn"/><text x="140" y="61" text-anchor="middle" class="tt">K2</text>
+        <path class="te" d="M170,57 L200,57"/>
+        <rect x="200" y="40" width="60" height="34" rx="4" class="tn"/><text x="230" y="61" text-anchor="middle" class="tt">K3</text>
+        <path class="te" d="M260,57 L285,57" marker-end="url(#arrow)"/>
+        <text x="270" y="45" class="tt" style="fill:#5D6D8A;font-size:11px;">…</text>
+
+        <text x="420" y="24" class="tt" style="fill:#F5B563;">≥8 entries &amp; table≥64 → tree</text>
+        <rect x="500" y="30" width="60" height="30" rx="4" class="tn" style="stroke:#B39DFB;"/><text x="530" y="50" text-anchor="middle" class="tt">K4●</text>
+        <path class="te" d="M510,60 C500,80 470,90 460,100"/>
+        <path class="te" d="M550,60 C560,80 590,90 600,100"/>
+        <rect x="420" y="100" width="60" height="30" rx="4" class="tn" style="stroke:#B39DFB;"/><text x="450" y="120" text-anchor="middle" class="tt">K1○</text>
+        <rect x="590" y="100" width="60" height="30" rx="4" class="tn" style="stroke:#B39DFB;"/><text x="620" y="120" text-anchor="middle" class="tt">K7○</text>
+        <path class="te" d="M430,130 C420,150 400,160 390,170"/>
+        <path class="te" d="M470,130 C480,150 500,160 510,170"/>
+        <rect x="350" y="170" width="60" height="20" rx="4" class="tn" style="stroke:#B39DFB;"/><text x="380" y="184" text-anchor="middle" class="tt" style="font-size:10px;">K2</text>
+        <rect x="480" y="170" width="60" height="20" rx="4" class="tn" style="stroke:#B39DFB;"/><text x="510" y="184" text-anchor="middle" class="tt" style="font-size:10px;">K5</text>
+        <text x="670" y="60" class="tt" style="fill:#5D6D8A;font-size:11px;">● black</text>
+        <text x="670" y="120" class="tt" style="fill:#5D6D8A;font-size:11px;">○ red</text>
+      </svg>
+      <p class="dim">If two keys land in the same tree bucket and don't implement <code class="inline">Comparable</code> (or compare equal), Java can't decide tree order from the key's value alone — so it breaks the tie using <code class="inline">System.identityHashCode()</code>, essentially "which object was created first in memory," just to guarantee the tree stays consistently ordered.</p>
+
+      <div id="hashmap-resize"></div>
+      <h3>Resizing: doubling without starting over</h3>
+      <p>HashMap resizes (doubles its table) once occupancy passes <b>capacity × load factor</b> — by default <code class="inline">0.75</code>, so a 16-bucket table resizes after its 13th entry. A smaller load factor wastes memory on empty buckets; a larger one causes more collisions. 0.75 is Java's measured sweet spot.</p>
+      <p>Here's the elegant part: because capacity always doubles (16→32→64…), the bitmask only ever grows by <b>one bit</b> at a time. That means every existing entry has only two possible destinations in the new table: its <i>same</i> index, or its <i>same index + old capacity</i> — depending on whether that one new bit happens to be 0 or 1 in its hash. HashMap never has to recompute a full hash during resize; it just checks one bit and splits each chain into a "stays low" list and a "moves high" list.</p>
+
+      <div class="viz">
+        <svg viewBox="0 0 780 210" width="100%" style="max-width:780px;">
+          <style> .rt{font-family:'IBM Plex Mono',monospace;font-size:12px;fill:#E7EDF7;} </style>
+          <text x="10" y="20" class="rt" style="fill:#93A3BE;">capacity 16 → bucket 5 chain: [K1, K2, K3]</text>
+          <rect x="10" y="34" width="90" height="30" rx="4" fill="#101B30" stroke="#3E8E88"/><text x="55" y="54" text-anchor="middle" class="rt">bucket 5</text>
+          <path d="M100,49 L140,49" stroke="#5D6D8A" marker-end="url(#arrow)"/>
+          <rect x="140" y="34" width="230" height="30" rx="4" fill="#101B30" stroke="#3E8E88"/><text x="255" y="54" text-anchor="middle" class="rt">K1 → K2 → K3</text>
+
+          <text x="10" y="110" class="rt" style="fill:#F5B563;">resize to capacity 32 — new bit checked: bit 4</text>
+          <path d="M255,64 C255,90 100,90 100,120" stroke="#5D6D8A" fill="none"/>
+          <path d="M255,64 C255,90 500,90 500,120" stroke="#5D6D8A" fill="none"/>
+
+          <rect x="20" y="120" width="180" height="30" rx="4" fill="#101B30" stroke="#7FD99B"/>
+          <text x="110" y="140" text-anchor="middle" class="rt" style="fill:#7FD99B;">bucket 5 (bit=0): K1, K3</text>
+          <rect x="420" y="120" width="200" height="30" rx="4" fill="#101B30" stroke="#F0837A"/>
+          <text x="520" y="140" text-anchor="middle" class="rt" style="fill:#F0837A;">bucket 5+16=21 (bit=1): K2</text>
+
+          <text x="10" y="185" class="rt" style="fill:#5D6D8A;font-size:11px;">No rehashing needed — only the new high bit decides low-list vs high-list.</text>
+        </svg>
+      </div>
+
+      <div class="callout danger">
+        <div class="k">Interview trap</div>
+        Always construct a HashMap (or ConcurrentHashMap) with an expected size up front — <code class="inline">new HashMap&lt;&gt;(expectedSize)</code> — when you know roughly how many entries are coming. Skipping this means the table silently resizes (and fully re-buckets) <i>log₂(finalSize/16)</i> times during a big bulk load, each one a stop-and-copy pause.
+      </div>
+    </section>
+
+    <!-- ================= SECTION 4B: SET / MAP FAMILY ================= -->
+    <section id="setmap">
+      <div class="eyebrow">05 — YOU ALREADY KNOW THESE, YOU JUST DON'T KNOW IT YET</div>
+      <h2>HashSet, LinkedHashSet, TreeSet, LinkedHashMap, TreeMap</h2>
+      <div class="sub">Good news first: none of these five classes are a new data structure. Every single one is either a HashMap wearing a costume, or the same Red-Black tree you just met a moment ago. Once you see the trick, you can never un-see it.</div>
+
+      <div id="setmap-hashset"></div>
+      <h3>HashSet: a HashMap wearing a costume</h3>
+      <p>Open the real Java source code for <code class="inline">HashSet</code> and this is almost the entire class:</p>
+      <pre><span class="kw">public class</span> HashSet&lt;E&gt; {
+    <span class="c1">// a HashSet does not have its own buckets — it hides a HashMap inside itself</span>
+    <span class="kw">private</span> HashMap&lt;E, Object&gt; map;
+
+    <span class="c1">// one single dummy object, shared by every element, in every HashSet, in the whole program</span>
+    <span class="kw">private static final</span> Object PRESENT = <span class="kw">new</span> Object();
+
+    <span class="kw">public boolean</span> add(E e) {
+        <span class="kw">return</span> map.put(e, PRESENT) == <span class="kw">null</span>;   <span class="c1">// your element becomes the KEY</span>
+    }
+    <span class="kw">public boolean</span> contains(Object o) {
+        <span class="kw">return</span> map.containsKey(o);
+    }
+}</pre>
+      <p>Read that slowly, in plain words: <b>add(x) really just means map.put(x, PRESENT)</b>, and <b>contains(x) really just means map.containsKey(x)</b>. There is no separate hashing logic, no separate bucket array, no separate collision handling written anywhere for HashSet — because it doesn't need any. It borrows all of it from HashMap.</p>
+
+      <div class="analogy">
+        <div class="icon">🎭</div>
+        <div>
+          <div class="k">Simple picture: a coat rack with one spare coat</div>
+          Imagine a coat rack (the HashMap) with a labeled hook for every item. A HashSet doesn't build its own coat rack — it uses the same one, and it hangs the exact same spare coat (the shared <code class="inline">PRESENT</code> object) on every hook, no matter what the hook's label is. The label is the only thing anyone actually cares about — that's your element.
+        </div>
+      </div>
+
+      <p>This one fact means every rule you already learned in the HashMap section above is <i>automatically</i> true for HashSet too: <code class="inline">hashCode()</code> turns your object into a number, that number gets its bits spread and masked down to a bucket index, two elements landing in the same bucket form a chain, and a chain that grows past 8 entries (in a table of 64+ buckets) quietly turns into the same Red-Black tree. You did not learn a second data structure just now — you learned that HashSet <i>is</i> HashMap, minus the values.</p>
+
+      <div class="callout">
+        <div class="k">On memory, specifically</div>
+        A HashSet object on the heap doesn't hold a bucket array of its own — it holds one reference to a hidden HashMap object, which is the thing that actually holds the bucket array. So creating a HashSet costs one small extra object compared to creating a HashMap directly. The <code class="inline">PRESENT</code> placeholder costs almost nothing, because Java creates it exactly once, ever, and every HashSet in your entire program reuses that same single object — it is never duplicated per element.
+      </div>
+
+      <div id="setmap-linked"></div>
+      <h3>LinkedHashSet and LinkedHashMap: one hidden chain, threaded through the buckets</h3>
+      <p>A plain HashMap makes you no promises at all about the order you'll see when you loop over it — the order just falls out of which bucket each key happened to land in, and that looks completely random to a human. <code class="inline">LinkedHashMap</code> fixes exactly that one problem, with one small addition.</p>
+      <p>Every entry in a LinkedHashMap carries two extra fields that a normal HashMap entry does not have: <code class="inline">before</code> and <code class="inline">after</code> — references pointing to the entry that was inserted right before it, and the entry inserted right after it. Line all of those up, and you get a second, invisible linked list running through the entries, completely separate from the bucket array underneath. When you iterate, Java ignores the buckets entirely and just walks this hidden chain from the oldest entry to the newest — which is exactly why the order you see matches the order you inserted things in.</p>
+
+      <div class="analogy">
+        <div class="icon">🧵</div>
+        <div>
+          <div class="k">Simple picture: numbered raffle tickets on a shelf of unlabeled boxes</div>
+          The boxes (buckets) are still scattered around in whatever order hashing puts them in — nothing changes there. But now imagine a piece of thread tied from the first box you filled, to the second, to the third, and so on. To read things back "in the order I added them," you don't look at the shelf at all — you just follow the thread.
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <div class="k">This costs real memory — which is the whole point of this guide</div>
+        Two extra references per entry sounds small, but it is not free: on most 64-bit JVMs that's around 16 extra bytes <i>per entry</i>, and two more fields the garbage collector must trace every time it scans that object. This is a direct, measurable trade: you are spending heap memory to buy yourself a predictable iteration order. <code class="inline">LinkedHashSet</code> is to <code class="inline">LinkedHashMap</code> exactly what <code class="inline">HashSet</code> is to <code class="inline">HashMap</code> — a thin wrapper hiding a private <code class="inline">LinkedHashMap&lt;E,Object&gt;</code> field inside, reusing the exact same <code class="inline">PRESENT</code> trick.</div>
+
+      <div id="setmap-lru"></div>
+      <h3>Building an LRU Cache: The Magic of <code class="inline">accessOrder = true</code></h3>
+
+      <div class="analogy">
+        <div class="icon">📚</div>
+        <div>
+          <div class="k">Simple picture: A 3-book shelf (The LRU eviction rule)</div>
+          Imagine a small bookshelf that only holds <b>3 books</b>. You want to keep your favorite, most popular books on this shelf. When the shelf is full and you buy a new book, which one do you throw away?<br><br>
+          The smartest choice is usually: <b>throw away the book you haven't touched for the longest time.</b><br><br>
+          In computer science, this strategy is called an <b>LRU Cache</b> (<b>L</b>east <b>R</b>ecently <b>U</b>sed cache).
+        </div>
+      </div>
+
+      <div class="card" style="margin: 20px 0;">
+        <h4 style="color:var(--cyan); margin-bottom:12px;">Part 1: How <code class="inline">accessOrder = true</code> Works</h4>
+        <p>A standard map in Java just remembers data (key and value pairs). A <code class="inline">LinkedHashMap</code> is special because it also ties all the items together with an invisible chain in a specific line.</p>
+        <ul style="margin: 10px 0 18px 20px; line-height: 1.8;">
+          <li><b>Normal behavior (<code class="inline">accessOrder = false</code>):</b> The line is organized strictly by when items were first put into the map (insertion order).</li>
+          <li><b>Special behavior (<code class="inline">accessOrder = true</code>):</b> The line updates <b>every time you touch an item</b> (both reads and writes).</li>
+        </ul>
+
+        <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:16px; margin:16px 0;">
+          <div class="mono-label" style="color:var(--amber); margin-bottom:12px; font-weight:600; font-size:13px;">Step-by-Step Lifecycle (Capacity = 3):</div>
+          
+          <div style="margin-bottom:16px;">
+            <b>1. You put in 3 items:</b> <code class="inline">A</code>, <code class="inline">B</code>, and <code class="inline">C</code>
+            <div style="display:flex; align-items:center; gap:8px; margin:8px 0; font-family:var(--mono); font-size:13px;">
+              <div class="cell hot">A</div> <span>→</span>
+              <div class="cell">B</div> <span>→</span>
+              <div class="cell filled">C</div>
+            </div>
+            <p class="dim" style="margin:4px 0 0 0;">• <code class="inline">A</code> is at the front (oldest, least recently used / eldest).<br>• <code class="inline">C</code> is at the back (newest, most recently used).</p>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <b>2. Now, you only <i>read</i> item A (<code class="inline">map.get("A")</code>):</b>
+            <div style="display:flex; align-items:center; gap:8px; margin:8px 0; font-family:var(--mono); font-size:13px;">
+              <div class="cell hot">B</div> <span>→</span>
+              <div class="cell">C</div> <span>→</span>
+              <div class="cell filled">A</div>
+            </div>
+            <p class="dim" style="margin:4px 0 0 0;">Normally, reading a book doesn't change anything. But because <code class="inline">accessOrder = true</code>, Java unlinks <code class="inline">A</code> and moves it all the way to the end as the newest accessed item: <code class="inline">[B] → [C] → [A]</code>.</p>
+          </div>
+
+          <div>
+            <b>3. What happens next? (Eviction when the shelf fills up)</b>
+            <div style="display:flex; align-items:center; gap:8px; margin:8px 0; font-family:var(--mono); font-size:13px;">
+              <div class="cell ghost" style="text-decoration:line-through; color:var(--coral); border-color:var(--coral);">B (evicted)</div> <span>→</span>
+              <div class="cell hot">C</div> <span>→</span>
+              <div class="cell">A</div> <span>→</span>
+              <div class="cell filled">D</div>
+            </div>
+            <p class="dim" style="margin:4px 0 0 0;">If your shelf fills up and you must insert <code class="inline">D</code>, Java kicks out the item at the very front of the line — which is now <code class="inline">B</code>, because <code class="inline">A</code> was recently protected by your read!</p>
+          </div>
+        </div>
+
+        <p style="margin-top:14px;">In Java, you turn this into a functioning LRU cache by overriding <code class="inline">removeEldestEntry()</code>:</p>
+        <pre><span class="c1">// Textbook JDK LRU Cache (Max capacity: 3)</span>
+<span class="ty">Map</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt; lruCache = <span class="kw">new</span> <span class="ty">LinkedHashMap</span>&lt;&gt;(<span class="st">16</span>, <span class="st">0.75f</span>, <span class="kw">true</span> <span class="c1">/* accessOrder = true */</span>) {
+    <span class="kw">@Override</span>
+    <span class="kw">protected boolean</span> <span class="fn">removeEldestEntry</span>(<span class="ty">Map.Entry</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt; eldest) {
+        <span class="kw">return</span> size() &gt; <span class="st">3</span>; <span class="c1">// Evict the head entry once size exceeds 3</span>
+    }
+};</pre>
+      </div>
+
+      <div class="callout danger" style="margin:22px 0;">
+        <div class="k">Part 2: The Hidden Catch (Why it fails under heavy traffic)</div>
+        <p>Most of the time in programming, <b>reading</b> data is completely safe to do with multiple people at once. Ten people can look at the same webpage or read the same book at the exact same second without bumping into each other.</p>
+        <p><b>Writing</b> (changing) data is different. If two people try to rewrite the same page at the same time, it causes chaos. So programmers put a <b>lock</b> on the book: only one person can write at a time while everyone else waits.</p>
+        <p>Here is the critical problem with <code class="inline">accessOrder = true</code>:</p>
+        <ul style="margin:8px 0 12px 20px; line-height:1.75;">
+          <li><b>Because of that flag, a read is secretly a write.</b></li>
+          <li>When you call <code class="inline">get()</code>, Java isn't just looking at the value. It is actively unhooking pointers (<code class="inline">before</code> and <code class="inline">after</code>) and rearranging the doubly linked chain behind the scenes.</li>
+          <li>If two computer threads try to rearrange the chain at the exact same millisecond, the chain breaks, cyclic references are formed, and the program crashes or loops infinitely.</li>
+          <li><b>The consequence:</b> You must force every reader to wait in a single line using a lock (such as <code class="inline">Collections.synchronizedMap</code>). If thousands of users are reading data at the same second, everything slows to a crawl because nobody can read at the same time.</li>
+        </ul>
+        <p style="margin-bottom:0;">In high-speed, multi-user systems, engineers avoid this flag and use specialized concurrent caches (like <b>Caffeine</b> or custom striped rings) that don't need to rebuild internal chains on every simple read. (See <a href="#caffeine">Section 14 · Modern Caching</a> for how W-TinyLFU and asynchronous ring buffers solve this without read locks).</p>
+      </div>
+
+      <div id="setmap-tree"></div>
+      <h3>TreeSet and TreeMap: the same Red-Black tree, used from the very first entry</h3>
+      <p>You already met the Red-Black tree a moment ago — it's the shape a HashMap bucket turns itself into once its chain grows past 8 entries. TreeMap and TreeSet don't wait for that to happen. They use a Red-Black tree as their <i>entire</i> storage, starting from the very first entry you insert.</p>
+
+      <p>Here's the plain-English version of "self-balancing," since that word gets thrown around a lot without being explained: a normal binary search tree can accidentally turn into a straight line. If you insert 1, 2, 3, 4, 5 in that exact order into a plain BST, each new number is bigger than the last, so each one becomes the right child of the one before it — you end up with something that behaves exactly like a LinkedList, and looking something up costs O(n), a full walk. A Red-Black tree refuses to let this happen. Every time a node is inserted, the tree checks a small set of coloring rules (every node is marked red or black, and a few simple rules about which colors can sit next to each other must always hold), and if inserting the new node broke a rule, it performs a <b>rotation</b> — a quick local swap of a few pointers — to restore balance immediately.</p>
+
+      <div class="callout">
+        <div class="k">The one guarantee that matters</div>
+        A Red-Black tree guarantees the longest path from root to leaf is never more than roughly twice the length of the shortest path. That single guarantee is what keeps <code class="inline">put()</code>, <code class="inline">get()</code>, and <code class="inline">remove()</code> at O(log n) <b>even in the worst case</b> — unlike HashMap's O(1), which is only true <i>on average</i> and can degrade if hashing goes badly.
+      </div>
+
+      <svg viewBox="0 0 700 220" width="100%" style="max-width:700px;margin:20px 0;">
+        <style>
+          .bn{ fill:#101B30; stroke:#F0837A; stroke-width:1.3; }
+          .bt{ font-family:'IBM Plex Mono',monospace; font-size:12px; fill:#E7EDF7; }
+          .be{ stroke:#5D6D8A; stroke-width:1.2; }
+          .bl{ font-family:'Space Grotesk',sans-serif; font-size:12px; fill:#93A3BE; }
+        </style>
+        <text x="10" y="20" class="bl">Insert 1,2,3,4,5 in order — no balancing</text>
+        <line class="be" x1="40" y1="40" x2="40" y2="70"/>
+        <circle cx="40" cy="35" r="16" class="bn"/><text x="40" y="39" text-anchor="middle" class="bt">1</text>
+        <line class="be" x1="60" y1="80" x2="80" y2="110"/>
+        <circle cx="60" cy="75" r="16" class="bn"/><text x="60" y="79" text-anchor="middle" class="bt">2</text>
+        <line class="be" x1="100" y1="150" x2="120" y2="180"/>
+        <circle cx="100" cy="115" r="16" class="bn"/><text x="100" y="119" text-anchor="middle" class="bt">3</text>
+        <circle cx="140" cy="155" r="16" class="bn"/><text x="140" y="159" text-anchor="middle" class="bt">4</text>
+        <line class="be" x1="100" y1="130" x2="140" y2="140"/>
+        <circle cx="180" cy="195" r="16" class="bn"/><text x="180" y="199" text-anchor="middle" class="bt">5</text>
+        <line class="be" x1="140" y1="170" x2="180" y2="180"/>
+        <text x="30" y="215" class="bl" style="fill:#F0837A;">a straight line — finding "5" means walking past 1,2,3,4 first. O(n).</text>
+
+        <text x="400" y="20" class="bl">Same 5 values — Red-Black balanced</text>
+        <style>.gn{ fill:#101B30; stroke:#7FD99B; stroke-width:1.3; } .ge{ stroke:#5D6D8A; stroke-width:1.2; }</style>
+        <line class="ge" x1="500" y1="55" x2="450" y2="105"/>
+        <line class="ge" x1="500" y1="55" x2="550" y2="105"/>
+        <circle cx="500" cy="40" r="17" class="gn"/><text x="500" y="45" text-anchor="middle" class="bt">3</text>
+        <line class="ge" x1="450" y1="120" x2="420" y2="160"/>
+        <circle cx="450" cy="105" r="16" class="gn"/><text x="450" y="109" text-anchor="middle" class="bt">2</text>
+        <circle cx="420" cy="175" r="15" class="gn"/><text x="420" y="179" text-anchor="middle" class="bt">1</text>
+        <line class="ge" x1="550" y1="120" x2="580" y2="160"/>
+        <circle cx="550" cy="105" r="16" class="gn"/><text x="550" y="109" text-anchor="middle" class="bt">4</text>
+        <circle cx="580" cy="175" r="15" class="gn"/><text x="580" y="179" text-anchor="middle" class="bt">5</text>
+        <text x="400" y="215" class="bl" style="fill:#7FD99B;">a rotation kept it short and wide — finding any value takes at most 2 hops. O(log n).</text>
+      </svg>
+
+      <p>TreeSet follows the same pattern as HashSet and LinkedHashSet: it's a thin wrapper hiding a private <code class="inline">TreeMap&lt;E,Object&gt;</code> field, reusing the same one-shared-dummy-value trick. What you get in exchange for O(log n) instead of O(1) average is real ordering power a HashMap can never offer: <code class="inline">first()</code> / <code class="inline">last()</code> (smallest / largest), <code class="inline">ceiling(x)</code> / <code class="inline">floor(x)</code> (smallest ≥x / largest ≤x), <code class="inline">higher(x)</code> / <code class="inline">lower(x)</code> (strictly greater / strictly less), and whole range views like <code class="inline">headMap()</code>, <code class="inline">tailMap()</code>, and <code class="inline">subMap()</code>. None of this is possible on a HashMap — a HashMap doesn't track order, so it has no concept of "what comes just after this key."</p>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>Set family — one glance</h4>
+          <table style="margin:8px 0 0;">
+            <tr><th>Class</th><th>Backed by</th><th>Order</th><th>add/contains</th></tr>
+            <tr><td class="mono">HashSet</td><td class="mono">HashMap</td><td>none — looks random</td><td>O(1) avg</td></tr>
+            <tr><td class="mono">LinkedHashSet</td><td class="mono">LinkedHashMap</td><td>insertion order</td><td>O(1) avg</td></tr>
+            <tr><td class="mono">TreeSet</td><td class="mono">Red-Black tree</td><td>sorted order</td><td>O(log n)</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h4>Map family — one glance</h4>
+          <table style="margin:8px 0 0;">
+            <tr><th>Class</th><th>Extra cost vs HashMap</th><th>Order</th><th>get/put</th></tr>
+            <tr><td class="mono">HashMap</td><td>—</td><td>none — looks random</td><td>O(1) avg</td></tr>
+            <tr><td class="mono">LinkedHashMap</td><td>2 refs / entry</td><td>insertion (or access) order</td><td>O(1) avg</td></tr>
+            <tr><td class="mono">TreeMap</td><td>tree, not array</td><td>sorted order</td><td>O(log n)</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="viz">
+        <div class="viz-controls">
+          <input id="set-word" placeholder="type a word…" style="font-family:var(--mono);background:#080D18;border:1px solid var(--line);color:#E7EDF7;padding:8px 10px;border-radius:4px;width:160px;">
+          <button class="btn" onclick="setDemo.add()">add to all three →</button>
+          <button class="btn alt" onclick="setDemo.reset()">reset</button>
+        </div>
+        <div class="grid3">
+          <div class="card"><h4>HashSet</h4><div id="set-hash" class="mono" style="font-size:12.5px;line-height:2;"></div></div>
+          <div class="card"><h4>LinkedHashSet</h4><div id="set-linked" class="mono" style="font-size:12.5px;line-height:2;"></div></div>
+          <div class="card"><h4>TreeSet</h4><div id="set-tree" class="mono" style="font-size:12.5px;line-height:2;"></div></div>
+        </div>
+        <div class="viz-caption" id="set-caption">Same words, added in the same order, into all three. Watch the iteration order come out different for each one — because each one stores it differently underneath. HashSet's order isn't random, by the way — it's just the bucket index, which looks arbitrary to us but is 100% determined by the hash.</div>
+      </div>
+
+      <p class="dim">Practice problems for exactly these structures are waiting for you in the "Practice problems, organized by data structure" section further down — look for the <b>HashMap / HashSet</b> row and the <b>TreeMap / TreeSet</b> row.</p>
+    </section>
+
+    <!-- ================= SECTION 4: QUEUES & HEAPS ================= -->
+    <section id="queues">
+      <div class="eyebrow">06 — ORDERED EXTRACTION</div>
+      <h2>Queue, Deque, and the binary heap</h2>
+      <div class="sub">A List cares about position. A Queue cares about <i>order of extraction</i> — who gets served next.</div>
+
+      <h3>ArrayDeque: the modern default</h3>
+      <p><code class="inline">ArrayDeque</code> ("double-ended queue") is a circular array with a <code class="inline">head</code> and <code class="inline">tail</code> index. It supports adding/removing from <i>either</i> end in O(1) without ever allocating a node object — so it plays FIFO queue, LIFO stack, and deque all at once, and generally beats both <code class="inline">LinkedList</code> and the ancient <code class="inline">Stack</code> class for these roles.</p>
+
+      <div class="analogy">
+        <div class="icon">🔄</div>
+        <div>
+          <div class="k">Analogy: a circular parking lot</div>
+          Picture a row of parking spaces bent into a circle. Cars enter at one marker (tail) and leave from another (head). When the lot fills, instead of building a longer street, the whole ring just doubles in size. When the head pointer would run off the end of the array, it silently wraps back to index 0 — that's the bitwise trick <code class="inline">head = (head - 1) & (capacity - 1)</code>, the same power-of-two masking trick HashMap uses.
+        </div>
+      </div>
+
+      <h3>PriorityQueue: a binary heap, not a sorted list</h3>
+      <p>A common misconception: <code class="inline">PriorityQueue</code> does <b>not</b> keep its elements fully sorted. It keeps one guarantee only — <b>the smallest element is always at the front</b> — using a shape called a <b>binary min-heap</b>, stored compactly inside a plain array.</p>
+      <p>The trick is a pure-arithmetic tree: for any array index <var>i</var>, its parent lives at <code class="inline">(i-1)/2</code>, and its children live at <code class="inline">2i+1</code> and <code class="inline">2i+2</code>. No pointers at all — the shape is implied entirely by position.</p>
+
+      <div class="viz">
+        <div class="viz-controls">
+          <button class="btn" onclick="heapDemo.insert()">insert random →</button>
+          <button class="btn alt" onclick="heapDemo.poll()">poll() — remove min</button>
+          <button class="btn" onclick="heapDemo.reset()">reset</button>
+        </div>
+        <div id="heap-svg-wrap"></div>
+        <div class="viz-caption" id="heap-caption">insert bubbles the new value <b>up</b> while it's smaller than its parent (siftUp). poll() moves the last element to the root, then sinks it <b>down</b> past its smaller child (siftDown). Both run in O(log n).</div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 5: SEQUENCED COLLECTIONS ================= -->
+    <section id="sequenced">
+      <div class="eyebrow">07 — JAVA 21</div>
+      <h2>Sequenced Collections: one missing interface, finally added</h2>
+      <div class="sub">A real gap existed for years: every ordered collection had a "first" and "last" element, but there was no common way to say so.</div>
+
+      <div class="callout warn">
+        <div class="k">The problem, before Java 21</div>
+        Getting the last element required a different idiom per type: <code class="inline">list.get(list.size()-1)</code> for a List, <code class="inline">deque.getLast()</code> for a Deque, <code class="inline">sortedSet.last()</code> for a SortedSet — and for a <code class="inline">LinkedHashSet</code>, there was no shortcut at all; you had to iterate the entire set just to reach the end.
+      </div>
+
+      <p><b>JEP 431</b> introduced <code class="inline">SequencedCollection&lt;E&gt;</code>, sitting between <code class="inline">Collection&lt;E&gt;</code> and both <code class="inline">List&lt;E&gt;</code> and <code class="inline">Deque&lt;E&gt;</code>. It standardizes six methods every ordered collection can now share:</p>
+      <pre>interface SequencedCollection&lt;E&gt; extends Collection&lt;E&gt; {
+    void addFirst(E e);
+    void addLast(E e);
+    E getFirst();
+    E getLast();
+    E removeFirst();
+    E removeLast();
+    SequencedCollection&lt;E&gt; reversed();  <span class="c1">// O(1) view, no copying</span>
+}</pre>
+      <p><code class="inline">reversed()</code> is the elegant part: it doesn't build a new reversed copy. It returns a thin <i>view</i> object that reads the same backing data back-to-front — so it's O(1) in time and memory, no matter the collection's size.</p>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>SequencedSet&lt;E&gt;</h4>
+          <p class="dim" style="margin:0;">Extends both Set and SequencedCollection. <code class="inline">LinkedHashSet</code> now supports <code class="inline">addFirst</code>/<code class="inline">addLast</code> in O(1). <code class="inline">SortedSet</code> also implements this interface, but throws <code class="inline">UnsupportedOperationException</code> on <code class="inline">addFirst</code> — its order is dictated by a Comparator, not insertion, so "add at the front" is a contradiction it correctly refuses.</p>
+        </div>
+        <div class="card">
+          <h4>SequencedMap&lt;K,V&gt;</h4>
+          <p class="dim" style="margin:0;">Adds <code class="inline">firstEntry()</code>, <code class="inline">lastEntry()</code>, <code class="inline">pollFirstEntry()</code>, <code class="inline">pollLastEntry()</code>, plus sequenced views <code class="inline">sequencedKeySet()</code> and <code class="inline">sequencedEntrySet()</code>. Implemented by <code class="inline">LinkedHashMap</code> and <code class="inline">TreeMap</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 6: CONCURRENCY BASICS ================= -->
+    <section id="concurrency">
+      <div class="eyebrow">08 — BEFORE ANY "CONCURRENT" CLASS MAKES SENSE</div>
+      <h2>What actually goes wrong when two threads share data</h2>
+      <div class="sub">Everything from here on — ConcurrentHashMap, CopyOnWriteArrayList, blocking queues — exists to solve one problem. Let's see the problem first.</div>
+
+      <p>A <b>thread</b> is an independent sequence of instructions your program runs. Modern CPUs have multiple cores, so multiple threads can genuinely execute <i>at the same instant</i> — not just take turns quickly. That's the whole point of concurrency: real parallel speed. It's also where the trouble starts.</p>
+
+      <div class="analogy">
+        <div class="icon">🏧</div>
+        <div>
+          <div class="k">Analogy: two people, one bank balance, no communication</div>
+          A shared bank balance reads $100. You and your partner both check the balance at the <i>same instant</i>, both see $100, and both decide to withdraw $80. Each of you independently computes "100 − 80 = 20" and writes 20 back. The bank ends up at $20 — even though $160 was withdrawn from an account that only had $100. Nobody did anything individually wrong; the problem is that <b>read, decide, and write</b> weren't a single uninterruptible step. This is exactly what an unsynchronized <code class="inline">counter++</code> does across two threads.
+        </div>
+      </div>
+
+      <p>This is called a <b>race condition</b>: the final result depends on the unpredictable timing of two threads, rather than on the logic of the program. Java gives you two fundamentally different tools to prevent it:</p>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>🔒 Locking — make threads take turns</h4>
+          <p class="dim" style="margin:0;">A <code class="inline">synchronized</code> block or <code class="inline">ReentrantLock</code> lets only one thread execute the protected code at a time. Every other thread trying to enter is <i>parked</i> — put to sleep by the OS — until the lock is free. Simple to reason about, but threads waiting on a lock do zero useful work, and heavy contention means most threads spend their time asleep.</p>
+        </div>
+        <div class="card">
+          <h4>⚡ CAS — bet, then check</h4>
+          <p class="dim" style="margin:0;"><b>Compare-And-Swap</b> is a single CPU instruction: "if this memory location still holds the value I expect, replace it with my new value — atomically, as one indivisible step. Tell me if it worked." No thread ever sleeps. If the swap fails because someone else got there first, the thread just re-reads the current value and tries again. This is called <b>lock-free</b> programming.</p>
+        </div>
+      </div>
+
+      <div class="viz">
+        <div class="viz-controls">
+          <button class="btn" onclick="casDemo.runUnsafe()">simulate: unsynchronized counter++ ×2 threads</button>
+          <button class="btn" onclick="casDemo.runCAS()">simulate: CAS-protected increment</button>
+          <button class="btn alt" onclick="casDemo.reset()">reset</button>
+        </div>
+        <div id="cas-out" style="font-family:var(--mono);font-size:13px;white-space:pre-line;line-height:1.8;"></div>
+      </div>
+
+      <p>CAS is what lets a data structure be thread-safe <i>without</i> ever putting a thread to sleep for the common case — which is exactly the trick <code class="inline">ConcurrentHashMap</code>, <code class="inline">LongAdder</code>, and <code class="inline">ConcurrentSkipListMap</code> all lean on.</p>
+    </section>
+
+    <!-- ================= SECTION 7: CONCURRENTHASHMAP ================= -->
+    <section id="chm">
+      <div class="eyebrow">09 — THE STANDARD THREAD-SAFE MAP</div>
+      <h2>ConcurrentHashMap: CAS where it can, a tiny lock where it must</h2>
+      <div class="sub">The most important upgrade in ConcurrentHashMap's history: Java 7 locked in coarse 16-way stripes. Java 8 rebuilt it to lock almost nothing.</div>
+
+      <h3>The old way (Java 7): segment striping</h3>
+      <p>Java 7's ConcurrentHashMap pre-split the table into 16 independent <code class="inline">Segment</code>s, each guarded by its own lock. Up to 16 threads could write simultaneously — one per segment — but any operation needing a global view (like computing overall size, or resizing) had to lock across <i>all</i> segments at once.</p>
+
+      <div id="chm-cas"></div>
+      <h3>The current design (Java 8+): per-bucket, not per-segment</h3>
+      <p>Java 8 threw out segments entirely. The table now looks just like HashMap's — a flat array of buckets — but every operation on a bucket is protected individually and as cheaply as possible:</p>
+
+      <div class="viz">
+        <svg viewBox="0 0 820 260" width="100%" style="max-width:820px;">
+          <style>.ct{font-family:'IBM Plex Mono',monospace;font-size:12.5px;fill:#E7EDF7;} .cb{fill:#101B30;stroke:#3E8E88;stroke-width:1.2;}</style>
+          <rect x="20" y="20" width="360" height="66" rx="6" class="cb" style="stroke:#7FD99B;"/>
+          <text x="200" y="44" text-anchor="middle" class="ct" style="fill:#7FD99B;">table[i] == null</text>
+          <text x="200" y="66" text-anchor="middle" class="ct" style="font-size:11px;color:#93A3BE;">CAS insert directly — no lock at all</text>
+
+          <rect x="440" y="20" width="360" height="66" rx="6" class="cb" style="stroke:#F5B563;"/>
+          <text x="620" y="44" text-anchor="middle" class="ct" style="fill:#F5B563;">table[i] != null</text>
+          <text x="620" y="66" text-anchor="middle" class="ct" style="font-size:11px;">synchronized(bucket-head) — lock ONE bucket only</text>
+
+          <rect x="60" y="120" width="700" height="120" rx="6" class="cb"/>
+          <text x="80" y="146" class="ct" style="fill:#93A3BE;">Inside that one-bucket lock, three sub-cases:</text>
+          <text x="80" y="176" class="ct">1. Plain chain → append/traverse the linked list as normal</text>
+          <text x="80" y="200" class="ct">2. Treeified bucket (TreeBin) → delegate to its own internal reader-writer lock, letting concurrent reads pass even while one writer rotates the tree</text>
+          <text x="80" y="224" class="ct">3. ForwardingNode found (bucket mid-migration) → thread <span style="color:#6EE7D8;">helps finish the resize</span> instead of waiting</text>
+        </svg>
+      </div>
+
+      <p>The insight: locking one bucket's head node blocks nothing else in the table. Two threads writing to two different buckets run fully in parallel — even though both technically "hold a lock" at that moment.</p>
+
+      <div id="chm-resize"></div>
+      <h3>Cooperative resizing: nobody blocks, everybody helps</h3>
+      <p>A single-threaded HashMap resize just stops and copies everything. A concurrent map can't get away with "stop the world" — other threads must be able to keep working. ConcurrentHashMap solves this with two shared counters:</p>
+      <ul class="max">
+        <li><code class="inline">sizeCtl</code> — when negative, encodes that a resize is in progress, packing a generation stamp and a count of active migrating threads into one int</li>
+        <li><code class="inline">transferIndex</code> — the next unclaimed stretch of buckets still needing migration</li>
+      </ul>
+      <p>Any thread that stumbles onto a <code class="inline">ForwardingNode</code> (a marker left on an already-migrated bucket) doesn't wait around — it calls <code class="inline">helpTransfer()</code> and claims its own stride of buckets to migrate via a CAS decrement on <code class="inline">transferIndex</code>. Whichever threads happen to be around during a resize simply pitch in; the resize finishes faster the busier the map is.</p>
+
+      <div class="callout">
+        <div class="k">Why null is banned</div>
+        <code class="inline">map.get(key)</code> returning <code class="inline">null</code> is ambiguous in a single thread: is the key mapped to null, or just absent? You'd normally resolve this with a follow-up <code class="inline">containsKey(key)</code> call. In a concurrent map, another thread can insert or remove that exact key <i>between</i> your two calls — so the two-step check is no longer atomic and can lie to you. Doug Lea's fix was simpler than any locking scheme: ConcurrentHashMap just refuses to store <code class="inline">null</code> at all, and throws <code class="inline">NullPointerException</code> immediately if you try.
+      </div>
+
+      <h3>Counting size without a global lock: LongAdder</h3>
+      <p>If every thread updated one shared counter with CAS, all of them would repeatedly collide on the exact same memory address — the CPU cache line backing that counter gets invalidated on every single update (more on this in the mechanical sympathy section). <code class="inline">LongAdder</code> instead keeps a base counter plus an <i>array</i> of independent striped counters. Under contention, each thread hashes to its own stripe and updates that instead — collisions become rare — and <code class="inline">sum()</code> just adds every stripe together when a total is actually needed.</p>
+    </section>
+
+    <!-- ================= SECTION 8: COPY-ON-WRITE ================= -->
+    <section id="cow">
+      <div class="eyebrow">10 — READ-HEAVY, WRITE-RARE</div>
+      <h2>CopyOnWriteArrayList: reads that never even see a lock</h2>
+      <div class="sub">An entirely different bet: what if writes were expensive, so reads could be completely free?</div>
+
+      <p><code class="inline">CopyOnWriteArrayList</code> stores its data in a <code class="inline">volatile Object[] array</code>. Reads just read that reference directly — no lock, no CAS retry loop, nothing. They're as fast as reading a plain array, and they can never throw <code class="inline">ConcurrentModificationException</code>, because they never even look at whether the array has changed.</p>
+
+      <p>The cost is paid entirely by writers. Every single mutation — even adding one element — does this under a <code class="inline">ReentrantLock</code>:</p>
+      <pre><span class="kw">public boolean</span> add(E e) {
+    lock.lock();
+    <span class="kw">try</span> {
+        Object[] newElements = Arrays.copyOf(getArray(), len + 1);
+        newElements[len] = e;
+        setArray(newElements);  <span class="c1">// swap the volatile reference — readers now see it</span>
+    } <span class="kw">finally</span> { lock.unlock(); }
+}</pre>
+
+      <div class="analogy">
+        <div class="icon">📋</div>
+        <div>
+          <div class="k">Analogy: a clipboard that gets fully re-photocopied on every edit</div>
+          Anyone can glance at the clipboard on the wall at any moment without asking permission — they just see whatever page is currently pinned up. But to make an edit, you have to photocopy the entire page, mark it up, and pin the new copy over the old one. If the clipboard has 50,000 lines, every single edit means recopying all 50,000 lines. Fine if edits are rare. Ruinous if edits happen constantly.
+        </div>
+      </div>
+
+      <p>An iterator created over a CopyOnWriteArrayList captures the array reference at that instant — a snapshot. It will never reflect later writes, and it doesn't support <code class="inline">remove()</code>/<code class="inline">set()</code>/<code class="inline">add()</code> through the iterator at all. This makes it a strong fit for things like listener/observer lists — read constantly, modified almost never — and a poor fit for anything write-heavy.</p>
+    </section>
+
+    <!-- ================= SECTION 9: BLOCKING QUEUES ================= -->
+    <section id="bqueues">
+      <div class="eyebrow">11 — PRODUCER / CONSUMER PIPELINES</div>
+      <h2>Blocking queues: when threads should actually wait</h2>
+      <div class="sub">Sometimes waiting is correct — a consumer thread with nothing to do genuinely should sleep rather than spin. These queues make that safe and efficient.</div>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>ArrayBlockingQueue</h4>
+          <p class="dim">Fixed-size array, bounded capacity fixed at creation. One single <code class="inline">ReentrantLock</code> guards both <code class="inline">put()</code> and <code class="inline">take()</code>, with two condition variables (<code class="inline">notEmpty</code>, <code class="inline">notFull</code>) used to park and wake threads efficiently. Because producers and consumers share the one lock, they can contend with each other under bursty load — but memory use is minimal and fully predictable.</p>
+        </div>
+        <div class="card">
+          <h4>LinkedBlockingQueue</h4>
+          <p class="dim">Unbounded by default, built from linked nodes. Uses <b>two separate locks</b> — <code class="inline">putLock</code> and <code class="inline">takeLock</code> — so producers and consumers stop contending with each other entirely. The trade-off: every insertion allocates a new node, adding garbage-collection pressure that the array-backed queue avoids.</p>
+        </div>
+      </div>
+
+      <h3>SynchronousQueue: a queue with zero capacity</h3>
+      <p>This one holds nothing at all. Every <code class="inline">put()</code> must rendezvous directly with a waiting <code class="inline">take()</code> — it's a pure hand-off between two threads, not storage. Internally it's a lock-free "dual" structure (a dual-stack for LIFO mode, a dual-queue for FIFO mode) where nodes represent either "I have data waiting" or "I want data." This is the queue behind <code class="inline">Executors.newCachedThreadPool()</code>, where a new task should hand directly to an idle worker thread.</p>
+
+      <h3>LinkedTransferQueue: the "give me everything" queue</h3>
+      <p>Combines ideas from all of the above into one unbounded, lock-free queue. Its signature addition is <code class="inline">transfer(e)</code>: it blocks until some consumer actually takes the element, guaranteeing direct hand-off semantics even though the queue is otherwise unbounded and non-blocking for normal <code class="inline">put()</code>/<code class="inline">take()</code> use.</p>
+
+      <table>
+        <tr><th>Queue</th><th>Synchronization</th><th>Blocks?</th><th>Best for</th></tr>
+        <tr><td class="mono">ArrayBlockingQueue</td><td>1 lock, 2 conditions</td><td>Yes</td><td>Strict memory bound, simple pipelines</td></tr>
+        <tr><td class="mono">LinkedBlockingQueue</td><td>2 locks (put/take)</td><td>Yes</td><td>High-throughput producer/consumer, GC tolerant</td></tr>
+        <tr><td class="mono">SynchronousQueue</td><td>lock-free dual structure</td><td>Yes (rendezvous)</td><td>Direct thread hand-off, cached thread pools</td></tr>
+        <tr><td class="mono">LinkedTransferQueue</td><td>lock-free CAS</td><td>Optional (transfer)</td><td>Mixed hand-off + buffered workloads</td></tr>
+      </table>
+    </section>
+
+    <!-- ================= SECTION 10: SKIP LIST ================= -->
+    <section id="skiplist">
+      <div class="eyebrow">12 — CONCURRENT + SORTED, WITHOUT A TREE</div>
+      <h2>ConcurrentSkipListMap: an express-lane linked list</h2>
+      <div class="sub">Balanced trees (Red-Black, AVL) rebalance by rotating nodes across multiple levels — brutal to do safely without locking large parts of the tree. Skip lists sidestep the whole problem.</div>
+
+      <p>A skip list is just several linked lists stacked on top of each other. Level 0 holds every element in sorted order — nothing fancy. Each level above it holds a randomly-chosen, thinner subset of the level below, like an express train that only stops at some of the same stations as the local train.</p>
+
+      <div class="viz">
+        <svg viewBox="0 0 780 200" width="100%" style="max-width:780px;">
+          <style>.sn{fill:#101B30;stroke:#3E8E88;stroke-width:1.3;} .st2{font-family:'IBM Plex Mono',monospace;font-size:12px;fill:#E7EDF7;} .se{stroke:#5D6D8A;stroke-width:1.1;}</style>
+          <text x="10" y="24" class="st2" style="fill:#5D6D8A;">L2</text>
+          <line x1="40" y1="20" x2="720" y2="20" class="se"/>
+          <circle cx="40" cy="20" r="4" fill="#6EE7D8"/>
+          <circle cx="420" cy="20" r="4" fill="#6EE7D8"/>
+          <text x="420" y="12" text-anchor="middle" class="st2">40</text>
+
+          <text x="10" y="74" class="st2" style="fill:#5D6D8A;">L1</text>
+          <line x1="40" y1="70" x2="720" y2="70" class="se"/>
+          <circle cx="40" cy="70" r="4" fill="#6EE7D8"/>
+          <circle cx="220" cy="70" r="4" fill="#6EE7D8"/>
+          <circle cx="420" cy="70" r="4" fill="#6EE7D8"/>
+          <text x="220" y="62" text-anchor="middle" class="st2">20</text>
+
+          <text x="10" y="124" class="st2" style="fill:#5D6D8A;">L0</text>
+          <line x1="40" y1="120" x2="720" y2="120" class="se"/>
+          <circle cx="40" cy="120" r="4" fill="#6EE7D8"/>
+          <circle cx="120" cy="120" r="4" fill="#F5B563"/>
+          <circle cx="220" cy="120" r="4" fill="#6EE7D8"/>
+          <circle cx="320" cy="120" r="4" fill="#F5B563"/>
+          <circle cx="420" cy="120" r="4" fill="#6EE7D8"/>
+          <text x="120" y="140" text-anchor="middle" class="st2" style="fill:#F5B563;">5</text>
+          <text x="320" y="140" text-anchor="middle" class="st2" style="fill:#F5B563;">30</text>
+          <line x1="720" y1="0" x2="720" y2="130" class="se" style="stroke-dasharray:2,2;"/>
+          <text x="740" y="70" class="st2" style="fill:#5D6D8A;font-size:11px;">→ ∞</text>
+          <text x="40" y="180" class="st2" style="fill:#93A3BE;">Search "30": start top level → overshoot at 40 → drop a level → find between 20 and 40 → drop → land on 30. ~O(log n).</text>
+        </svg>
+      </div>
+
+      <p>Whether a new node gets promoted to a higher level is decided by a random coin flip at insertion time (typically 50/50 per level) — no rebalancing operation is ever needed, because the structure's shape is probabilistic by construction rather than something that must be actively maintained.</p>
+
+      <h3>Deleting without locking: the tombstone protocol</h3>
+      <p>Removing a node safely while other threads are mid-traversal, without a lock, takes three CAS-driven steps:</p>
+      <ol class="max">
+        <li><b>Logical deletion</b> — CAS the node's value to null. It's now "dead" but still physically linked in.</li>
+        <li><b>Marker insertion</b> — CAS in a special tombstone node right after it, so any thread walking past knows this node is being removed.</li>
+        <li><b>Physical unlinking</b> — the next thread that happens to walk past (any thread — not necessarily the deleter) finishes the job, rewiring the previous node's pointer to skip over both the dead node and its tombstone.</li>
+      </ol>
+      <p class="dim">That last step is the elegant part: cleanup work is shared opportunistically across whichever threads happen to pass by, instead of being one thread's exclusive responsibility.</p>
+      <p><code class="inline">ConcurrentSkipListMap</code> is the map to reach for when you need both <b>sorted order</b> and <b>thread safety</b> — <code class="inline">ConcurrentHashMap</code> gives you thread safety but no ordering at all.</p>
+    </section>
+
+    <!-- ================= SECTION 11: MECHANICAL SYMPATHY ================= -->
+    <section id="mechsym">
+      <div class="eyebrow">13 — WHY HARDWARE SHAPES THE "RIGHT" ANSWER</div>
+      <h2>Cache lines, false sharing, and compressed pointers</h2>
+      <div class="sub">Two structures with identical Big-O can perform completely differently — because Big-O doesn't know your CPU has caches.</div>
+
+      <h3>Cache lines</h3>
+      <p>CPUs never fetch a single byte from memory. They fetch in fixed 64-byte blocks called <b>cache lines</b>, on the assumption that if you touched one byte, you'll probably touch its neighbors soon (this is why ArrayList's contiguous layout wins — one cache-line fetch grabs several elements at once).</p>
+
+      <h3>False sharing: contention on memory nobody's actually fighting over</h3>
+      <div class="analogy">
+        <div class="icon">🍕</div>
+        <div>
+          <div class="k">Analogy: two people sharing one pizza box, eating different slices</div>
+          Two threads increment two <i>completely unrelated</i> counters — Variable A and Variable B — that just happen to have been placed next to each other in memory, inside the same 64-byte cache line (the "pizza box"). Under the CPU's cache-coherence protocol (MESI), when Core 1 writes to Variable A, the <i>entire</i> cache line is invalidated in Core 2's cache — even though Core 2 was only ever touching Variable B. Core 2 now has to reload the whole line from a slower shared cache, purely because of where A happened to sit in memory. Nobody is actually contending for the same data — just the same delivery box.
+        </div>
+      </div>
+
+      <p>The JDK's fix is the <code class="inline">@Contended</code> annotation, which pads a field with extra bytes so it lands on its own private cache line, immune to a neighbor's writes. <code class="inline">ConcurrentHashMap.CounterCell</code> and <code class="inline">Striped64</code> (which backs <code class="inline">LongAdder</code>) both use it — it's precisely why striped counters actually deliver the scalability they promise.</p>
+
+      <h3>Compressed OOPs: the 32 GB cliff</h3>
+      <p>On a 64-bit JVM, a plain object reference is normally 8 bytes. But HotSpot aligns every object to an 8-byte boundary, which means the lowest 3 bits of any object's address are always zero — genuinely wasted information. Below a 32 GB heap, the JVM exploits this: it stores references as 32-bit numbers and shifts them left by 3 bits whenever they're loaded into a register, recovering the full 8-byte address cheaply. This is <b>Compressed OOPs</b>, and it's on by default.</p>
+      <div class="callout danger">
+        <div class="k">The cliff</div>
+        The instant your heap crosses roughly 32 GB, this trick stops working and compressed OOPs turn off automatically. Every reference field across your entire heap silently doubles from 4 to 8 bytes. For pointer-dense structures — HashMap nodes, LinkedList nodes, TreeMap entries — this alone can inflate memory use by 30–50%, with zero new data stored. Sizing a heap to sit just under 32 GB is often a deliberate, informed choice rather than an accident.
+      </div>
+    </section>
+
+    <!-- ================= SECTION 12: CAFFEINE / W-TINYLFU ================= -->
+    <section id="caffeine">
+      <div class="eyebrow">14 — MODERN CACHING</div>
+      <h2>Why LinkedHashMap and bare ConcurrentHashMap both fail as caches</h2>
+      <div class="sub">A cache needs two things neither built-in structure gives you for free: bounded size, and eviction of the <i>right</i> item.</div>
+
+      <ul class="max">
+        <li><code class="inline">LinkedHashMap</code> in access-order mode <i>can</i> track recency and evict the least-recently-used item — but it does so by locking on every single read to reposition the accessed entry, which is a serialization bottleneck under concurrent traffic.</li>
+        <li>A bare <code class="inline">ConcurrentHashMap</code> has no eviction policy at all. Bolt one on with a periodic background scan and you've turned eviction into an O(n) sweep that can stall the whole application.</li>
+      </ul>
+
+      <p>Modern caches (Caffeine, built by Ben Manes) solve this with <b>Window TinyLFU (W-TinyLFU)</b>, which separates "is this cache full" from "did anyone actually look at this item recently" into two independent, cheap mechanisms:</p>
+
+      <div class="grid3">
+        <div class="card">
+          <h4>Lock-free read buffering</h4>
+          <p class="dim" style="margin:0;">A cache read is a plain <code class="inline">ConcurrentHashMap.get()</code> — no lock. The read event is separately dropped into a small ring buffer. A background thread drains that buffer in batches later, so recency bookkeeping never sits on the hot read path.</p>
+        </div>
+        <div class="card">
+          <h4>Count-Min Sketch filter</h4>
+          <p class="dim" style="margin:0;">A tiny probabilistic structure (a few megabytes for millions of entries) estimates how often each key has been seen recently. A new candidate only evicts an existing item if its estimated frequency is actually higher — protecting the cache from being flushed by one big one-off scan.</p>
+        </div>
+        <div class="card">
+          <h4>Segmented LRU</h4>
+          <p class="dim" style="margin:0;">Space splits into a small "Window" (catches short-term bursty access) and a larger "Main" cache (Probational + Protected). An adaptive algorithm shifts the boundary between them based on live hit-rate feedback.</p>
+        </div>
+      </div>
+      <p class="dim">The net effect: near-lock-free reads, bounded memory, and materially higher hit rates than a plain LRU under real-world access patterns.</p>
+    </section>
+
+    <!-- ================= SECTION 14: HANDS-ON METHODS ================= -->
+    <section id="handson">
+      <div class="eyebrow">15 — CODE YOU WILL ACTUALLY BE ASKED TO WRITE</div>
+      <h2>Hands-on method reference</h2>
+      <div class="sub">Knowing how something works is half the interview. The other half is writing correct code on a whiteboard or shared editor, fast. Below are the methods you will really use, with short, real code for each.</div>
+
+      <h3>List — ArrayList / LinkedList</h3>
+      <pre><span class="ty">List</span>&lt;String&gt; names = <span class="kw">new</span> ArrayList&lt;&gt;();
+names.add(<span class="st">"Anna"</span>);                 <span class="c1">// append at end — O(1) amortized</span>
+names.add(0, <span class="st">"Zoe"</span>);               <span class="c1">// insert at front — O(n), shifts everyone right</span>
+names.get(1);                        <span class="c1">// read by index — O(1) for ArrayList</span>
+names.set(1, <span class="st">"Ravi"</span>);               <span class="c1">// overwrite by index</span>
+names.remove(<span class="st">"Zoe"</span>);                <span class="c1">// remove by VALUE (uses equals())</span>
+names.remove(0);                     <span class="c1">// remove by INDEX (be careful with Integer vs int here!)</span>
+names.contains(<span class="st">"Anna"</span>);             <span class="c1">// O(n) linear scan — no shortcut for List</span>
+names.removeIf(n -&gt; n.length() &lt; 3); <span class="c1">// remove every element matching a condition</span>
+Collections.sort(names);             <span class="c1">// natural order (needs Comparable) — O(n log n)</span>
+names.sort(Comparator.reverseOrder()); <span class="c1">// or a custom Comparator</span></pre>
+      <div class="callout warn">
+        <div class="k">Classic interview trap</div>
+        <code class="inline">names.remove(2)</code> removes the element <b>at index 2</b>. But <code class="inline">names.remove(Integer.valueOf(2))</code> removes the element <b>equal to the value 2</b> — because now you've passed an <code class="inline">Integer</code> object, not an <code class="inline">int</code>, so Java picks the other overloaded method. This exact gotcha gets asked a lot.
+      </div>
+
+      <h3>Set — HashSet / LinkedHashSet / TreeSet</h3>
+      <pre><span class="ty">Set</span>&lt;String&gt; seen = <span class="kw">new</span> HashSet&lt;&gt;();
+seen.add(<span class="st">"a"</span>);                 <span class="c1">// O(1) average — returns false if already present</span>
+seen.contains(<span class="st">"a"</span>);            <span class="c1">// O(1) average — the whole reason to use a Set</span>
+seen.retainAll(otherSet);      <span class="c1">// keep only common elements — set intersection</span>
+seen.removeAll(otherSet);      <span class="c1">// set difference</span>
+<span class="ty">TreeSet</span>&lt;Integer&gt; sorted = <span class="kw">new</span> TreeSet&lt;&gt;(List.of(5,1,9,3));
+sorted.first(); sorted.last();       <span class="c1">// smallest / largest — O(log n)</span>
+sorted.ceiling(4); sorted.floor(4);  <span class="c1">// smallest ≥4 / largest ≤4</span></pre>
+
+      <h3>Map — HashMap / TreeMap / LinkedHashMap</h3>
+      <pre><span class="ty">Map</span>&lt;String, <span class="ty">Integer</span>&gt; wordCount = <span class="kw">new</span> HashMap&lt;&gt;();
+wordCount.put(<span class="st">"cat"</span>, 1);                                  <span class="c1">// insert or overwrite</span>
+wordCount.get(<span class="st">"cat"</span>);                                     <span class="c1">// returns null if missing — check carefully!</span>
+wordCount.getOrDefault(<span class="st">"dog"</span>, 0);                         <span class="c1">// safer read, no null surprise</span>
+wordCount.putIfAbsent(<span class="st">"cat"</span>, 99);                         <span class="c1">// only inserts if key is missing — no overwrite</span>
+
+<span class="c1">// The single most useful pattern in interview code — counting frequency:</span>
+wordCount.merge(<span class="st">"cat"</span>, 1, Integer::sum);                   <span class="c1">// if absent: put 1. if present: add 1.</span>
+
+<span class="c1">// Grouping items under a key, building a list as you go:</span>
+<span class="ty">Map</span>&lt;String, <span class="ty">List</span>&lt;String&gt;&gt; groups = <span class="kw">new</span> HashMap&lt;&gt;();
+groups.computeIfAbsent(<span class="st">"vowel"</span>, k -&gt; <span class="kw">new</span> ArrayList&lt;&gt;()).add(<span class="st">"apple"</span>);
+
+<span class="kw">for</span> (Map.Entry&lt;String,Integer&gt; e : wordCount.entrySet()) {   <span class="c1">// standard safe iteration</span>
+    System.out.println(e.getKey() + <span class="st">"="</span> + e.getValue());
+}</pre>
+      <div class="callout">
+        <div class="k">Why merge() and computeIfAbsent() matter so much in interviews</div>
+        Before these existed, counting frequencies took 3 lines (check contains, then either put or increment). <code class="inline">merge()</code> and <code class="inline">computeIfAbsent()</code> collapse that into one line and remove an entire class of bugs. Interviewers specifically look for whether you know these — using them is a strong, fast signal that you write modern Java, not Java from 2010.
+      </div>
+
+      <h3>Deque — as a stack, and as a queue</h3>
+      <pre><span class="ty">Deque</span>&lt;Integer&gt; stack = <span class="kw">new</span> ArrayDeque&lt;&gt;();
+stack.push(1); stack.push(2);      <span class="c1">// push = addFirst</span>
+stack.pop();                       <span class="c1">// pop = removeFirst → returns 2 (LIFO — last in, first out)</span>
+
+<span class="ty">Deque</span>&lt;Integer&gt; queue = <span class="kw">new</span> ArrayDeque&lt;&gt;();
+queue.offer(1); queue.offer(2);    <span class="c1">// offer = addLast</span>
+queue.poll();                      <span class="c1">// poll = removeFirst → returns 1 (FIFO — first in, first out)</span></pre>
+
+      <h3>PriorityQueue</h3>
+      <pre><span class="ty">PriorityQueue</span>&lt;Integer&gt; minHeap = <span class="kw">new</span> PriorityQueue&lt;&gt;();                 <span class="c1">// smallest first, by default</span>
+<span class="ty">PriorityQueue</span>&lt;Integer&gt; maxHeap = <span class="kw">new</span> PriorityQueue&lt;&gt;(Comparator.reverseOrder()); <span class="c1">// largest first</span>
+minHeap.offer(5); minHeap.offer(1); minHeap.offer(9);
+minHeap.peek();   <span class="c1">// look at the smallest without removing — O(1)</span>
+minHeap.poll();   <span class="c1">// remove and return the smallest — O(log n)</span></pre>
+
+      <h3>ConcurrentHashMap</h3>
+      <pre><span class="ty">ConcurrentHashMap</span>&lt;String, <span class="ty">LongAdder</span>&gt; metrics = <span class="kw">new</span> ConcurrentHashMap&lt;&gt;();
+metrics.computeIfAbsent(<span class="st">"clicks"</span>, k -&gt; <span class="kw">new</span> LongAdder()).increment(); <span class="c1">// thread-safe, no external lock</span>
+metrics.forEach((key, adder) -&gt; System.out.println(key + <span class="st">"="</span> + adder.sum())); <span class="c1">// weakly consistent, non-blocking</span></pre>
+    </section>
+
+    <!-- ================= SECTION 15: STREAMS + COLLECTIONS ================= -->
+    <section id="streams">
+      <div class="eyebrow">16 — INTERVIEW-STYLE STREAM API PROBLEMS</div>
+      <h2>Solving collection problems with the Stream API</h2>
+      <div class="sub">Interviewers love asking "now do it with streams." Below are common problems, each read as: take a collection in, get a new collection or value out, in one readable pipeline.</div>
+
+      <h3>1. Count word frequency (List → Map)</h3>
+      <pre><span class="ty">List</span>&lt;String&gt; words = List.of(<span class="st">"cat"</span>,<span class="st">"dog"</span>,<span class="st">"cat"</span>,<span class="st">"bird"</span>,<span class="st">"dog"</span>,<span class="st">"cat"</span>);
+<span class="ty">Map</span>&lt;String, <span class="ty">Long</span>&gt; freq = words.stream()
+    .collect(Collectors.groupingBy(w -&gt; w, Collectors.counting()));
+<span class="c1">// {bird=1, cat=3, dog=2}</span></pre>
+
+      <h3>2. Find the top-3 most frequent elements</h3>
+      <pre><span class="ty">List</span>&lt;String&gt; top3 = freq.entrySet().stream()
+    .sorted(Map.Entry.&lt;String,Long&gt;comparingByValue().reversed())
+    .limit(3)
+    .map(Map.Entry::getKey)
+    .collect(Collectors.toList());</pre>
+
+      <h3>3. Group a list of objects by a property</h3>
+      <pre><span class="c1">// group employees by department name</span>
+<span class="ty">Map</span>&lt;String, <span class="ty">List</span>&lt;Employee&gt;&gt; byDept = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDepartment));
+
+<span class="c1">// same, but just count them per department</span>
+<span class="ty">Map</span>&lt;String, <span class="ty">Long</span>&gt; countByDept = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDepartment, Collectors.counting()));</pre>
+
+      <h3>4. Partition into two groups (even / odd, pass / fail)</h3>
+      <pre><span class="ty">Map</span>&lt;Boolean, <span class="ty">List</span>&lt;Integer&gt;&gt; parts = numbers.stream()
+    .collect(Collectors.partitioningBy(n -&gt; n % 2 == 0));
+<span class="ty">List</span>&lt;Integer&gt; evens = parts.get(<span class="kw">true</span>);
+<span class="ty">List</span>&lt;Integer&gt; odds  = parts.get(<span class="kw">false</span>);</pre>
+
+      <h3>5. Flatten a list of lists into one list</h3>
+      <pre><span class="ty">List</span>&lt;<span class="ty">List</span>&lt;Integer&gt;&gt; nested = List.of(List.of(1,2), List.of(3,4), List.of(5));
+<span class="ty">List</span>&lt;Integer&gt; flat = nested.stream()
+    .flatMap(List::stream)
+    .collect(Collectors.toList());
+<span class="c1">// [1, 2, 3, 4, 5]</span></pre>
+
+      <h3>6. Remove duplicates while keeping insertion order</h3>
+      <pre><span class="ty">List</span>&lt;String&gt; unique = names.stream()
+    .distinct()                       <span class="c1">// internally uses a HashSet to track "seen" items</span>
+    .collect(Collectors.toCollection(LinkedHashSet::new));</pre>
+
+      <h3>7. Join collection elements into one readable string</h3>
+      <pre><span class="ty">String</span> csv = names.stream()
+    .collect(Collectors.joining(<span class="st">", "</span>, <span class="st">"["</span>, <span class="st">"]"</span>));
+<span class="c1">// "[Anna, Ravi, Chen]"</span></pre>
+
+      <div class="callout">
+        <div class="k">The pattern to remember</div>
+        Every stream problem is really three steps: <b>filter</b> (keep what you want), <b>map</b> (transform each item into something else), and <b>collect</b> (pour the results into a real collection — usually via <code class="inline">Collectors</code>). Once you can name which of the three a problem needs, writing the stream becomes mechanical.
+      </div>
+    </section>
+
+    <!-- ================= SECTION 16: PRACTICE PROBLEMS ================= -->
+    <section id="practice">
+      <div class="eyebrow">17 — BUILD MUSCLE MEMORY</div>
+      <h2>Practice problems, organized by data structure</h2>
+      <div class="sub">Reading builds understanding. Solving builds memory that survives interview pressure. These are well-known problem types you'll find on LeetCode and similar sites — solve a few from each row before moving to the next data structure.</div>
+
+      <table>
+        <tr><th>Structure</th><th>Easy</th><th>Medium</th><th>Hard</th></tr>
+        <tr>
+          <td class="mono">Array / ArrayList</td>
+          <td>Two Sum · Best Time to Buy & Sell Stock</td>
+          <td>Product of Array Except Self · 3Sum</td>
+          <td>Trapping Rain Water · First Missing Positive</td>
+        </tr>
+        <tr>
+          <td class="mono">HashMap / HashSet</td>
+          <td>Contains Duplicate · Valid Anagram</td>
+          <td>Group Anagrams · Top K Frequent Elements</td>
+          <td>Longest Consecutive Sequence · LRU Cache (design)</td>
+        </tr>
+        <tr>
+          <td class="mono">LinkedList</td>
+          <td>Reverse Linked List · Merge Two Sorted Lists</td>
+          <td>Add Two Numbers · Remove Nth Node From End</td>
+          <td>Merge k Sorted Lists · Reverse Nodes in k-Group</td>
+        </tr>
+        <tr>
+          <td class="mono">Stack / Deque</td>
+          <td>Valid Parentheses · Min Stack (design)</td>
+          <td>Evaluate Reverse Polish Notation · Daily Temperatures</td>
+          <td>Largest Rectangle in Histogram · Sliding Window Maximum</td>
+        </tr>
+        <tr>
+          <td class="mono">Queue / BFS</td>
+          <td>Implement Queue using Stacks</td>
+          <td>Number of Islands · Rotting Oranges</td>
+          <td>Sliding Window Median · Shortest Path in Binary Matrix</td>
+        </tr>
+        <tr>
+          <td class="mono">PriorityQueue / Heap</td>
+          <td>Kth Largest Element in a Stream (design)</td>
+          <td>Kth Largest Element in an Array · Task Scheduler</td>
+          <td>Merge k Sorted Lists · Find Median from Data Stream</td>
+        </tr>
+        <tr>
+          <td class="mono">TreeMap / TreeSet</td>
+          <td>Contains Duplicate II</td>
+          <td>My Calendar I (design) · Contains Duplicate III</td>
+          <td>Count of Smaller Numbers After Self</td>
+        </tr>
+        <tr>
+          <td class="mono">Concurrency</td>
+          <td>Print in Order (design)</td>
+          <td>Design a Bounded Blocking Queue</td>
+          <td>Design a Rate Limiter / Concurrent LRU Cache</td>
+        </tr>
+      </table>
+      <p class="dim">Tip: for each solved problem, say out loud which data structure choice made the solution O(n) instead of O(n²) — that habit is exactly what a lead-level interviewer is listening for.</p>
+    </section>
+
+    <!-- ================= SECTION 13: SCENARIOS ================= -->
+    <section id="scenarios">
+      <div class="eyebrow">18 — PUTTING IT TOGETHER</div>
+      <h2>Four system-design scenarios, worked through out loud</h2>
+      <div class="sub">This is the shape a lead-level interview question actually takes: a constraint-laden scenario, not a "define HashMap" prompt. Here's how the reasoning above resolves each one.</div>
+
+      <h3>1 — In-memory cache, 500K entries, 95:5 read:write, p99 &lt; 2ms</h3>
+      <p class="dim"><code class="inline">Collections.synchronizedMap(LinkedHashMap)</code> fails immediately — every read takes the global monitor to reposition LRU pointers, so reads queue behind each other under load. A bare <code class="inline">ConcurrentHashMap</code> plus a background sweep thread fails differently: the periodic O(n) eviction scan risks GC-pause-like latency spikes. <b>Answer:</b> a W-TinyLFU cache (Caffeine) — lock-free reads against an internal ConcurrentHashMap, async batched recency tracking, memory capped by the Count-Min Sketch admission filter.</p>
+
+      <h3>2 — 1M+ events/sec between 8 producer threads and 1 consumer, GC pauses &gt;1ms unacceptable</h3>
+      <p class="dim"><code class="inline">LinkedBlockingQueue</code> is disqualified by its own design: a new <code class="inline">Node</code> object per event at 1M events/sec means tens of megabytes of short-lived garbage every second — frequent young-gen GC. <code class="inline">ArrayBlockingQueue</code> avoids allocation but funnels all 8 producers and the consumer through one shared lock. <b>Answer:</b> a pre-allocated lock-free ring buffer (LMAX Disruptor pattern) — no runtime allocation at all, sequence counters padded to avoid false sharing, producers claim slots via CAS.</p>
+
+      <h3>3 — 50,000 live counters, high write rate, periodic full-scan reporting</h3>
+      <p class="dim">A <code class="inline">ReentrantReadWriteLock</code> around a plain HashMap forces writers to queue behind the reporting thread's full scan every 5 seconds. <code class="inline">CopyOnWriteArrayList</code>/Set forces a full 50,000-entry array clone on every single write. <b>Answer:</b> <code class="inline">ConcurrentHashMap&lt;String, LongAdder&gt;</code> — writers hit only their own key's striped counter, and the reporting thread's weakly-consistent iteration reads live volatile references without blocking anyone.</p>
+
+      <h3>4 — Pre-loading 10 million entries into a map at startup</h3>
+      <p class="dim">Constructing with the default capacity forces roughly <code class="inline">log₂(10,000,000 × 4/3 ÷ 16) ≈ 20</code> successive doublings, each one a full table reallocation and node migration under load. <b>Answer:</b> pre-size the map — <code class="inline">new ConcurrentHashMap&lt;&gt;((int)(10_000_000/0.75f)+1)</code> — allocating the final backing array once, up front, eliminating every intermediate resize.</p>
+    </section>
+
+    <!-- ================= SECTION 14: CHEAT SHEET ================= -->
+    <section id="cheatsheet">
+      <div class="eyebrow">19 — QUICK REFERENCE</div>
+      <h2>The one table to glance at before the interview</h2>
+      <div class="sub"></div>
+
+      <table>
+        <tr><th>Need</th><th>Reach for</th><th>Why (one line)</th></tr>
+        <tr><td>Fast random access, mostly appends</td><td class="mono">ArrayList</td><td>O(1) index math, cache-friendly</td></tr>
+        <tr><td>Stack / queue / deque behavior</td><td class="mono">ArrayDeque</td><td>No node allocation, both-end O(1)</td></tr>
+        <tr><td>Unordered fast lookup, single-threaded</td><td class="mono">HashMap</td><td>O(1) average via hashing</td></tr>
+        <tr><td>Predictable iteration order</td><td class="mono">LinkedHashMap</td><td>Insertion-order doubly-linked entries</td></tr>
+        <tr><td>Sorted keys, single-threaded</td><td class="mono">TreeMap</td><td>Red-Black tree, O(log n)</td></tr>
+        <tr><td>Thread-safe map, unordered, high concurrency</td><td class="mono">ConcurrentHashMap</td><td>Per-bucket CAS/locking, no global lock</td></tr>
+        <tr><td>Thread-safe map, sorted</td><td class="mono">ConcurrentSkipListMap</td><td>Lock-free skip list, O(log n)</td></tr>
+        <tr><td>Read-heavy, rarely-mutated shared list</td><td class="mono">CopyOnWriteArrayList</td><td>Wait-free reads, cloned writes</td></tr>
+        <tr><td>Bounded producer/consumer, memory-critical</td><td class="mono">ArrayBlockingQueue</td><td>Fixed array, single lock</td></tr>
+        <tr><td>High-throughput producer/consumer</td><td class="mono">LinkedBlockingQueue</td><td>Split put/take locks</td></tr>
+        <tr><td>Direct thread hand-off, zero buffering</td><td class="mono">SynchronousQueue</td><td>Zero-capacity rendezvous</td></tr>
+        <tr><td>Priority-ordered extraction</td><td class="mono">PriorityQueue</td><td>Array-backed binary min-heap</td></tr>
+        <tr><td>Bounded, self-evicting cache</td><td class="mono">Caffeine (W-TinyLFU)</td><td>Lock-free reads + frequency admission</td></tr>
+        <tr><td>Contended shared counter</td><td class="mono">LongAdder</td><td>Striped counters avoid false sharing</td></tr>
+      </table>
+    </section>
+
+    <footer>Built for lead-level Java interview preparation · every mechanism traced to the JDK source behavior it describes</footer>
+  </main>
+</div>
+
+<script>
+  // active TOC highlighting
+  const links = document.querySelectorAll('nav.toc a');
+  const sections = Array.from(links).map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+  function onScroll(){
+    let idx = 0;
+    for(let i=0;i<sections.length;i++){
+      if(sections[i].getBoundingClientRect().top < 120) idx = i;
+    }
+    links.forEach(l=>l.classList.remove('active'));
+    if(links[idx]) links[idx].classList.add('active');
+  }
+  document.addEventListener('scroll', onScroll);
+  onScroll();
+
+  // ---- ArrayList shift demo ----
+  const alDemo = (function(){
+    let data = ['A','B','C','D','E'];
+    let flashIdx = [];
+    const el = document.getElementById('al-cells');
+    const caption = document.getElementById('al-caption');
+    function render(){
+      el.innerHTML = data.map((v,i)=>{
+        const hot = flashIdx.includes(i) ? ' hot' : ' filled';
+        return `<div><div class="cell${hot}">${v}</div><div class="idx">${i}</div></div>`;
+      }).join('');
+      el.style.display='flex';
+    }
+    function append(){
+      data.push(String.fromCharCode(65+ (data.length % 26)) + (data.length>25?data.length:''));
+      flashIdx = [data.length-1];
+      caption.textContent = 'append(x): wrote directly to the next free slot. No shifting. O(1) amortized.';
+      render();
+    }
+    function insertFront(){
+      data.unshift('★');
+      flashIdx = data.map((_,i)=>i).slice(1);
+      caption.textContent = `insert at index 0: all ${data.length-1} existing elements had to shift one slot to the right first. O(n).`;
+      render();
+    }
+    function reset(){ data=['A','B','C','D','E']; flashIdx=[]; caption.textContent='Watch: appending to the end is cheap. Inserting at the front forces every element to shift right by one slot — an O(n) memory shuffle.'; render(); }
+    render();
+    return {append, insertFront, reset};
+  })();
+
+  // simple deterministic string hash (mimics java String.hashCode direction) for demo purposes
+  function demoHash(str){
+    let h = 0;
+    for(let i=0;i<str.length;i++){ h = (Math.imul(31,h) + str.charCodeAt(i))|0; }
+    return h;
+  }
+  function spread(h){ return (h ^ (h >>> 16)) | 0; }
+
+  const hmDemo = (function(){
+    const el = document.getElementById('hm-steps');
+    function go(){
+      const key = document.getElementById('hm-key').value || 'sampleKey';
+      const raw = demoHash(key);
+      const sp = spread(raw);
+      const idx = (sp & 15) >>> 0;
+      el.innerHTML = `
+        <div>key.hashCode() &nbsp;→&nbsp; <span style="color:#F5B563">${raw}</span></div>
+        <div>spread: h ^ (h &gt;&gt;&gt; 16) &nbsp;→&nbsp; <span style="color:#B39DFB">${sp}</span></div>
+        <div>bucket = spread &amp; (16-1) &nbsp;→&nbsp; <span style="color:#6EE7D8;font-size:18px;">bucket ${idx}</span></div>`;
+    }
+    return {go};
+  })();
+
+  const bucketDemo = (function(){
+    const N = 16;
+    let buckets = Array.from({length:N}, ()=>[]);
+    const sampleWords = ['orderId','userToken','sessionKey','cacheEntry','productSku','regionCode','deviceId','apiKey','txnRef','shardKey','nodeId','eventType'];
+    const el = document.getElementById('bucket-table');
+    const cap = document.getElementById('bucket-caption');
+    function render(){
+      let maxLen = Math.max(1, ...buckets.map(b=>b.length));
+      el.innerHTML = buckets.map((b,i)=>{
+        const chain = b.map(k=>`<div class="cell filled" style="min-width:80px;">${k}</div>`).join('<span style="color:#5D6D8A;margin:0 4px;">→</span>');
+        const treeified = b.length >= 8;
+        return `<div style="display:flex;align-items:center;margin-bottom:6px;">
+          <div class="cell${b.length?' hot':''}" style="min-width:34px;">${i}</div>
+          <span style="color:#5D6D8A;margin:0 8px;">|</span>
+          ${b.length ? chain : '<span style="color:#5D6D8A;font-family:var(--mono);font-size:12px;">empty</span>'}
+          ${treeified ? '<span style="color:#B39DFB;font-family:var(--mono);font-size:11px;margin-left:10px;">⚠ treeified (≥8)</span>' : ''}
+        </div>`;
+      }).join('');
+    }
+    function insertRandom(){
+      const w = sampleWords[Math.floor(Math.random()*sampleWords.length)] + Math.floor(Math.random()*90+10);
+      const idx = (spread(demoHash(w)) & (N-1)) >>> 0;
+      buckets[idx].push(w);
+      cap.textContent = `"${w}" hashed to bucket ${idx}` + (buckets[idx].length>1 ? ` — collision! chain length now ${buckets[idx].length}.` : '.');
+      render();
+    }
+    function reset(){ buckets = Array.from({length:N}, ()=>[]); cap.textContent='16 buckets. Insert a few keys and watch collisions form chains.'; render(); }
+    render();
+    return {insertRandom, reset};
+  })();
+
+  // ---- HashSet vs LinkedHashSet vs TreeSet ordering demo ----
+  const setDemo = (function(){
+    let items = [];
+    const hashEl = document.getElementById('set-hash');
+    const linkedEl = document.getElementById('set-linked');
+    const treeEl = document.getElementById('set-tree');
+    const cap = document.getElementById('set-caption');
+    function render(){
+      // LinkedHashSet: pure insertion order
+      linkedEl.innerHTML = items.length
+        ? items.map((w,i)=>`${i+1}. ${w}`).join('<br>')
+        : '<span style="color:#5D6D8A;">empty</span>';
+      // TreeSet: natural (alphabetical) order
+      const sorted = [...items].sort();
+      treeEl.innerHTML = sorted.length
+        ? sorted.map(w=>w).join('<br>')
+        : '<span style="color:#5D6D8A;">empty</span>';
+      // HashSet: order by bucket index (same hash+spread+mask as the HashMap demo above),
+      // ties within a bucket kept in insertion order — approximating real chaining behavior
+      const withBucket = items.map(w => ({ w, b: (spread(demoHash(w)) & 15) >>> 0 }));
+      withBucket.sort((a,b) => a.b - b.b);
+      hashEl.innerHTML = withBucket.length
+        ? withBucket.map(x => `${x.w} <span style="color:#5D6D8A;">(bucket ${x.b})</span>`).join('<br>')
+        : '<span style="color:#5D6D8A;">empty</span>';
+    }
+    function add(){
+      const input = document.getElementById('set-word');
+      const w = (input.value || '').trim();
+      if(!w) return;
+      if(!items.includes(w)){
+        items.push(w);
+        cap.textContent = `"${w}" added. Same insert, three different iteration orders below — none of them are wrong, they're just answering different questions.`;
+      } else {
+        cap.textContent = `"${w}" is already in the set — a Set silently ignores duplicate add() calls (add() returns false).`;
+      }
+      input.value = '';
+      render();
+    }
+    function reset(){ items = []; cap.textContent = "Same words, added in the same order, into all three. Watch the iteration order come out different for each one — because each one stores it differently underneath."; render(); }
+    render();
+    return {add, reset};
+  })();
+
+  // ---- Min-heap visualizer ----
+  const heapDemo = (function(){
+    let heap = [12, 25, 40, 60, 33];
+    const wrap = document.getElementById('heap-svg-wrap');
+    const cap = document.getElementById('heap-caption');
+    function pos(i, count){
+      // simple layered layout
+      const level = Math.floor(Math.log2(i+1));
+      const levelStart = Math.pow(2,level)-1;
+      const posInLevel = i - levelStart;
+      const levelCount = Math.pow(2,level);
+      const width = 700;
+      const x = (posInLevel+1) * (width/(levelCount+1)) + 40;
+      const y = 30 + level*55;
+      return {x,y};
+    }
+    function render(){
+      const w = 800, h = 220;
+      let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" style="max-width:${w}px;">`;
+      svg += `<style>.hn{fill:#101B30;stroke:#3E8E88;stroke-width:1.4;} .ht{font-family:'IBM Plex Mono',monospace;font-size:13px;fill:#E7EDF7;} .he{stroke:#5D6D8A;stroke-width:1.2;}</style>`;
+      for(let i=0;i<heap.length;i++){
+        const p = pos(i, heap.length);
+        const parent = Math.floor((i-1)/2);
+        if(i>0){ const pp = pos(parent, heap.length); svg += `<line class="he" x1="${pp.x}" y1="${pp.y}" x2="${p.x}" y2="${p.y}"/>`; }
+      }
+      for(let i=0;i<heap.length;i++){
+        const p = pos(i, heap.length);
+        const isRoot = i===0;
+        svg += `<circle cx="${p.x}" cy="${p.y}" r="20" class="hn" style="${isRoot?'stroke:#F5B563;':''}"/>`;
+        svg += `<text x="${p.x}" y="${p.y+5}" text-anchor="middle" class="ht">${heap[i]}</text>`;
+      }
+      svg += `</svg>`;
+      wrap.innerHTML = svg;
+    }
+    function siftUp(i){
+      while(i>0){
+        const p = Math.floor((i-1)/2);
+        if(heap[p] > heap[i]){ [heap[p],heap[i]] = [heap[i],heap[p]]; i=p; } else break;
+      }
+    }
+    function siftDown(i){
+      const n = heap.length;
+      while(true){
+        let l=2*i+1, r=2*i+2, smallest=i;
+        if(l<n && heap[l]<heap[smallest]) smallest=l;
+        if(r<n && heap[r]<heap[smallest]) smallest=r;
+        if(smallest!==i){ [heap[i],heap[smallest]]=[heap[smallest],heap[i]]; i=smallest; } else break;
+      }
+    }
+    function insert(){
+      const v = Math.floor(Math.random()*90)+5;
+      heap.push(v); siftUp(heap.length-1);
+      cap.innerHTML = `inserted <b style="color:#F5B563">${v}</b> at the end, then bubbled it up while smaller than its parent (siftUp). Root is always the minimum.`;
+      render();
+    }
+    function poll(){
+      if(heap.length===0){ cap.textContent='heap is empty.'; return; }
+      const min = heap[0];
+      const last = heap.pop();
+      if(heap.length>0){ heap[0]=last; siftDown(0); }
+      cap.innerHTML = `removed root <b style="color:#F0837A">${min}</b> (the min), moved the last element to the root, then sank it down past its smaller child (siftDown).`;
+      render();
+    }
+    function reset(){ heap=[12,25,40,60,33]; cap.textContent="insert bubbles the new value up while it's smaller than its parent (siftUp). poll() moves the last element to the root, then sinks it down past its smaller child (siftDown). Both run in O(log n)."; render(); }
+    render();
+    return {insert, poll, reset};
+  })();
+
+  // ---- CAS vs unsynchronized race simulator (deterministic illustrative simulation) ----
+  const casDemo = (function(){
+    const out = document.getElementById('cas-out');
+    function runUnsafe(){
+      // simulate the classic lost-update: both threads read 100 before either writes
+      let shared = 100;
+      const threadARead = shared;      // Thread A reads 100
+      const threadBRead = shared;      // Thread B reads 100 (before A writes back)
+      const threadAWrite = threadARead + 1; // A computes 101
+      const threadBWrite = threadBRead + 1; // B computes 101 too — doesn't see A's write
+      shared = threadBWrite; // B writes last, A's increment is silently lost
+      out.textContent =
+`start: counter = 100
+Thread A reads 100 → computes 101
+Thread B reads 100 (before A wrote back) → computes 101
+Thread A writes 101
+Thread B writes 101   ← overwrites A's update
+final counter = ${shared}   (expected 102 — an increment was LOST, no exception thrown)`;
+    }
+    function runCAS(){
+      let shared = 100;
+      let log = [`start: counter = 100 (as an AtomicInteger)`];
+      // Thread A wins the race
+      let expected = shared;
+      let success = (shared === expected);
+      if(success){ shared = expected + 1; }
+      log.push(`Thread A: compareAndSet(expected=100, new=101) → succeeds. counter = ${shared}`);
+      // Thread B tries with stale expected value, fails, retries
+      expected = 100; // B read this before A's update landed
+      success = (shared === expected);
+      log.push(`Thread B: compareAndSet(expected=100, new=101) → FAILS (counter is now 101, not 100)`);
+      expected = shared;
+      shared = expected + 1;
+      log.push(`Thread B retries: compareAndSet(expected=101, new=102) → succeeds. counter = ${shared}`);
+      log.push(`final counter = ${shared}   (correct — CAS forced Thread B to notice the change and retry)`);
+      out.textContent = log.join('\n');
+    }
+    function reset(){ out.textContent = ''; }
+    return {runUnsafe, runCAS, reset};
+  })();
+</script>
+
+</body>
+</html>

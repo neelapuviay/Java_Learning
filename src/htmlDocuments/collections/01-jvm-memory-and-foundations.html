@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 01: JVM Memory & Big-O Foundations — Java Collections</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="reader.js"></script>
+</head>
+<body>
+
+<div class="module-header-bar">
+  <div class="module-header-breadcrumb">
+    <span class="badge badge-cyan">MODULE 01</span> <span>JVM Memory &amp; Big-O Foundations</span>
+  </div>
+  <a href="index.html" target="_top" class="page-btn" style="padding:4px 10px;font-size:11px;">⊞ Full Portal View</a>
+</div>
+
+<div class="shell single-col">
+  <main>
+    <div class="hero">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+        <span class="badge badge-cyan">MODULE 01</span>
+        <span class="badge badge-amber">⏱️ 14 min read</span>
+        <span class="badge badge-green">Core Foundations</span>
+      </div>
+      <h1>JVM Memory &amp; <em>First Principles</em>.</h1>
+      <p class="lede">Before we open ArrayList or HashMap, we examine what memory looks like inside a running Java program. Every collection is nothing but an intentional strategy for storing, locating, and manipulating references in heap memory.</p>
+      <div class="promise">
+        <div><b>Stack vs Heap</b>why collections only store references, never primitives</div>
+        <div><b>GC Mechanics</b>how object allocation creates GC pressure</div>
+        <div><b>Big-O Visualized</b>interactive mental models for O(1), O(log n), and O(n)</div>
+      </div>
+    </div>
+
+    <!-- ================= SECTION 1: JVM MEMORY BASICS ================= -->
+    <section id="memory">
+      <div class="eyebrow">01 — READ THIS FIRST</div>
+      <h2>Every collection is just a memory management trick</h2>
+      <div class="sub">Before we open ArrayList or HashMap, let's look at what "memory" means inside a running Java program. Once you see this clearly, every collection becomes easy — because a collection is nothing but a smart way of storing and finding data in memory.</div>
+
+      <div id="memory-heap"></div>
+      <h3>Two areas of memory: Stack and Heap</h3>
+      <p>When your Java program runs, the JVM (Java Virtual Machine) gives it two main areas of memory to work with.</p>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>Stack — small, fast, temporary</h4>
+          <p class="dim" style="margin:0;">Each thread gets its own stack. Every time you call a method, a new "frame" is placed on top of the stack. That frame holds the method's local variables and primitives (<code class="inline">int</code>, <code class="inline">boolean</code>, <code class="inline">char</code>...). When the method finishes, its frame is thrown away instantly. The stack is very fast, but very small.</p>
+        </div>
+        <div class="card">
+          <h4>Heap — big, shared, long-lived</h4>
+          <p class="dim" style="margin:0;">Every object you create with <code class="inline">new</code> — including every <code class="inline">ArrayList</code>, <code class="inline">HashMap</code>, and every element inside them — lives on the heap. The heap is shared by all threads in the program. It is much bigger than the stack, but also slower to work with, because objects can be scattered anywhere in it.</p>
+        </div>
+      </div>
+
+      <div class="analogy">
+        <div class="icon">🗒️</div>
+        <div>
+          <div class="k">Simple picture: sticky notes vs a warehouse</div>
+          Think of the stack as sticky notes on your own desk — quick to write, quick to throw away, and only you can see them. The heap is a big shared warehouse where the actual boxes (objects) are stored. Your sticky note doesn't hold the box itself — it just holds the <b>address</b> of the shelf where the box sits in the warehouse. That address is what Java calls a <b>reference</b>.
+        </div>
+      </div>
+
+      <pre><span class="kw">int</span> age = 25;                    <span class="c1">// "25" is stored directly on the stack (a primitive)</span>
+List&lt;String&gt; names = <span class="kw">new</span> ArrayList&lt;&gt;();  <span class="c1">// "names" on the stack holds an ADDRESS</span>
+                                     <span class="c1">// the real ArrayList object lives on the heap</span></pre>
+
+      <p>This is exactly why collections only store <b>objects</b>, never raw primitives. A collection like <code class="inline">List&lt;Integer&gt;</code> cannot hold a plain <code class="inline">int</code> — Java has to wrap it inside an <code class="inline">Integer</code> object first (this automatic wrapping is called <b>autoboxing</b>). That's an extra object on the heap, with extra memory overhead, for every single number you put into a collection. Knowing this now will make the "memory overhead per element" numbers later in this guide make a lot more sense.</p>
+
+      <div id="memory-gc"></div>
+      <h3>What happens to old data: Garbage Collection</h3>
+      <p>In many languages, you must manually free memory when you're done with an object, or your program slowly runs out of memory (a "memory leak"). Java does this for you automatically with a background process called the <b>Garbage Collector (GC)</b>.</p>
+      <p>The rule is simple: if <b>nothing on the stack (and nothing reachable from it) still points to an object on the heap</b>, that object is garbage. The GC finds these unreachable objects and reclaims their memory.</p>
+
+      <div class="callout">
+        <div class="k">Why this matters for collections</div>
+        This is the real reason <code class="inline">LinkedList</code> feels "heavier" than <code class="inline">ArrayList</code>: every node it creates is a separate heap object that the GC must later track and clean up. This is also why <code class="inline">CopyOnWriteArrayList</code> can cause GC pressure on every write — it throws away and recreates a whole array each time. When this guide later says a design choice "creates GC pressure," it simply means: <i>this approach makes a lot of short-lived heap objects, and the garbage collector has to work harder to clean them all up, which can pause your program for a moment.</i>
+      </div>
+
+      <h3>Putting it together: what a collection actually does</h3>
+      <p>With stack, heap, references, and garbage collection in mind, here is the one-sentence idea behind this entire guide:</p>
+      <div class="callout warn">
+        <div class="k">The core idea</div>
+        A Java collection is just an object on the heap that organizes a group of <b>references</b> (addresses) to other objects, using some clever layout — a straight row (array), a chain of pointers (linked list), or a mathematical shortcut (hashing) — so that adding, finding, and removing items is as fast as possible for the way you plan to use them.
+      </div>
+
+      <!-- Quick Knowledge Check Accordion -->
+      <div class="quiz-box">
+        <div class="quiz-header">
+          <span class="quiz-badge">💡 Quick Knowledge Check</span>
+          <button type="button" class="quiz-toggle" aria-expanded="false">Test Your Intuition <span class="quiz-toggle-icon">▼</span></button>
+        </div>
+        <div class="quiz-question">Why does creating <code>List&lt;Integer&gt; list = new ArrayList&lt;&gt;()</code> generate significantly more GC pressure than <code>int[] arr = new int[1000]</code>?</div>
+        <div class="quiz-answer">
+          <b>Answer:</b> An <code>int[]</code> stores raw 32-bit values packed tightly together on the heap as a single contiguous object. In contrast, <code>List&lt;Integer&gt;</code> stores references to 1,000 separate <code>Integer</code> objects on the heap (autoboxing). Each <code>Integer</code> object incurs 16-24 bytes of object header overhead, creating 1,001 heap objects that the Garbage Collector must later scan and clean up!
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 2: FOUNDATIONS ================= -->
+    <section id="foundations">
+      <div class="eyebrow">02 — START HERE</div>
+      <h2>What a "collection" even is</h2>
+      <div class="sub">Before HashMap or ConcurrentHashMap mean anything, you need three ideas: what memory looks like, what Big-O is actually measuring, and why Java splits "collections" from "maps."</div>
+
+      <div id="foundations-mem"></div>
+      <h3>Memory, in one picture</h3>
+      <p>Your computer's memory (RAM) is one enormous numbered street of boxes. Every box holds one small piece of data, and every box has an address — a house number. A variable in your program is just a label taped to one of these boxes.</p>
+
+      <div class="analogy">
+        <div class="icon">🏘️</div>
+        <div>
+          <div class="k">Analogy: memory is a street of numbered mailboxes</div>
+          If a data structure keeps its items in <b>consecutive</b> mailboxes (house #100, #101, #102…), the postman can predict exactly where the next one is without asking. If it scatters items across <b>random</b> houses across town and each house has a note saying "next item lives at house #4471," the postman must walk to each house, read the note, and only then learn where to go next. The first approach is an <code class="inline">array</code>. The second is a <code class="inline">linked list</code>. This one distinction explains almost every performance difference in this whole guide.
+        </div>
+      </div>
+
+      <div id="big-o"></div>
+      <h3>Big-O, in plain terms</h3>
+      <p>Big-O answers one question: <b>as the collection grows, how does the work grow?</b> It deliberately ignores constants and hardware speed — it's about shape, not seconds.</p>
+
+      <div class="grid3">
+        <div class="card">
+          <h4>O(1) — constant</h4>
+          <p class="dim" style="margin:0;">Same effort no matter how big the collection gets. Reading array index <code class="inline">arr[500]</code> costs the same whether the array has 501 or 5,000,001 elements.</p>
+        </div>
+        <div class="card">
+          <h4>O(log n) — logarithmic</h4>
+          <p class="dim" style="margin:0;">Effort grows, but very slowly — each step eliminates half the remaining work. A balanced tree with a billion items needs about 30 steps to find anything.</p>
+        </div>
+        <div class="card">
+          <h4>O(n) — linear</h4>
+          <p class="dim" style="margin:0;">Effort grows exactly as fast as the data. Double the elements, double the work. Scanning a list looking for a value is O(n).</p>
+        </div>
+      </div>
+
+      <div class="viz" style="margin: 22px 0 32px; padding: 18px;">
+        <a href="Gemini_Generated_Image_mak1ptmak1ptmak1%20(1).png" target="_blank" title="Click to view full image in a new tab" style="display: block; cursor: zoom-in; text-decoration: none;">
+          <div style="border-radius: 6px; overflow: hidden; border: 1px solid var(--line); line-height: 0;">
+            <img src="Gemini_Generated_Image_mak1ptmak1ptmak1%20(1).png" alt="Big-O Complexity Visualized: O(1) Constant, O(log n) Logarithmic, and O(n) Linear" style="width: 100%; height: auto; display: block;" loading="lazy">
+          </div>
+        </a>
+        <div class="viz-caption" style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <span><b>Visual comparison:</b> <b>O(1) Constant</b> (direct offset math accessing <code class="inline">arr[500]</code> with fixed effort), <b>O(log n) Logarithmic</b> (halving remaining work each step), and <b>O(n) Linear</b> (sequential scan).</span>
+          <span style="font-size: 11px; opacity: 0.7;">🔍 Click image to expand</span>
+        </div>
+      </div>
+
+      <div id="family"></div>
+      <h3>Why Collection and Map are cousins, not siblings</h3>
+      <p>Java's collections split into two families that look similar but solve different problems:</p>
+
+      <div class="analogy">
+        <div class="icon">🎒</div>
+        <div>
+          <div class="k">A Collection is a bag. A Map is a phonebook.</div>
+          A <b>Collection</b> (List, Set, Queue) just holds items — you throw one thing in with <code class="inline">add(item)</code>. A <b>Map</b> stores <i>pairs</i> — a name and a phone number — so adding requires two things: <code class="inline">put(key, value)</code>. Because "add one thing" and "add two linked things" are fundamentally different actions, Java never forces Map to pretend it's a Collection. Instead, a Map exposes <i>views</i> — <code class="inline">keySet()</code> (just the names), <code class="inline">values()</code> (just the numbers), <code class="inline">entrySet()</code> (the pairs) — each of which <i>is</i> a real Collection you can loop over.
+        </div>
+      </div>
+
+      <div class="tree-interactive-card">
+        <!-- Toolbar -->
+        <div class="tree-toolbar">
+          <div class="tree-toolbar-info">
+            <span class="tree-toolbar-badge">⚡ Interactive Hierarchy Explorer</span>
+            <span style="font-size: 12.5px; color: var(--text-dim);">Click nodes with <span style="color:var(--cyan);">▶</span> to expand · Filter by type</span>
+          </div>
+          <div class="tree-toolbar-actions">
+            <!-- Filter buttons -->
+            <div style="display: flex; gap: 4px; margin-right: 6px;">
+              <button type="button" class="tree-btn filter-btn active" data-filter="all" id="filter-all">All (34)</button>
+              <button type="button" class="tree-btn filter-btn" data-filter="interfaces" id="filter-interfaces">«interfaces» (14)</button>
+              <button type="button" class="tree-btn filter-btn" data-filter="classes" id="filter-classes">«classes» (20)</button>
+            </div>
+            <button type="button" class="tree-btn" id="btn-expand-all" title="Expand all branches">
+              <span>⊞</span> Expand All
+            </button>
+            <button type="button" class="tree-btn" id="btn-collapse-all" title="Collapse to main branches">
+              <span>⊟</span> Collapse All
+            </button>
+          </div>
+        </div>
+
+        <!-- Tree Grid -->
+        <div class="tree-grid" id="tree-container">
+          <!-- Left Column: Collection Family -->
+          <div class="tree-column">
+            <div class="tree-col-header">
+              <div class="tree-col-title collection-title">
+                <span>📦 COLLECTION FAMILY (java.util)</span>
+              </div>
+              <span class="badge" style="font-size: 10px; background: rgba(245, 181, 99, 0.12); color: var(--amber); border: 1px solid rgba(245, 181, 99, 0.25);">Single Elements</span>
+            </div>
+
+            <ul class="tree-root">
+              <!-- Iterable -->
+              <li class="tree-item has-children is-open" data-type="interface" id="node-iterable">
+                <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="true">
+                  <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                  <span class="type-chip interface">«interface»</span>
+                  <span class="tree-node-name">Iterable&lt;E&gt;</span>
+                  <span class="tree-tag note">root for for-each</span>
+                  <span class="child-count-pill">1 child</span>
+                </div>
+
+                <ul class="tree-children">
+                  <!-- Collection -->
+                  <li class="tree-item has-children is-open" data-type="interface" id="node-collection">
+                    <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="true">
+                      <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                      <span class="type-chip interface">«interface»</span>
+                      <span class="tree-node-name">Collection&lt;E&gt;</span>
+                      <span class="tree-tag note">core bag contract</span>
+                      <span class="child-count-pill">3 branches</span>
+                    </div>
+
+                    <ul class="tree-children">
+                      <!-- List<E> -->
+                      <li class="tree-item has-children" data-type="interface" id="node-list">
+                        <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="false">
+                          <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                          <span class="type-chip interface">«interface»</span>
+                          <span class="tree-node-name">List&lt;E&gt;</span>
+                          <span class="tree-tag seq">SequencedCollection</span>
+                          <span class="child-count-pill">4 implementations ▾</span>
+                        </div>
+
+                        <ul class="tree-children collapsed">
+                          <li class="tree-item" data-type="class">
+                            <div class="tree-row is-class" tabindex="0">
+                              <span class="tree-icon leaf"></span>
+                              <span class="type-chip class">«class»</span>
+                              <span class="tree-node-name">ArrayList&lt;E&gt;</span>
+                              <span class="tree-tag note">resizable array · O(1) random access</span>
+                            </div>
+                          </li>
+                          <li class="tree-item" data-type="class">
+                            <div class="tree-row is-class" tabindex="0">
+                              <span class="tree-icon leaf"></span>
+                              <span class="type-chip class">«class»</span>
+                              <span class="tree-node-name">LinkedList&lt;E&gt;</span>
+                              <span class="tree-tag note">doubly-linked list · also Deque</span>
+                            </div>
+                          </li>
+                          <li class="tree-item has-children" data-type="class">
+                            <div class="tree-row is-class is-legacy" tabindex="0" role="button" aria-expanded="false">
+                              <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                              <span class="type-chip class">«class»</span>
+                              <span class="tree-node-name">Vector&lt;E&gt;</span>
+                              <span class="tree-tag legacy">legacy · synchronized</span>
+                              <span class="child-count-pill">1 subclass ▾</span>
+                            </div>
+                            <ul class="tree-children collapsed">
+                              <li class="tree-item" data-type="class">
+                                <div class="tree-row is-class is-legacy" tabindex="0">
+                                  <span class="tree-icon leaf"></span>
+                                  <span class="type-chip class">«class»</span>
+                                  <span class="tree-node-name">Stack&lt;E&gt;</span>
+                                  <span class="tree-tag legacy">legacy · LIFO extends Vector</span>
+                                </div>
+                              </li>
+                            </ul>
+                          </li>
+                          <li class="tree-item" data-type="class">
+                            <div class="tree-row is-class" tabindex="0">
+                              <span class="tree-icon leaf"></span>
+                              <span class="type-chip class">«class»</span>
+                              <span class="tree-node-name">CopyOnWriteArrayList&lt;E&gt;</span>
+                              <span class="tree-tag note">concurrent · lock-free reads</span>
+                            </div>
+                          </li>
+                        </ul>
+                      </li>
+
+                      <!-- Set<E> -->
+                      <li class="tree-item has-children" data-type="interface" id="node-set">
+                        <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="false">
+                          <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                          <span class="type-chip interface">«interface»</span>
+                          <span class="tree-node-name">Set&lt;E&gt;</span>
+                          <span class="tree-tag note">unique elements</span>
+                          <span class="child-count-pill">4 implementations ▾</span>
+                        </div>
+
+                        <ul class="tree-children collapsed">
+                          <li class="tree-item" data-type="class">
+                            <div class="tree-row is-class" tabindex="0">
+                              <span class="tree-icon leaf"></span>
+                              <span class="type-chip class">«class»</span>
+                              <span class="tree-node-name">HashSet&lt;E&gt;</span>
+                              <span class="tree-tag note">hash table backed by HashMap</span>
+                            </div>
+                          </li>
+                          <li class="tree-item" data-type="class">
+                            <div class="tree-row is-class" tabindex="0">
+                              <span class="tree-icon leaf"></span>
+                              <span class="type-chip class">«class»</span>
+                              <span class="tree-node-name">LinkedHashSet&lt;E&gt;</span>
+                              <span class="tree-tag seq">SequencedSet</span>
+                            </div>
+                          </li>
+                          <li class="tree-item has-children is-open" data-type="interface">
+                            <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="true">
+                              <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                              <span class="type-chip interface">«interface»</span>
+                              <span class="tree-node-name">SortedSet&lt;E&gt;</span>
+                              <span class="child-count-pill">1 interface</span>
+                            </div>
+                            <ul class="tree-children">
+                              <li class="tree-item has-children is-open" data-type="interface">
+                                <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="true">
+                                  <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                                  <span class="type-chip interface">«interface»</span>
+                                  <span class="tree-node-name">NavigableSet&lt;E&gt;</span>
+                                  <span class="tree-tag seq">SequencedSet</span>
+                                  <span class="child-count-pill">2 implementations</span>
+                                </div>
+                                <ul class="tree-children">
+                                  <li class="tree-item" data-type="class">
+                                    <div class="tree-row is-class" tabindex="0">
+                                      <span class="tree-icon leaf"></span>
+                                      <span class="type-chip class">«class»</span>
+                                      <span class="tree-node-name">TreeSet&lt;E&gt;</span>
+                                      <span class="tree-tag note">Red-Black Tree · O(log n)</span>
+                                    </div>
+                                  </li>
+                                  <li class="tree-item" data-type="class">
+                                    <div class="tree-row is-class" tabindex="0">
+                                      <span class="tree-icon leaf"></span>
+                                      <span class="type-chip class">«class»</span>
+                                      <span class="tree-node-name">ConcurrentSkipListSet&lt;E&gt;</span>
+                                      <span class="tree-tag note">concurrent sorted</span>
+                                    </div>
+                                  </li>
+                                </ul>
+                              </li>
+                            </ul>
+                          </li>
+                          <li class="tree-item" data-type="class">
+                            <div class="tree-row is-class" tabindex="0">
+                              <span class="tree-icon leaf"></span>
+                              <span class="type-chip class">«class»</span>
+                              <span class="tree-node-name">CopyOnWriteArraySet&lt;E&gt;</span>
+                              <span class="tree-tag note">concurrent set</span>
+                            </div>
+                          </li>
+                        </ul>
+                      </li>
+
+                      <!-- Queue<E> -->
+                      <li class="tree-item has-children" data-type="interface" id="node-queue">
+                        <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="false">
+                          <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                          <span class="type-chip interface">«interface»</span>
+                          <span class="tree-node-name">Queue&lt;E&gt;</span>
+                          <span class="tree-tag note">FIFO processing</span>
+                          <span class="child-count-pill">3 branches ▾</span>
+                        </div>
+
+                        <ul class="tree-children collapsed">
+                          <li class="tree-item" data-type="class">
+                            <div class="tree-row is-class" tabindex="0">
+                              <span class="tree-icon leaf"></span>
+                              <span class="type-chip class">«class»</span>
+                              <span class="tree-node-name">PriorityQueue&lt;E&gt;</span>
+                              <span class="tree-tag note">binary min-heap</span>
+                            </div>
+                          </li>
+                          <li class="tree-item has-children is-open" data-type="interface">
+                            <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="true">
+                              <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                              <span class="type-chip interface">«interface»</span>
+                              <span class="tree-node-name">Deque&lt;E&gt;</span>
+                              <span class="tree-tag seq">SequencedCollection</span>
+                              <span class="child-count-pill">2 implementations</span>
+                            </div>
+                            <ul class="tree-children">
+                              <li class="tree-item" data-type="class">
+                                <div class="tree-row is-class" tabindex="0">
+                                  <span class="tree-icon leaf"></span>
+                                  <span class="type-chip class">«class»</span>
+                                  <span class="tree-node-name">ArrayDeque&lt;E&gt;</span>
+                                  <span class="tree-tag note">circular buffer · best for Stack/Queue</span>
+                                </div>
+                              </li>
+                              <li class="tree-item" data-type="class">
+                                <div class="tree-row is-class" tabindex="0">
+                                  <span class="tree-icon leaf"></span>
+                                  <span class="type-chip class">«class»</span>
+                                  <span class="tree-node-name">LinkedList&lt;E&gt;</span>
+                                  <span class="tree-tag note">also implements List</span>
+                                </div>
+                              </li>
+                            </ul>
+                          </li>
+                          <li class="tree-item has-children is-open" data-type="interface">
+                            <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="true">
+                              <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                              <span class="type-chip interface">«interface»</span>
+                              <span class="tree-node-name">BlockingQueue&lt;E&gt;</span>
+                              <span class="tree-tag note">producer-consumer</span>
+                              <span class="child-count-pill">5 implementations</span>
+                            </div>
+                            <ul class="tree-children">
+                              <li class="tree-item" data-type="class">
+                                <div class="tree-row is-class" tabindex="0">
+                                  <span class="tree-icon leaf"></span>
+                                  <span class="type-chip class">«class»</span>
+                                  <span class="tree-node-name">ArrayBlockingQueue&lt;E&gt;</span>
+                                  <span class="tree-tag note">bounded array</span>
+                                </div>
+                              </li>
+                              <li class="tree-item" data-type="class">
+                                <div class="tree-row is-class" tabindex="0">
+                                  <span class="tree-icon leaf"></span>
+                                  <span class="type-chip class">«class»</span>
+                                  <span class="tree-node-name">LinkedBlockingQueue&lt;E&gt;</span>
+                                  <span class="tree-tag note">optionally bounded</span>
+                                </div>
+                              </li>
+                              <li class="tree-item" data-type="class">
+                                <div class="tree-row is-class" tabindex="0">
+                                  <span class="tree-icon leaf"></span>
+                                  <span class="type-chip class">«class»</span>
+                                  <span class="tree-node-name">PriorityBlockingQueue&lt;E&gt;</span>
+                                  <span class="tree-tag note">concurrent min-heap</span>
+                                </div>
+                              </li>
+                              <li class="tree-item" data-type="class">
+                                <div class="tree-row is-class" tabindex="0">
+                                  <span class="tree-icon leaf"></span>
+                                  <span class="type-chip class">«class»</span>
+                                  <span class="tree-node-name">SynchronousQueue&lt;E&gt;</span>
+                                  <span class="tree-tag note">zero capacity handoff</span>
+                                </div>
+                              </li>
+                              <li class="tree-item" data-type="class">
+                                <div class="tree-row is-class" tabindex="0">
+                                  <span class="tree-icon leaf"></span>
+                                  <span class="type-chip class">«class»</span>
+                                  <span class="tree-node-name">LinkedTransferQueue&lt;E&gt;</span>
+                                  <span class="tree-tag note">high-throughput transfer</span>
+                                </div>
+                              </li>
+                            </ul>
+                          </li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Right Column: Map Family & Concurrent -->
+          <div class="tree-column">
+            <div class="tree-col-header">
+              <div class="tree-col-title map-title">
+                <span>🗺️ MAP FAMILY (SEPARATE ROOT)</span>
+              </div>
+              <span class="badge" style="font-size: 10px; background: rgba(179, 157, 251, 0.12); color: var(--violet); border: 1px solid rgba(179, 157, 251, 0.25);">Key-Value Pairs</span>
+            </div>
+
+            <ul class="tree-root">
+              <!-- Map<K,V> -->
+              <li class="tree-item has-children" data-type="interface" id="node-map">
+                <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="false">
+                  <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                  <span class="type-chip interface">«interface»</span>
+                  <span class="tree-node-name">Map&lt;K,V&gt;</span>
+                  <span class="tree-tag note">not a Collection · pairs</span>
+                  <span class="child-count-pill">5 implementations ▾</span>
+                </div>
+
+                <ul class="tree-children collapsed">
+                  <!-- HashMap -->
+                  <li class="tree-item has-children is-open" data-type="class">
+                    <div class="tree-row is-class" tabindex="0" role="button" aria-expanded="true">
+                      <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                      <span class="type-chip class">«class»</span>
+                      <span class="tree-node-name">HashMap&lt;K,V&gt;</span>
+                      <span class="tree-tag note">buckets + red-black tree bins</span>
+                      <span class="child-count-pill">1 subclass</span>
+                    </div>
+                    <ul class="tree-children">
+                      <li class="tree-item" data-type="class">
+                        <div class="tree-row is-class" tabindex="0">
+                          <span class="tree-icon leaf"></span>
+                          <span class="type-chip class">«class»</span>
+                          <span class="tree-node-name">LinkedHashMap&lt;K,V&gt;</span>
+                          <span class="tree-tag seq">SequencedMap</span>
+                        </div>
+                      </li>
+                    </ul>
+                  </li>
+
+                  <!-- SortedMap -->
+                  <li class="tree-item has-children is-open" data-type="interface">
+                    <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="true">
+                      <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                      <span class="type-chip interface">«interface»</span>
+                      <span class="tree-node-name">SortedMap&lt;K,V&gt;</span>
+                      <span class="child-count-pill">1 interface</span>
+                    </div>
+                    <ul class="tree-children">
+                      <li class="tree-item has-children is-open" data-type="interface">
+                        <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="true">
+                          <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                          <span class="type-chip interface">«interface»</span>
+                          <span class="tree-node-name">NavigableMap&lt;K,V&gt;</span>
+                          <span class="tree-tag seq">SequencedMap</span>
+                          <span class="child-count-pill">1 implementation</span>
+                        </div>
+                        <ul class="tree-children">
+                          <li class="tree-item" data-type="class">
+                            <div class="tree-row is-class" tabindex="0">
+                              <span class="tree-icon leaf"></span>
+                              <span class="type-chip class">«class»</span>
+                              <span class="tree-node-name">TreeMap&lt;K,V&gt;</span>
+                              <span class="tree-tag note">Red-Black Tree · O(log n)</span>
+                            </div>
+                          </li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+
+                  <!-- Hashtable -->
+                  <li class="tree-item" data-type="class">
+                    <div class="tree-row is-class is-legacy" tabindex="0">
+                      <span class="tree-icon leaf"></span>
+                      <span class="type-chip class">«class»</span>
+                      <span class="tree-node-name">Hashtable&lt;K,V&gt;</span>
+                      <span class="tree-tag legacy">legacy · synchronized</span>
+                    </div>
+                  </li>
+
+                  <!-- IdentityHashMap -->
+                  <li class="tree-item" data-type="class">
+                    <div class="tree-row is-class" tabindex="0">
+                      <span class="tree-icon leaf"></span>
+                      <span class="type-chip class">«class»</span>
+                      <span class="tree-node-name">IdentityHashMap&lt;K,V&gt;</span>
+                      <span class="tree-tag note">compares keys via ==</span>
+                    </div>
+                  </li>
+
+                  <!-- WeakHashMap -->
+                  <li class="tree-item" data-type="class">
+                    <div class="tree-row is-class" tabindex="0">
+                      <span class="tree-icon leaf"></span>
+                      <span class="type-chip class">«class»</span>
+                      <span class="tree-node-name">WeakHashMap&lt;K,V&gt;</span>
+                      <span class="tree-tag note">weak-referenced keys</span>
+                    </div>
+                  </li>
+                </ul>
+              </li>
+
+              <!-- CONCURRENT MAP SIBLINGS -->
+              <li class="tree-item has-children" data-type="interface" style="margin-top: 18px;" id="node-concurrent-map">
+                <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="false">
+                  <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                  <span class="type-chip interface">«interface»</span>
+                  <span class="tree-node-name">ConcurrentMap&lt;K,V&gt;</span>
+                  <span class="tree-tag note">java.util.concurrent</span>
+                  <span class="child-count-pill">2 implementations ▾</span>
+                </div>
+
+                <ul class="tree-children collapsed">
+                  <li class="tree-item" data-type="class">
+                    <div class="tree-row is-class" tabindex="0">
+                      <span class="tree-icon leaf"></span>
+                      <span class="type-chip class">«class»</span>
+                      <span class="tree-node-name">ConcurrentHashMap&lt;K,V&gt;</span>
+                      <span class="tree-tag note">CAS + synchronized bin head</span>
+                    </div>
+                  </li>
+                  <li class="tree-item has-children is-open" data-type="interface">
+                    <div class="tree-row is-interface" tabindex="0" role="button" aria-expanded="true">
+                      <span class="tree-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>
+                      <span class="type-chip interface">«interface»</span>
+                      <span class="tree-node-name">ConcurrentNavigableMap&lt;K,V&gt;</span>
+                      <span class="child-count-pill">1 implementation</span>
+                    </div>
+                    <ul class="tree-children">
+                      <li class="tree-item" data-type="class">
+                        <div class="tree-row is-class" tabindex="0">
+                          <span class="tree-icon leaf"></span>
+                          <span class="type-chip class">«class»</span>
+                          <span class="tree-node-name">ConcurrentSkipListMap&lt;K,V&gt;</span>
+                          <span class="tree-tag note">lock-free skip list · concurrent O(log n)</span>
+                        </div>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- ================= LEGEND & COLOR CLASSIFICATION ================= -->
+        <div class="tree-legend-box">
+          <div class="legend-header">
+            <div class="legend-title">
+              <span>🔑 Hierarchy Legend &amp; Color Classification</span>
+            </div>
+            <span style="font-size: 11.5px; color: var(--text-dim); font-family: var(--mono);">JDK Class vs Interface Distinction</span>
+          </div>
+
+          <div class="legend-grid">
+            <!-- Interface Card -->
+            <div class="legend-card interface-card">
+              <div class="legend-card-header">
+                <span class="type-chip interface">«interface»</span>
+                <span class="legend-card-title">Cyan / Sky Blue · Interface</span>
+              </div>
+              <p class="legend-desc">
+                <strong>Abstract Contract:</strong> Defines public API method contracts (e.g., <code>add()</code>, <code>get()</code>, <code>size()</code>) without physical heap memory layout. Cannot be instantiated with <code>new</code>. Used as reference types for polymorphic code.
+              </p>
+            </div>
+
+            <!-- Class Card -->
+            <div class="legend-card class-card">
+              <div class="legend-card-header">
+                <span class="type-chip class">«class»</span>
+                <span class="legend-card-title">Green / Emerald · Concrete Class</span>
+              </div>
+              <p class="legend-desc">
+                <strong>Heap Implementation:</strong> Concrete data structure with actual memory allocation on the heap (continuous array, linked nodes, hash buckets). Instantiated with <code>new</code> (e.g., <code>new ArrayList&lt;&gt;()</code>).
+              </p>
+            </div>
+
+            <!-- Legacy Card -->
+            <div class="legend-card legacy-card">
+              <div class="legend-card-header">
+                <span class="tree-tag legacy">legacy</span>
+                <span class="legend-card-title">Coral Red · Legacy (Synchronized)</span>
+              </div>
+              <p class="legend-desc">
+                <strong>Pre-Java 2 Legacy:</strong> Thread-safe via coarse method-level locks (<code>Vector</code>, <code>Stack</code>, <code>Hashtable</code>). Retained for 100% backwards compatibility; superseded by modern collections and concurrent structures.
+              </p>
+            </div>
+
+            <!-- Sequenced Card -->
+            <div class="legend-card seq-card">
+              <div class="legend-card-header">
+                <span class="tree-tag seq">Sequenced</span>
+                <span class="legend-card-title">Violet · Java 21+ Sequenced</span>
+              </div>
+              <p class="legend-desc">
+                <strong>Ordered Sequence Contract:</strong> Java 21 unified interface (<code>SequencedCollection</code>, <code>SequencedSet</code>, <code>SequencedMap</code>) providing standard <code>addFirst()</code>, <code>addLast()</code>, and <code>reversed()</code> view access.
+              </p>
+            </div>
+          </div>
+
+          <div class="legend-tip">
+            <span>💡 <strong>Interactive Navigation:</strong> Click on any branch row (e.g. <code>List&lt;E&gt;</code>, <code>Set&lt;E&gt;</code>, <code>Queue&lt;E&gt;</code>, or <code>Map&lt;K,V&gt;</code>) or its arrow (<strong>▼ / ▶</strong>) to toggle its implementations. Use <strong>Expand All</strong> or <strong>Collapse All</strong> above for quick overview switching.</span>
+          </div>
+        </div>
+      </div>
+      <div class="viz-caption" style="margin-top: 10px;">Map and its concurrent cousins are drawn separately on purpose — as the analogy above explains, Map is never a Collection. Legacy classes (red) are shown because interviewers still ask about them, not because you should reach for them.</div>
+    </section>
+
+    <!-- Module Complete Card -->
+    <div class="chapter-complete-card">
+      <div class="chapter-complete-info">
+        <h4>Completed Module 01?</h4>
+        <p>Mark this foundation chapter as complete to track your progress in the curriculum.</p>
+      </div>
+      <button type="button" class="btn-mark-complete" data-module="01">
+        <span>○</span> Mark as Completed
+      </button>
+    </div>
+
+    <!-- Pagination Footer -->
+    <div class="module-pagination">
+      <a href="overview.html" class="page-btn">← Curriculum Overview</a>
+      <a href="02-lists.html" class="page-btn primary">Next: Module 02 · Lists in Depth →</a>
+    </div>
+
+    <footer>Built for lead-level Java interview preparation · every mechanism traced to the JDK source behavior it describes</footer>
+  </main>
+</div>
+
+<script>
+  (function() {
+    const treeContainer = document.getElementById('tree-container');
+    if (!treeContainer) return;
+
+    // Toggle child visibility of a tree item
+    function toggleNode(item) {
+      if (!item.classList.contains('has-children')) return;
+      const isOpen = item.classList.contains('is-open');
+      const children = item.querySelector(':scope > .tree-children');
+      const row = item.querySelector(':scope > .tree-row');
+
+      if (isOpen) {
+        item.classList.remove('is-open');
+        if (children) children.classList.add('collapsed');
+        if (row) row.setAttribute('aria-expanded', 'false');
+      } else {
+        item.classList.add('is-open');
+        if (children) children.classList.remove('collapsed');
+        if (row) row.setAttribute('aria-expanded', 'true');
+      }
+    }
+
+    // Click handler for node rows
+    treeContainer.addEventListener('click', function(e) {
+      const row = e.target.closest('.tree-row');
+      if (!row) return;
+      const item = row.closest('.tree-item');
+      if (item && item.classList.contains('has-children')) {
+        toggleNode(item);
+      }
+    });
+
+    // Keyboard navigation (Enter / Space)
+    treeContainer.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        const row = e.target.closest('.tree-row');
+        if (row) {
+          const item = row.closest('.tree-item');
+          if (item && item.classList.contains('has-children')) {
+            e.preventDefault();
+            toggleNode(item);
+          }
+        }
+      }
+    });
+
+    // Expand All button
+    const btnExpandAll = document.getElementById('btn-expand-all');
+    if (btnExpandAll) {
+      btnExpandAll.addEventListener('click', function() {
+        const allItemsWithChildren = treeContainer.querySelectorAll('.tree-item.has-children');
+        allItemsWithChildren.forEach(item => {
+          item.classList.add('is-open');
+          const children = item.querySelector(':scope > .tree-children');
+          const row = item.querySelector(':scope > .tree-row');
+          if (children) children.classList.remove('collapsed');
+          if (row) row.setAttribute('aria-expanded', 'true');
+        });
+      });
+    }
+
+    // Collapse All button (collapses down to top branches)
+    const btnCollapseAll = document.getElementById('btn-collapse-all');
+    if (btnCollapseAll) {
+      btnCollapseAll.addEventListener('click', function() {
+        const allItemsWithChildren = treeContainer.querySelectorAll('.tree-item.has-children');
+        allItemsWithChildren.forEach(item => {
+          // Keep top-level roots open so user sees high-level categories
+          if (item.id === 'node-iterable' || item.id === 'node-collection') {
+            item.classList.add('is-open');
+            const children = item.querySelector(':scope > .tree-children');
+            const row = item.querySelector(':scope > .tree-row');
+            if (children) children.classList.remove('collapsed');
+            if (row) row.setAttribute('aria-expanded', 'true');
+          } else {
+            item.classList.remove('is-open');
+            const children = item.querySelector(':scope > .tree-children');
+            const row = item.querySelector(':scope > .tree-row');
+            if (children) children.classList.add('collapsed');
+            if (row) row.setAttribute('aria-expanded', 'false');
+          }
+        });
+      });
+    }
+
+    // Type Filter Buttons (All / Interfaces / Classes)
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', function() {
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const filter = btn.getAttribute('data-filter');
+
+        treeContainer.classList.remove('filter-interfaces-only', 'filter-classes-only');
+        if (filter === 'interfaces') {
+          treeContainer.classList.add('filter-interfaces-only');
+        } else if (filter === 'classes') {
+          treeContainer.classList.add('filter-classes-only');
+        }
+      });
+    });
+  })();
+</script>
+</body>
+</html>

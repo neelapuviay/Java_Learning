@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Curriculum Overview &amp; Roadmap — Java Collections</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="reader.js"></script>
+<style>
+  body { padding: 32px 48px 80px; }
+  .shell.single-col { margin: 0 auto; padding: 0; }
+  @media (max-width: 768px) { body { padding: 20px 16px 60px; } }
+</style>
+</head>
+<body>
+
+<div class="shell single-col">
+  <div class="hero" style="padding: 24px 0 36px; border-bottom: 1px solid var(--line);">
+    <div class="tag">// ARCHITECTURE &amp; FIRST PRINCIPLES CURRICULUM</div>
+    <h1 style="max-width: 24ch;">Java Collections &amp; Concurrency, rebuilt from <em>first principles</em>.</h1>
+    <p class="lede">Every internal mechanism — memory layouts, bitwise spreading, treeification, CAS, cooperative resizing, lock-free skip lists, and CPU cache sympathy — explained with plain intuition first, mechanism second, and interactive visual simulators you can watch move.</p>
+    
+    <div class="promise">
+      <div><b>7 Modular Chapters</b>broken down by concept for focused, zero-fatigue learning</div>
+      <div><b>Visual Simulators</b>interactive animations for hashing, heaps, shifts &amp; CAS</div>
+      <div><b>Interview &amp; Production Ready</b>includes real system designs, trade-off matrix &amp; LeetCode patterns</div>
+      <div><b>Single Page Edition</b><a href="java-collections (1).html" target="_blank" style="text-decoration:underline;">view complete original guide →</a></div>
+    </div>
+  </div>
+
+  <div style="margin-top: 40px;">
+    <div class="eyebrow">CURRICULUM DIRECTORY</div>
+    <h2>Concept Modules</h2>
+    <p class="dim" style="max-width: 76ch;">Choose a module below or from the left menu to begin. Each chapter is self-contained with deep explanations, code breakdowns, and live visual widgets.</p>
+
+    <div class="hub-grid">
+
+      <!-- MODULE 1 -->
+      <a href="01-jvm-memory-and-foundations.html" class="hub-card">
+        <div>
+          <div class="hub-card-header">
+            <span class="hub-card-num">MODULE 01</span>
+            <div style="display:flex; gap:6px;">
+              <span class="badge badge-cyan">Foundations</span>
+              <span class="badge badge-amber">⏱️ 14 min</span>
+            </div>
+          </div>
+          <h3>JVM Memory &amp; Big-O Foundations</h3>
+          <p>Stack vs Heap mechanics, garbage collection reachability, memory address analogies, the Big-O visual comparison guide (O(1), O(log n), O(n)), and why Java separates Collection from Map.</p>
+          <div style="font-family:var(--mono); font-size:12px; color:var(--text-faint); margin-bottom:16px;">
+            🖼️ Features Big-O visual diagram &amp; interactive Collection hierarchy tree
+          </div>
+        </div>
+        <div class="hub-card-footer">
+          <span>Explore Module 01</span>
+          <span class="arrow">→</span>
+        </div>
+      </a>
+
+      <!-- MODULE 2 -->
+      <a href="02-lists.html" class="hub-card">
+        <div>
+          <div class="hub-card-header">
+            <span class="hub-card-num">MODULE 02</span>
+            <div style="display:flex; gap:6px;">
+              <span class="badge badge-amber">Data Structures</span>
+              <span class="badge badge-green">⏱️ 22 min</span>
+            </div>
+          </div>
+          <h3>Lists in Depth: ArrayList &amp; LinkedList</h3>
+          <p>Contiguous memory layout, mathematical offset indexing, amortized O(1) growth calculation, double-linked node pointer overhead, CPU cache line prefetching, and Vector/Stack legacy quirks.</p>
+          <div style="font-family:var(--mono); font-size:12px; color:var(--text-faint); margin-bottom:16px;">
+            ⚡ Includes interactive ArrayList shift vs append simulator
+          </div>
+        </div>
+        <div class="hub-card-footer">
+          <span>Explore Module 02</span>
+          <span class="arrow">→</span>
+        </div>
+      </a>
+
+      <!-- MODULE 3 -->
+      <a href="03-maps-and-sets.html" class="hub-card">
+        <div>
+          <div class="hub-card-header">
+            <span class="hub-card-num">MODULE 03</span>
+            <div style="display:flex; gap:6px;">
+              <span class="badge badge-green">Core Internals</span>
+              <span class="badge badge-cyan">⏱️ 18 min</span>
+            </div>
+          </div>
+          <h3>Map &amp; Set Internals: Hashing, Buckets &amp; Trees</h3>
+          <p>The mathematical journey from object to bucket: `hashCode()`, 16-bit XOR spreading, power-of-two mask indexing, collision chaining, Red-Black treeification (≥8), HashSet, LinkedHashMap, and TreeSet ordering.</p>
+          <div style="font-family:var(--mono); font-size:12px; color:var(--text-faint); margin-bottom:16px;">
+            ⚡ 3 interactive tools: Bit spreader, bucket chaining, and Set ordering comparison
+          </div>
+        </div>
+        <div class="hub-card-footer">
+          <span>Explore Module 03</span>
+          <span class="arrow">→</span>
+        </div>
+      </a>
+
+      <!-- MODULE 4 -->
+      <a href="04-queues-and-sequenced.html" class="hub-card">
+        <div>
+          <div class="hub-card-header">
+            <span class="hub-card-num">MODULE 04</span>
+            <div style="display:flex; gap:6px;">
+              <span class="badge badge-violet">Modern Java</span>
+              <span class="badge badge-amber">⏱️ 15 min</span>
+            </div>
+          </div>
+          <h3>Queues, Heaps &amp; Sequenced Collections</h3>
+          <p>ArrayDeque circular buffer index arithmetic, PriorityQueue binary min-heap mechanics, and Java 21 Sequenced Collections (`SequencedCollection`, `SequencedSet`, `SequencedMap`) with zero-copy O(1) reversed views.</p>
+          <div style="font-family:var(--mono); font-size:12px; color:var(--text-faint); margin-bottom:16px;">
+            ⚡ Includes interactive binary min-heap visualizer with siftUp and siftDown
+          </div>
+        </div>
+        <div class="hub-card-footer">
+          <span>Explore Module 04</span>
+          <span class="arrow">→</span>
+        </div>
+      </a>
+
+      <!-- MODULE 5 -->
+      <a href="05-concurrency.html" class="hub-card">
+        <div>
+          <div class="hub-card-header">
+            <span class="hub-card-num">MODULE 05</span>
+            <div style="display:flex; gap:6px;">
+              <span class="badge badge-coral">Concurrency</span>
+              <span class="badge badge-green">⏱️ 20 min</span>
+            </div>
+          </div>
+          <h3>Thread-Safe &amp; Concurrent Collections</h3>
+          <p>Java Memory Model, CPU cache visibility, volatile, atomic operations, ConcurrentHashMap table locking and cooperative multi-threaded resizing, CopyOnWriteArrayList, BlockingQueues, and ConcurrentSkipListMap.</p>
+          <div style="font-family:var(--mono); font-size:12px; color:var(--text-faint); margin-bottom:16px;">
+            ⚡ Includes interactive Compare-And-Swap (CAS) vs Race Condition simulator
+          </div>
+        </div>
+        <div class="hub-card-footer">
+          <span>Explore Module 05</span>
+          <span class="arrow">→</span>
+        </div>
+      </a>
+
+      <!-- MODULE 6 -->
+      <a href="06-advanced-performance.html" class="hub-card">
+        <div>
+          <div class="hub-card-header">
+            <span class="hub-card-num">MODULE 06</span>
+            <div style="display:flex; gap:6px;">
+              <span class="badge badge-amber">Hardware &amp; Caching</span>
+              <span class="badge badge-cyan">⏱️ 16 min</span>
+            </div>
+          </div>
+          <h3>Mechanical Sympathy &amp; High-Performance Caching</h3>
+          <p>Hardware cache line structure (64 bytes), false sharing contention between CPU cores, padding with `@Contended`, `LongAdder` cell striping, and modern caching architecture: Caffeine's W-TinyLFU eviction design.</p>
+          <div style="font-family:var(--mono); font-size:12px; color:var(--text-faint); margin-bottom:16px;">
+            📊 Memory barrier rules, frequency sketch, and window/probation/protected LRU breakdown
+          </div>
+        </div>
+        <div class="hub-card-footer">
+          <span>Explore Module 06</span>
+          <span class="arrow">→</span>
+        </div>
+      </a>
+
+      <!-- MODULE 7 -->
+      <a href="07-recipes-and-practice.html" class="hub-card">
+        <div>
+          <div class="hub-card-header">
+            <span class="hub-card-num">MODULE 07</span>
+            <div style="display:flex; gap:6px;">
+              <span class="badge badge-cyan">Recipes &amp; Scenarios</span>
+              <span class="badge badge-violet">⏱️ 25 min</span>
+            </div>
+          </div>
+          <h3>Hands-On Recipes, Streams &amp; Master Matrix</h3>
+          <p>Essential idioms (`computeIfAbsent`, `merge`, `removeIf`), Stream collectors and grouping patterns, top 5 interview problems with step-by-step solutions, real-world system design scenarios, and the comprehensive decision matrix cheat sheet.</p>
+          <div style="font-family:var(--mono); font-size:12px; color:var(--text-faint); margin-bottom:16px;">
+            🎯 5 LeetCode interview patterns + master collection decision cheat sheet
+          </div>
+        </div>
+        <div class="hub-card-footer">
+          <span>Explore Module 07</span>
+          <span class="arrow">→</span>
+        </div>
+      </a>
+
+    </div>
+  </div>
+
+  <section class="tight" style="padding-left:0; padding-right:0; border-top:1px solid var(--line);">
+    <div class="eyebrow">AT A GLANCE</div>
+    <h2>Quick Collection Decision Matrix</h2>
+    <p class="dim">A high-level summary of which data structure to choose for common software engineering requirements.</p>
+
+    <table>
+      <thead>
+        <tr><th>Requirement</th><th>Default Choice</th><th>Key Mechanism</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Fast random access, mostly appends</td><td class="mono">ArrayList</td><td>O(1) direct index math, cache-friendly contiguous array</td></tr>
+        <tr><td>Stack / queue / deque behavior</td><td class="mono">ArrayDeque</td><td>No node allocation overhead, circular buffer O(1) at both ends</td></tr>
+        <tr><td>Unordered fast key lookup, single-threaded</td><td class="mono">HashMap</td><td>O(1) average lookup via hash code and power-of-two bucket mask</td></tr>
+        <tr><td>Sorted keys / range queries, single-threaded</td><td class="mono">TreeMap</td><td>Red-Black self-balancing binary search tree, guaranteed O(log n)</td></tr>
+        <tr><td>Concurrent map, high throughput</td><td class="mono">ConcurrentHashMap</td><td>Per-bucket synchronized locking + lock-free CAS reads</td></tr>
+        <tr><td>Read-heavy, rarely mutated shared list</td><td class="mono">CopyOnWriteArrayList</td><td>Wait-free lockless reads, copy-on-write clone array mutators</td></tr>
+        <tr><td>Producer-consumer bounded queue</td><td class="mono">ArrayBlockingQueue</td><td>Circular array with ReentrantLock and Condition signaling</td></tr>
+        <tr><td>Bounded high-hit-rate in-memory cache</td><td class="mono">Caffeine (W-TinyLFU)</td><td>Window TinyLFU frequency admission sketch + segmented LRU</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    Built for lead-level Java interview preparation &amp; engineering mastery · Traced directly to OpenJDK source behavior.
+  </footer>
+</div>
+
+</body>
+</html>

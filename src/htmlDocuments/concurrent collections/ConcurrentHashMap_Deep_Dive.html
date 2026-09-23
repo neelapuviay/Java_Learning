@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ConcurrentHashMap Deep Dive: CAS, Bin-Locking & Memory Visibility — Deep Dive Tutor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  :root {
+    --bg-main: #0B1120;
+    --card-bg: #101B30;
+    --border-color: #1E2E4A;
+    --accent-coral: #F472B6;
+    --accent-cyan: #38BDF8;
+    --accent-green: #34D399;
+    --accent-amber: #FBBF24;
+    --text-main: #F1F5F9;
+    --text-dim: #94A3B8;
+  }
+  body {
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.6;
+    padding: 24px;
+    margin: 0;
+  }
+  .container {
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .badge-coral { background: rgba(244,114,182,0.15); color: #F472B6; border: 1px solid rgba(244,114,182,0.3); }
+  .badge-green { background: rgba(52,211,153,0.15); color: #34D399; border: 1px solid rgba(52,211,153,0.3); }
+  .badge-amber { background: rgba(251,191,36,0.15); color: #FBBF24; border: 1px solid rgba(251,191,36,0.3); }
+  .badge-cyan { background: rgba(56,189,248,0.15); color: #38BDF8; border: 1px solid rgba(56,189,248,0.3); }
+  
+  .hero { margin-bottom: 32px; border-bottom: 1px solid var(--border-color); padding-bottom: 24px; }
+  h1 { font-size: 32px; font-weight: 800; margin: 12px 0; color: #FFFFFF; }
+  .lede { font-size: 16px; color: var(--text-dim); }
+  
+  .section-block { margin-bottom: 40px; }
+  .section-title { font-size: 20px; font-weight: 700; color: #E2E8F0; margin-bottom: 14px; border-left: 4px solid var(--accent-cyan); padding-left: 12px; }
+  
+  /* Progressive disclosure markers */
+  .progressive-term {
+    position: relative;
+    display: inline-block;
+    border-bottom: 1.5px dotted var(--accent-cyan);
+    color: #E0F2FE;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .progressive-term .term-badge {
+    font-size: 9px;
+    background: rgba(56,189,248,0.2);
+    color: var(--accent-cyan);
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-left: 2px;
+    vertical-align: middle;
+  }
+  .progressive-term .term-popover {
+    display: none;
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 260px;
+    background: #1E293B;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 12px;
+    color: #CBD5E1;
+    z-index: 100;
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+  }
+  .progressive-term:hover .term-popover, .progressive-term:focus .term-popover {
+    display: block;
+  }
+  .progressive-term .term-popover strong { color: #FFFFFF; display: block; margin-bottom: 4px; font-size: 13px; }
+  .progressive-term .term-popover p { margin: 0 0 8px 0; line-height: 1.4; }
+  .progressive-term .drawer-link { color: var(--accent-cyan); text-decoration: none; font-weight: 600; }
+  
+  pre {
+    background: #0D1524;
+    border: 1px solid var(--border-color);
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: #E2E8F0;
+  }
+  
+  .btn-tutor {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #2563EB;
+    color: #FFFFFF;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: 6px;
+    transition: background 0.2s ease;
+    margin-top: 10px;
+  }
+  .btn-tutor:hover { background: #1D4ED8; }
+  
+  .trap-card {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+  }
+  .trap-question { font-weight: 700; color: #FCA5A5; margin-bottom: 6px; font-size: 14px; }
+  .trap-reality { font-size: 13px; color: #FEE2E2; line-height: 1.5; }
+  
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="hero">
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+      <span class="badge badge-coral">Concurrent Collections</span>
+      <span class="badge badge-green">Tutor Deep-Dive</span>
+    </div>
+    <h1>ConcurrentHashMap Deep Dive: CAS, Bin-Locking & Memory Visibility</h1>
+    <p class="lede">How multiple CPU cores can read, write, and resize a shared key-value table simultaneously without global lock contention or data corruption.</p>
+  </div>
+
+  <div class="section-block">
+    <div class="section-title">1. The Core Mechanism &amp; Why It Exists</div>
+    <div>
+<p>To understand why <span class="progressive-term" tabindex="0" title="High-throughput thread-safe map utilizing per-bucket CAS for empty bins and synchronized locks on individual bin heads, with cooperative multi-threaded resizing.">
+  <span class="term-text">ConcurrentHashMap</span>
+  <span class="term-badge">prereq</span>
+  <span class="term-popover">
+    <strong>ConcurrentHashMap</strong>
+    <p>High-throughput thread-safe map utilizing per-bucket CAS for empty bins and synchronized locks on individual bin heads, with cooperative multi-threaded resizing.</p>
+    <a href="src/htmlDocuments/collections/05-concurrency.html#chm" class="drawer-link" target="_blank">View full notes →</a>
+  </span>
+</span> is fast, contrast it with older solutions. <span class="progressive-term untracked" tabindex="0" title="Prerequisite concept to explore">
+  <span class="term-text">Hashtable</span>
+  <span class="term-badge">stub</span>
+  <span class="term-popover">
+    <strong>Hashtable</strong>
+    <p>Prerequisite concept tagged for drill-down.</p>
+  </span>
+</span> placed a coarse <code>synchronized</code> keyword across every public method. If Thread A was reading a key, Thread B could not read a different key — it blocked completely.</p>
+<p>In modern Java, ConcurrentHashMap eliminates global locks. When inserting into an empty bin, it uses hardware-level <span class="progressive-term" tabindex="0" title="A hardware-level CPU instruction that atomically updates a memory location only if it still holds the expected value, enabling non-blocking lock-free loops.">
+  <span class="term-text">Compare-And-Swap (CAS)</span>
+  <span class="term-badge">prereq</span>
+  <span class="term-popover">
+    <strong>Compare-And-Swap (CAS)</strong>
+    <p>A hardware-level CPU instruction that atomically updates a memory location only if it still holds the expected value, enabling non-blocking lock-free loops.</p>
+    <a href="src/htmlDocuments/collections/05-concurrency.html#cas-sim" class="drawer-link" target="_blank">View full notes →</a>
+  </span>
+</span> (Compare-And-Swap) with no locking at all. If a bin already has elements (a collision), it acquires an intrinsic lock <code>synchronized</code> on only that single bin's first node. Other threads operating on different bins run in parallel without contention.</p>
+<p>Memory visibility across all reader threads is guaranteed without locking via <span class="progressive-term" tabindex="0" title="Ensures CPU memory visibility across threads by bypassing core CPU caches and prohibiting compiler instruction reordering (establishing happens-before).">
+  <span class="term-text">volatile keyword</span>
+  <span class="term-badge">prereq</span>
+  <span class="term-popover">
+    <strong>volatile keyword</strong>
+    <p>Ensures CPU memory visibility across threads by bypassing core CPU caches and prohibiting compiler instruction reordering (establishing happens-before).</p>
+    <a href="src/htmlDocuments/collections/05-concurrency.html#chm" class="drawer-link" target="_blank">View full notes →</a>
+  </span>
+</span> reads on bucket array references and node values, respecting the JVM <span class="progressive-term" tabindex="0" title="A formal guarantee in the JMM that memory writes by one action are visible to a subsequent read action without race conditions.">
+  <span class="term-text">Happens-Before Relationship</span>
+  <span class="term-badge">prereq</span>
+  <span class="term-popover">
+    <strong>Happens-Before Relationship</strong>
+    <p>A formal guarantee in the JMM that memory writes by one action are visible to a subsequent read action without race conditions.</p>
+    <a href="src/htmlDocuments/collections/01-jvm-memory-and-foundations.html" class="drawer-link" target="_blank">View full notes →</a>
+  </span>
+</span> relationship.</p>
+</div>
+  </div>
+
+  <div class="section-block">
+    <div class="section-title">2. Concrete Runnable Example &amp; Live Step Execution</div>
+    <pre><code>import java.util.concurrent.ConcurrentHashMap;
+
+public class Main {
+    public static void main(String[] args) {
+        // ConcurrentHashMap uses CAS for null bins and synchronized for collision chains
+        ConcurrentHashMap&lt;String, Integer&gt; map = new ConcurrentHashMap&lt;&gt;();
+        map.put(&quot;Java&quot;, 21);
+        map.put(&quot;Spring&quot;, 3);
+        
+        // Atomic computeIfAbsent: single atomic check-and-insert
+        map.computeIfAbsent(&quot;Concurrency&quot;, k -&gt; 100);
+        
+        System.out.println(&quot;Map size: &quot; + map.size());
+    }
+}</code></pre>
+    <a href="https://pythontutor.com/visualize.html?via=ai#code=import%20java.util.concurrent.ConcurrentHashMap%3B%0A%0Apublic%20class%20Main%20%7B%0A%20%20%20%20public%20static%20void%20main%28String%5B%5D%20args%29%20%7B%0A%20%20%20%20%20%20%20%20%2F%2F%20ConcurrentHashMap%20uses%20CAS%20for%20null%20bins%20and%20synchronized%20for%20collision%20chains%0A%20%20%20%20%20%20%20%20ConcurrentHashMap%3CString%2C%20Integer%3E%20map%20%3D%20new%20ConcurrentHashMap%3C%3E%28%29%3B%0A%20%20%20%20%20%20%20%20map.put%28%22Java%22%2C%2021%29%3B%0A%20%20%20%20%20%20%20%20map.put%28%22Spring%22%2C%203%29%3B%0A%20%20%20%20%20%20%20%20%0A%20%20%20%20%20%20%20%20%2F%2F%20Atomic%20computeIfAbsent%3A%20single%20atomic%20check-and-insert%0A%20%20%20%20%20%20%20%20map.computeIfAbsent%28%22Concurrency%22%2C%20k%20-%3E%20100%29%3B%0A%20%20%20%20%20%20%20%20%0A%20%20%20%20%20%20%20%20System.out.println%28%22Map%20size%3A%20%22%20%2B%20map.size%28%29%29%3B%0A%20%20%20%20%7D%0A%7D&mode=display&py=java" target="_blank" class="btn-tutor">
+      ▶ Step through this code live in Python Tutor
+    </a>
+    <p style="font-size:12px; color:var(--text-dim); margin-top:8px;">Step through the initialization and CAS bin insertion live above. Observe object references on the heap.</p>
+  </div>
+
+  <div class="section-block">
+    <div class="section-title">3. Hands-on Practice &amp; LeetCode Patterns</div>
+    <div>
+        <div class="card" style="margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <h4 style="margin:0;">Design a High-Throughput In-Memory Cache with Expiration</h4>
+            <span class="badge badge-amber">Medium</span>
+          </div>
+          <p style="margin:0; font-size:13px; color:var(--text-dim, #93A3BE);">Implement get/put with TTL using ConcurrentHashMap without locking the whole table.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <h4 style="margin:0;">Subarray Sum Equals K (Thread-safe counting)</h4>
+            <span class="badge badge-green">Easy</span>
+          </div>
+          <p style="margin:0; font-size:13px; color:var(--text-dim, #93A3BE);">Use ConcurrentHashMap.merge() to aggregate frequencies concurrently across multiple worker threads.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <h4 style="margin:0;">LRU Cache with Fine-Grained Locking</h4>
+            <span class="badge badge-coral">Hard</span>
+          </div>
+          <p style="margin:0; font-size:13px; color:var(--text-dim, #93A3BE);">Combine ConcurrentHashMap with doubly-linked nodes and lock stripping.</p>
+        </div></div>
+  </div>
+
+  <div class="section-block">
+    <div class="section-title">4. Interview Traps &amp; Common Gotchas</div>
+    <div>
+        <div class="trap-card">
+          <div class="trap-question">⚠️ Trap: "ConcurrentHashMap is 100% lock-free in modern Java."</div>
+          <div class="trap-reality"><strong>Reality:</strong> False. It is lock-free ONLY for reads and insertions into empty buckets (via CAS). Once a collision occurs, it synchronizes on the bin head node.</div>
+        </div>
+        <div class="trap-card">
+          <div class="trap-question">⚠️ Trap: "size() locks the whole map to count accurately."</div>
+          <div class="trap-reality"><strong>Reality:</strong> False. It uses a LongAdder-like CounterCell array mechanism that aggregates counts without full locks, providing an eventually consistent estimate.</div>
+        </div>
+        <div class="trap-card">
+          <div class="trap-question">⚠️ Trap: "Iterating through ConcurrentHashMap throws ConcurrentModificationException if modified."</div>
+          <div class="trap-reality"><strong>Reality:</strong> False. Its iterators are 'weakly consistent': they never throw ConcurrentModificationException and reflect map state at or after iterator creation.</div>
+        </div></div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,110 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-09-10",
+  "concepts": {
+    "thread-safety": {
+      "name": "Thread Safety",
+      "category": "Concurrency Fundamentals",
+      "one_line_summary": "Guarantee that shared mutable state behaves correctly when accessed by multiple threads concurrently without data races or corruption.",
+      "prerequisites": ["thread-basics", "shared-memory"],
+      "doc_path": "src/htmlDocuments/collections/05-concurrency.html#concurrency",
+      "visualizer_type": "thread_lifecycle"
+    },
+    "race-condition": {
+      "name": "Race Condition",
+      "category": "Concurrency Fundamentals",
+      "one_line_summary": "A timing bug occurring when two or more threads read and write shared data concurrently, causing the final output to depend on unpredictable execution order.",
+      "prerequisites": ["thread-safety"],
+      "doc_path": "src/htmlDocuments/collections/05-concurrency.html#concurrency",
+      "visualizer_type": "thread_lifecycle"
+    },
+    "volatile": {
+      "name": "volatile keyword",
+      "category": "Java Memory Model",
+      "one_line_summary": "Ensures CPU memory visibility across threads by bypassing core CPU caches and prohibiting compiler instruction reordering (establishing happens-before).",
+      "prerequisites": ["cpu-cache", "happens-before"],
+      "doc_path": "src/htmlDocuments/collections/05-concurrency.html#chm",
+      "visualizer_type": "custom_svg"
+    },
+    "cas": {
+      "name": "Compare-And-Swap (CAS)",
+      "category": "Atomic Hardware Primitives",
+      "one_line_summary": "A hardware-level CPU instruction that atomically updates a memory location only if it still holds the expected value, enabling non-blocking lock-free loops.",
+      "prerequisites": ["cpu-cache", "atomic-operations"],
+      "doc_path": "src/htmlDocuments/collections/05-concurrency.html#cas-sim",
+      "visualizer_type": "python_tutor"
+    },
+    "happens-before": {
+      "name": "Happens-Before Relationship",
+      "category": "Java Memory Model",
+      "one_line_summary": "A formal guarantee in the JMM that memory writes by one action are visible to a subsequent read action without race conditions.",
+      "prerequisites": ["thread-basics"],
+      "doc_path": "src/htmlDocuments/collections/01-jvm-memory-and-foundations.html",
+      "visualizer_type": "custom_svg"
+    },
+    "hash-bucket-array": {
+      "name": "Hash Bucket Array",
+      "category": "Data Structures",
+      "one_line_summary": "An underlying array of buckets where keys are hashed and mapped to array indices, resolving collisions via linked nodes or trees.",
+      "prerequisites": ["hash-code", "arrays"],
+      "doc_path": "src/htmlDocuments/collections/03-maps-and-sets.html",
+      "visualizer_type": "visualgo"
+    },
+    "treeification": {
+      "name": "Bucket Treeification",
+      "category": "Collections Internals",
+      "one_line_summary": "Java 8+ optimization converting a hash collision linked-list bin into a Red-Black tree once it exceeds TREEIFY_THRESHOLD (8) and table capacity >= 64.",
+      "prerequisites": ["hash-bucket-array", "red-black-tree"],
+      "doc_path": "src/htmlDocuments/collections/03-maps-and-sets.html",
+      "visualizer_type": "visualgo"
+    },
+    "concurrent-hash-map": {
+      "name": "ConcurrentHashMap",
+      "category": "Concurrent Collections",
+      "one_line_summary": "High-throughput thread-safe map utilizing per-bucket CAS for empty bins and synchronized locks on individual bin heads, with cooperative multi-threaded resizing.",
+      "prerequisites": ["cas", "volatile", "hash-bucket-array", "treeification"],
+      "doc_path": "src/htmlDocuments/collections/05-concurrency.html#chm",
+      "visualizer_type": "python_tutor"
+    },
+    "copy-on-write-array-list": {
+      "name": "CopyOnWriteArrayList",
+      "category": "Concurrent Collections",
+      "one_line_summary": "Thread-safe list making a fresh clone of the underlying array upon every write, allowing lightning-fast lock-free snapshot reads without ConcurrentModificationException.",
+      "prerequisites": ["arrays", "thread-safety"],
+      "doc_path": "src/htmlDocuments/collections/02-lists.html",
+      "visualizer_type": "python_tutor"
+    },
+    "reentrant-lock": {
+      "name": "ReentrantLock",
+      "category": "Locking & Synchronization",
+      "one_line_summary": "Explicit mutex built on AbstractQueuedSynchronizer (AQS) supporting fair/unfair policies, interruptible lock acquisition, and multiple condition variables.",
+      "prerequisites": ["cas", "thread-safety", "aqs"],
+      "doc_path": null,
+      "visualizer_type": "java_concurrent_animated"
+    },
+    "executor-service": {
+      "name": "ExecutorService & ThreadPoolExecutor",
+      "category": "Concurrency Utilities",
+      "one_line_summary": "Framework managing worker threads, task queues (BlockingQueue), lifecycle termination, and rejected execution handling to eliminate manual thread creation.",
+      "prerequisites": ["thread-basics", "blocking-queue"],
+      "doc_path": "src/leariningExamples/ProducerAndConsumer/ExecutorServiceDemo.java",
+      "visualizer_type": "thread_lifecycle"
+    },
+    "blocking-queue": {
+      "name": "BlockingQueue",
+      "category": "Concurrent Collections",
+      "one_line_summary": "Queue that blocks producer threads when full (put) and blocks consumer threads when empty (take), standard for producer-consumer pipelines.",
+      "prerequisites": ["queue-basics", "thread-safety"],
+      "doc_path": "src/htmlDocuments/collections/04-queues-and-sequenced.html",
+      "visualizer_type": "java_concurrent_animated"
+    },
+    "virtual-threads": {
+      "name": "Virtual Threads (Project Loom / Java 21+)",
+      "category": "Modern Java Concurrency",
+      "one_line_summary": "Lightweight user-mode threads managed by the JVM instead of the OS, scheduled on carrier OS threads via ForkJoinPool to enable massive non-blocking concurrency.",
+      "prerequisites": ["thread-basics", "executor-service"],
+      "doc_path": null,
+      "visualizer_type": "thread_lifecycle"
+    }
+  }
+}

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 07: Practical Recipes, Streams & Master Matrix — Java Collections</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="reader.js"></script>
+</head>
+<body>
+
+<div class="module-header-bar">
+  <div class="module-header-breadcrumb">
+    <span class="badge badge-cyan">MODULE 07</span> <span>Practical Recipes, Streams &amp; Master Decision Matrix</span>
+  </div>
+  <a href="index.html" target="_top" class="page-btn" style="padding:4px 10px;font-size:11px;">⊞ Full Portal View</a>
+</div>
+
+<div class="shell single-col">
+  <main>
+    <div class="hero">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+        <span class="badge badge-cyan">MODULE 07</span>
+        <span class="badge badge-violet">⏱️ 25 min read</span>
+        <span class="badge badge-amber">Recipes &amp; Scenarios</span>
+      </div>
+      <h1>Hands-On Recipes &amp; <em>Master Decision Matrix</em>.</h1>
+      <p class="lede">Knowing how something works is half the interview. The other half is writing clean, idiomatic Java on a whiteboard or shared editor. Review essential idioms, common Stream pipelines, LeetCode problem mappings, and real-world system designs.</p>
+      <div class="promise">
+        <div><b>Modern Idioms</b>merge(), computeIfAbsent(), and removeIf()</div>
+        <div><b>Streams Pipeline</b>filter, map, and collect patterns</div>
+        <div><b>Master Decision Matrix</b>the quick-reference table for leads and architects</div>
+      </div>
+    </div>
+
+    <!-- ================= SECTION: HANDS-ON METHODS ================= -->
+    <section id="handson">
+      <div class="eyebrow">15 — CODE YOU WILL ACTUALLY BE ASKED TO WRITE</div>
+      <h2>Hands-on method reference</h2>
+      <div class="sub">Below are the methods you will really use, with short, idiomatic code for each.</div>
+
+      <div id="handson-list"></div>
+      <h3>List — ArrayList / LinkedList</h3>
+      <pre><span class="ty">List</span>&lt;String&gt; names = <span class="kw">new</span> ArrayList&lt;&gt;();
+names.add(<span class="st">"Anna"</span>);                 <span class="c1">// append at end — O(1) amortized</span>
+names.add(0, <span class="st">"Zoe"</span>);               <span class="c1">// insert at front — O(n), shifts everyone right</span>
+names.get(1);                        <span class="c1">// read by index — O(1) for ArrayList</span>
+names.set(1, <span class="st">"Ravi"</span>);               <span class="c1">// overwrite by index</span>
+names.remove(<span class="st">"Zoe"</span>);                <span class="c1">// remove by VALUE (uses equals())</span>
+names.remove(0);                     <span class="c1">// remove by INDEX (be careful with Integer vs int here!)</span>
+names.contains(<span class="st">"Anna"</span>);             <span class="c1">// O(n) linear scan — no shortcut for List</span>
+names.removeIf(n -&gt; n.length() &lt; 3); <span class="c1">// remove every element matching a condition</span>
+Collections.sort(names);             <span class="c1">// natural order (needs Comparable) — O(n log n)</span>
+names.sort(Comparator.reverseOrder()); <span class="c1">// or a custom Comparator</span></pre>
+      
+      <div class="callout warn">
+        <div class="k">Classic interview trap</div>
+        <code class="inline">names.remove(2)</code> removes the element <b>at index 2</b>. But <code class="inline">names.remove(Integer.valueOf(2))</code> removes the element <b>equal to the value 2</b> — because now you've passed an <code class="inline">Integer</code> object, not an <code class="inline">int</code>, so Java picks the other overloaded method. This exact gotcha gets asked constantly in interviews.
+      </div>
+
+      <div id="handson-set"></div>
+      <h3>Set — HashSet / LinkedHashSet / TreeSet</h3>
+      <pre><span class="ty">Set</span>&lt;String&gt; seen = <span class="kw">new</span> HashSet&lt;&gt;();
+seen.add(<span class="st">"a"</span>);                 <span class="c1">// O(1) average — returns false if already present</span>
+seen.contains(<span class="st">"a"</span>);            <span class="c1">// O(1) average — the whole reason to use a Set</span>
+seen.retainAll(otherSet);      <span class="c1">// keep only common elements — set intersection</span>
+seen.removeAll(otherSet);      <span class="c1">// set difference</span>
+<span class="ty">TreeSet</span>&lt;Integer&gt; sorted = <span class="kw">new</span> TreeSet&lt;&gt;(List.of(5,1,9,3));
+sorted.first(); sorted.last();       <span class="c1">// smallest / largest — O(log n)</span>
+sorted.ceiling(4); sorted.floor(4);  <span class="c1">// smallest ≥4 / largest ≤4</span></pre>
+
+      <div id="handson-map"></div>
+      <h3>Map — HashMap / TreeMap / LinkedHashMap</h3>
+      <pre><span class="ty">Map</span>&lt;String, <span class="ty">Integer</span>&gt; wordCount = <span class="kw">new</span> HashMap&lt;&gt;();
+wordCount.put(<span class="st">"cat"</span>, 1);                                  <span class="c1">// insert or overwrite</span>
+wordCount.get(<span class="st">"cat"</span>);                                     <span class="c1">// returns null if missing — check carefully!</span>
+wordCount.getOrDefault(<span class="st">"dog"</span>, 0);                         <span class="c1">// safer read, no null surprise</span>
+wordCount.putIfAbsent(<span class="st">"cat"</span>, 99);                         <span class="c1">// only inserts if key is missing — no overwrite</span>
+
+<span class="c1">// The single most useful pattern in interview code — counting frequency:</span>
+wordCount.merge(<span class="st">"cat"</span>, 1, Integer::sum);                   <span class="c1">// if absent: put 1. if present: add 1.</span>
+
+<span class="c1">// Grouping items under a key, building a list as you go:</span>
+<span class="ty">Map</span>&lt;String, <span class="ty">List</span>&lt;String&gt;&gt; groups = <span class="kw">new</span> HashMap&lt;&gt;();
+groups.computeIfAbsent(<span class="st">"vowel"</span>, k -&gt; <span class="kw">new</span> ArrayList&lt;&gt;()).add(<span class="st">"apple"</span>);
+
+<span class="kw">for</span> (Map.Entry&lt;String,Integer&gt; e : wordCount.entrySet()) {   <span class="c1">// standard safe iteration</span>
+    System.out.println(e.getKey() + <span class="st">"="</span> + e.getValue());
+}</pre>
+
+      <div class="callout">
+        <div class="k">Why merge() and computeIfAbsent() matter so much in interviews</div>
+        Before these existed, counting frequencies took 3 lines (check contains, then either put or increment). <code class="inline">merge()</code> and <code class="inline">computeIfAbsent()</code> collapse that into one line and remove an entire class of bugs. Interviewers specifically look for whether you know these — using them is a strong signal that you write clean modern Java.
+      </div>
+
+      <div id="handson-deque"></div>
+      <h3>Deque — as a stack, and as a queue</h3>
+      <pre><span class="ty">Deque</span>&lt;Integer&gt; stack = <span class="kw">new</span> ArrayDeque&lt;&gt;();
+stack.push(1); stack.push(2);      <span class="c1">// push = addFirst</span>
+stack.pop();                       <span class="c1">// pop = removeFirst → returns 2 (LIFO — last in, first out)</span>
+
+<span class="ty">Deque</span>&lt;Integer&gt; queue = <span class="kw">new</span> ArrayDeque&lt;&gt;();
+queue.offer(1); queue.offer(2);    <span class="c1">// offer = addLast</span>
+queue.poll();                      <span class="c1">// poll = removeFirst → returns 1 (FIFO — first in, first out)</span></pre>
+
+      <h3>PriorityQueue</h3>
+      <pre><span class="ty">PriorityQueue</span>&lt;Integer&gt; minHeap = <span class="kw">new</span> PriorityQueue&lt;&gt;();                 <span class="c1">// smallest first, by default</span>
+<span class="ty">PriorityQueue</span>&lt;Integer&gt; maxHeap = <span class="kw">new</span> PriorityQueue&lt;&gt;(Comparator.reverseOrder()); <span class="c1">// largest first</span>
+minHeap.offer(5); minHeap.offer(1); minHeap.offer(9);
+minHeap.peek();   <span class="c1">// look at the smallest without removing — O(1)</span>
+minHeap.poll();   <span class="c1">// remove and return the smallest — O(log n)</span></pre>
+
+      <h3>ConcurrentHashMap</h3>
+      <pre><span class="ty">ConcurrentHashMap</span>&lt;String, <span class="ty">LongAdder</span>&gt; metrics = <span class="kw">new</span> ConcurrentHashMap&lt;&gt;();
+metrics.computeIfAbsent(<span class="st">"clicks"</span>, k -&gt; <span class="kw">new</span> LongAdder()).increment(); <span class="c1">// thread-safe, no external lock</span>
+metrics.forEach((key, adder) -&gt; System.out.println(key + <span class="st">"="</span> + adder.sum())); <span class="c1">// weakly consistent, non-blocking</span></pre>
+    </section>
+
+    <!-- ================= SECTION: STREAMS + COLLECTIONS ================= -->
+    <section id="streams">
+      <div class="eyebrow">16 — INTERVIEW-STYLE STREAM API PROBLEMS</div>
+      <h2>Solving collection problems with the Stream API</h2>
+      <div class="sub">Interviewers love asking "now do it with streams." Below are common problems, each read as: take a collection in, get a new collection or value out, in one readable pipeline.</div>
+
+      <div id="streams-group"></div>
+      <h3>1. Count word frequency (List → Map)</h3>
+      <pre><span class="ty">List</span>&lt;String&gt; words = List.of(<span class="st">"cat"</span>,<span class="st">"dog"</span>,<span class="st">"cat"</span>,<span class="st">"bird"</span>,<span class="st">"dog"</span>,<span class="st">"cat"</span>);
+<span class="ty">Map</span>&lt;String, <span class="ty">Long</span>&gt; freq = words.stream()
+    .collect(Collectors.groupingBy(w -&gt; w, Collectors.counting()));
+<span class="c1">// {bird=1, cat=3, dog=2}</span></pre>
+
+      <h3>2. Find the top-3 most frequent elements</h3>
+      <pre><span class="ty">List</span>&lt;String&gt; top3 = freq.entrySet().stream()
+    .sorted(Map.Entry.&lt;String,Long&gt;comparingByValue().reversed())
+    .limit(3)
+    .map(Map.Entry::getKey)
+    .collect(Collectors.toList());</pre>
+
+      <h3>3. Group a list of objects by a property</h3>
+      <pre><span class="c1">// group employees by department name</span>
+<span class="ty">Map</span>&lt;String, <span class="ty">List</span>&lt;Employee&gt;&gt; byDept = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDepartment));
+
+<span class="c1">// same, but just count them per department</span>
+<span class="ty">Map</span>&lt;String, <span class="ty">Long</span>&gt; countByDept = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDepartment, Collectors.counting()));</pre>
+
+      <div id="streams-flat"></div>
+      <h3>4. Partition into two groups (even / odd, pass / fail)</h3>
+      <pre><span class="ty">Map</span>&lt;Boolean, <span class="ty">List</span>&lt;Integer&gt;&gt; parts = numbers.stream()
+    .collect(Collectors.partitioningBy(n -&gt; n % 2 == 0));
+<span class="ty">List</span>&lt;Integer&gt; evens = parts.get(<span class="kw">true</span>);
+<span class="ty">List</span>&lt;Integer&gt; odds  = parts.get(<span class="kw">false</span>);</pre>
+
+      <h3>5. Flatten a list of lists into one list</h3>
+      <pre><span class="ty">List</span>&lt;<span class="ty">List</span>&lt;Integer&gt;&gt; nested = List.of(List.of(1,2), List.of(3,4), List.of(5));
+<span class="ty">List</span>&lt;Integer&gt; flat = nested.stream()
+    .flatMap(List::stream)
+    .collect(Collectors.toList());
+<span class="c1">// [1, 2, 3, 4, 5]</span></pre>
+
+      <h3>6. Remove duplicates while keeping insertion order</h3>
+      <pre><span class="ty">List</span>&lt;String&gt; unique = names.stream()
+    .distinct()                       <span class="c1">// internally uses a HashSet to track "seen" items</span>
+    .collect(Collectors.toCollection(LinkedHashSet::new));</pre>
+
+      <h3>7. Join collection elements into one readable string</h3>
+      <pre><span class="ty">String</span> csv = names.stream()
+    .collect(Collectors.joining(<span class="st">", "</span>, <span class="st">"["</span>, <span class="st">"]"</span>));
+<span class="c1">// "[Anna, Ravi, Chen]"</span></pre>
+
+      <div class="callout">
+        <div class="k">The pattern to remember</div>
+        Every stream problem is really three steps: <b>filter</b> (keep what you want), <b>map</b> (transform each item into something else), and <b>collect</b> (pour the results into a real collection — usually via <code class="inline">Collectors</code>). Once you can name which of the three a problem needs, writing the stream becomes mechanical.
+      </div>
+    </section>
+
+    <!-- ================= SECTION: PRACTICE PROBLEMS ================= -->
+    <section id="practice">
+      <div class="eyebrow">17 — BUILD MUSCLE MEMORY</div>
+      <h2>Practice problems, organized by data structure</h2>
+      <div class="sub">Reading builds understanding. Solving builds memory that survives interview pressure. These are well-known problem types you'll find on LeetCode and similar sites — solve a few from each row before moving to the next data structure.</div>
+
+      <table>
+        <tr><th>Structure</th><th>Easy</th><th>Medium</th><th>Hard</th></tr>
+        <tr>
+          <td class="mono">Array / ArrayList</td>
+          <td>Two Sum · Best Time to Buy &amp; Sell Stock</td>
+          <td>Product of Array Except Self · 3Sum</td>
+          <td>Trapping Rain Water · First Missing Positive</td>
+        </tr>
+        <tr>
+          <td class="mono">HashMap / HashSet</td>
+          <td>Contains Duplicate · Valid Anagram</td>
+          <td>Group Anagrams · Top K Frequent Elements</td>
+          <td>Longest Consecutive Sequence · LRU Cache (design)</td>
+        </tr>
+        <tr>
+          <td class="mono">LinkedList</td>
+          <td>Reverse Linked List · Merge Two Sorted Lists</td>
+          <td>Add Two Numbers · Remove Nth Node From End</td>
+          <td>Merge k Sorted Lists · Reverse Nodes in k-Group</td>
+        </tr>
+        <tr>
+          <td class="mono">Stack / Deque</td>
+          <td>Valid Parentheses · Min Stack (design)</td>
+          <td>Evaluate Reverse Polish Notation · Daily Temperatures</td>
+          <td>Largest Rectangle in Histogram · Sliding Window Maximum</td>
+        </tr>
+        <tr>
+          <td class="mono">Queue / BFS</td>
+          <td>Implement Queue using Stacks</td>
+          <td>Number of Islands · Rotting Oranges</td>
+          <td>Sliding Window Median · Shortest Path in Binary Matrix</td>
+        </tr>
+        <tr>
+          <td class="mono">PriorityQueue / Heap</td>
+          <td>Kth Largest Element in a Stream (design)</td>
+          <td>Kth Largest Element in an Array · Task Scheduler</td>
+          <td>Merge k Sorted Lists · Find Median from Data Stream</td>
+        </tr>
+        <tr>
+          <td class="mono">TreeMap / TreeSet</td>
+          <td>Contains Duplicate II</td>
+          <td>My Calendar I (design) · Contains Duplicate III</td>
+          <td>Count of Smaller Numbers After Self</td>
+        </tr>
+        <tr>
+          <td class="mono">Concurrency</td>
+          <td>Print in Order (design)</td>
+          <td>Design a Bounded Blocking Queue</td>
+          <td>Design a Rate Limiter / Concurrent LRU Cache</td>
+        </tr>
+      </table>
+      <p class="dim">Tip: for each solved problem, say out loud which data structure choice made the solution O(n) instead of O(n²) — that habit is exactly what a lead-level interviewer is listening for.</p>
+    </section>
+
+    <!-- ================= SECTION: SCENARIOS ================= -->
+    <section id="scenarios">
+      <div class="eyebrow">18 — PUTTING IT TOGETHER</div>
+      <h2>Four system-design scenarios, worked through out loud</h2>
+      <div class="sub">This is the shape a lead-level interview question actually takes: a constraint-laden scenario, not a "define HashMap" prompt. Here's how the reasoning above resolves each one.</div>
+
+      <h3>1 — In-memory cache, 500K entries, 95:5 read:write, p99 &lt; 2ms</h3>
+      <p class="dim"><code class="inline">Collections.synchronizedMap(LinkedHashMap)</code> fails immediately — every read takes the global monitor to reposition LRU pointers, so reads queue behind each other under load. A bare <code class="inline">ConcurrentHashMap</code> plus a background sweep thread fails differently: the periodic O(n) eviction scan risks GC-pause-like latency spikes. <b>Answer:</b> a W-TinyLFU cache (Caffeine) — lock-free reads against an internal ConcurrentHashMap, async batched recency tracking, memory capped by the Count-Min Sketch admission filter.</p>
+
+      <h3>2 — 1M+ events/sec between 8 producer threads and 1 consumer, GC pauses &gt;1ms unacceptable</h3>
+      <p class="dim"><code class="inline">LinkedBlockingQueue</code> is disqualified by its own design: a new <code class="inline">Node</code> object per event at 1M events/sec means tens of megabytes of short-lived garbage every second — frequent young-gen GC. <code class="inline">ArrayBlockingQueue</code> avoids allocation but funnels all 8 producers and the consumer through one shared lock. <b>Answer:</b> a pre-allocated lock-free ring buffer (LMAX Disruptor pattern) — no runtime allocation at all, sequence counters padded to avoid false sharing, producers claim slots via CAS.</p>
+
+      <h3>3 — 50,000 live counters, high write rate, periodic full-scan reporting</h3>
+      <p class="dim">A <code class="inline">ReentrantReadWriteLock</code> around a plain HashMap forces writers to queue behind the reporting thread's full scan every 5 seconds. <code class="inline">CopyOnWriteArrayList</code>/Set forces a full 50,000-entry array clone on every single write. <b>Answer:</b> <code class="inline">ConcurrentHashMap&lt;String, LongAdder&gt;</code> — writers hit only their own key's striped counter, and the reporting thread's weakly-consistent iteration reads live volatile references without blocking anyone.</p>
+
+      <h3>4 — Pre-loading 10 million entries into a map at startup</h3>
+      <p class="dim">Constructing with the default capacity forces roughly <code class="inline">log₂(10,000,000 × 4/3 ÷ 16) ≈ 20</code> successive doublings, each one a full table reallocation and node migration under load. <b>Answer:</b> pre-size the map — <code class="inline">new ConcurrentHashMap&lt;&gt;((int)(10_000_000/0.75f)+1)</code> — allocating the final backing array once, up front, eliminating every intermediate resize.</p>
+
+      <!-- Quick Knowledge Check Accordion -->
+      <div class="quiz-box">
+        <div class="quiz-header">
+          <span class="quiz-badge">💡 Quick Knowledge Check</span>
+          <button type="button" class="quiz-toggle" aria-expanded="false">Test Your Intuition <span class="quiz-toggle-icon">▼</span></button>
+        </div>
+        <div class="quiz-question">Why does modifying a collection inside an enhanced for-loop (<code>for (String s : list) { list.remove(s); }</code>) throw <code>ConcurrentModificationException</code> even in a single-threaded program?</div>
+        <div class="quiz-answer">
+          <b>Answer:</b> The enhanced for-loop compiles down to an <code>Iterator</code>. The iterator records list's <code>expectedModCount = modCount</code> when created. Calling <code>list.remove()</code> directly mutates the underlying list and increments <code>modCount++</code>, but leaves the iterator's <code>expectedModCount</code> unchanged. On the very next <code>iterator.next()</code> check, <code>modCount != expectedModCount</code> is detected, throwing fail-fast <code>ConcurrentModificationException</code>! To safely remove elements, use <code>iterator.remove()</code> or Java 8's two-pointer <code>list.removeIf(...)</code>.
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION: CHEAT SHEET ================= -->
+    <section id="cheatsheet">
+      <div class="eyebrow">19 — QUICK REFERENCE</div>
+      <h2>The one table to glance at before the interview</h2>
+
+      <table>
+        <tr><th>Need</th><th>Reach for</th><th>Why (one line)</th></tr>
+        <tr><td>Fast random access, mostly appends</td><td class="mono">ArrayList</td><td>O(1) index math, cache-friendly</td></tr>
+        <tr><td>Stack / queue / deque behavior</td><td class="mono">ArrayDeque</td><td>No node allocation, both-end O(1)</td></tr>
+        <tr><td>Unordered fast lookup, single-threaded</td><td class="mono">HashMap</td><td>O(1) average via hashing</td></tr>
+        <tr><td>Predictable iteration order</td><td class="mono">LinkedHashMap</td><td>Insertion-order doubly-linked entries</td></tr>
+        <tr><td>Sorted keys, single-threaded</td><td class="mono">TreeMap</td><td>Red-Black tree, O(log n)</td></tr>
+        <tr><td>Thread-safe map, unordered, high concurrency</td><td class="mono">ConcurrentHashMap</td><td>Per-bucket CAS/locking, no global lock</td></tr>
+        <tr><td>Thread-safe map, sorted</td><td class="mono">ConcurrentSkipListMap</td><td>Lock-free skip list, O(log n)</td></tr>
+        <tr><td>Read-heavy, rarely-mutated shared list</td><td class="mono">CopyOnWriteArrayList</td><td>Wait-free reads, cloned writes</td></tr>
+        <tr><td>Bounded producer/consumer, memory-critical</td><td class="mono">ArrayBlockingQueue</td><td>Fixed array, single lock</td></tr>
+        <tr><td>High-throughput producer/consumer</td><td class="mono">LinkedBlockingQueue</td><td>Split put/take locks</td></tr>
+        <tr><td>Direct thread hand-off, zero buffering</td><td class="mono">SynchronousQueue</td><td>Zero-capacity rendezvous</td></tr>
+        <tr><td>Priority-ordered extraction</td><td class="mono">PriorityQueue</td><td>Array-backed binary min-heap</td></tr>
+        <tr><td>Bounded, self-evicting cache</td><td class="mono">Caffeine (W-TinyLFU)</td><td>Lock-free reads + frequency admission</td></tr>
+        <tr><td>Contended shared counter</td><td class="mono">LongAdder</td><td>Striped counters avoid false sharing</td></tr>
+      </table>
+    </section>
+
+    <!-- Module Complete Card -->
+    <div class="chapter-complete-card">
+      <div class="chapter-complete-info">
+        <h4>Completed Module 07?</h4>
+        <p>Mark Recipes &amp; Decision Matrix as complete. Congratulations on completing the core curriculum!</p>
+      </div>
+      <button type="button" class="btn-mark-complete" data-module="07">
+        <span>○</span> Mark as Completed
+      </button>
+    </div>
+
+    <!-- Pagination Footer -->
+    <div class="module-pagination">
+      <a href="06-advanced-performance.html" class="page-btn">← Module 06 · Performance &amp; Caching</a>
+      <a href="overview.html" class="page-btn primary">← Back to Overview Hub</a>
+    </div>
+
+    <footer>Built for lead-level Java interview preparation · every mechanism traced to the JDK source behavior it describes</footer>
+  </main>
+</div>
+
+</body>
+</html>

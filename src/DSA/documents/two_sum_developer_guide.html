@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Two Sum (#1) — Developer Mental Model & Intuition Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card-bg: #111d35;
+      --card-bg-subtle: #162444;
+      --border: #1e3158;
+      --border-highlight: #38bdf8;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --accent-purple: #818cf8;
+      --easy: #22c55e;
+      --medium: #f59e0b;
+      --hard: #ef4444;
+      --code-bg: #090e1a;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      padding: 0;
+      margin: 0;
+    }
+
+    /* Top Nav */
+    .top-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(11, 17, 32, 0.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.875rem;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      transition: all 0.2s ease;
+    }
+
+    .back-link:hover {
+      background: rgba(56, 189, 248, 0.18);
+      transform: translateX(-2px);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #38bdf8, #2563eb);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 2px 8px rgba(56, 189, 248, 0.3);
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 4px 14px rgba(56, 189, 248, 0.45);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--card-bg);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--card-bg-subtle);
+      color: var(--text);
+      border-color: var(--border-highlight);
+    }
+
+    /* Container */
+    .container {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    /* Header & Hero */
+    header.doc-header {
+      margin-bottom: 36px;
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .doc-category-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 4px 10px;
+      border-radius: 9999px;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      margin-bottom: 14px;
+    }
+
+    h1.doc-title {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 2.35rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      line-height: 1.25;
+      margin-bottom: 16px;
+      background: linear-gradient(90deg, #ffffff 30%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .meta-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 14px;
+    }
+
+    .pill {
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pill-easy {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--easy);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .pill-complexity {
+      background: rgba(129, 140, 248, 0.12);
+      color: #c7d2fe;
+      border: 1px solid rgba(129, 140, 248, 0.25);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .pill-pattern {
+      background: rgba(56, 189, 248, 0.12);
+      color: #bae6fd;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+    }
+
+    /* Content Sections */
+    .section-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px;
+      margin-bottom: 32px;
+      box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.35);
+      transition: border-color 0.2s ease;
+    }
+
+    .section-card:hover {
+      border-color: rgba(56, 189, 248, 0.3);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .step-number {
+      background: linear-gradient(135deg, var(--accent), var(--accent-purple));
+      color: #0b1120;
+      font-weight: 800;
+      font-size: 0.85rem;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    h2 {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.015em;
+    }
+
+    p {
+      color: #cbd5e1;
+      font-size: 0.98rem;
+      margin-bottom: 16px;
+    }
+
+    p strong {
+      color: #ffffff;
+    }
+
+    /* Comparison Box */
+    .contrast-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 20px 0;
+    }
+
+    @media (max-width: 700px) {
+      .contrast-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .contrast-box {
+      background: var(--card-bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+    }
+
+    .contrast-box.human {
+      border-left: 4px solid var(--accent-purple);
+    }
+
+    .contrast-box.computer {
+      border-left: 4px solid var(--medium);
+    }
+
+    .contrast-title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .contrast-box.human .contrast-title { color: #a5b4fc; }
+    .contrast-box.computer .contrast-title { color: #fcd34d; }
+
+    .contrast-box p {
+      font-size: 0.9rem;
+      margin: 0;
+      color: #cbd5e1;
+    }
+
+    /* Formula Banner */
+    .formula-banner {
+      background: linear-gradient(90deg, rgba(56, 189, 248, 0.12), rgba(129, 140, 248, 0.12));
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin: 20px 0;
+      text-align: center;
+    }
+
+    .formula-banner code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+    }
+
+    .formula-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    /* Tables */
+    .table-wrapper {
+      overflow-x: auto;
+      margin: 20px 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    table.doc-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    table.doc-table th {
+      background: rgba(9, 14, 26, 0.8);
+      padding: 12px 16px;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    table.doc-table td {
+      padding: 12px 16px;
+      font-size: 0.9rem;
+      border-bottom: 1px solid rgba(30, 49, 88, 0.5);
+      vertical-align: middle;
+    }
+
+    table.doc-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    table.doc-table tr:hover {
+      background: rgba(56, 189, 248, 0.03);
+    }
+
+    .highlight-row {
+      background: rgba(56, 189, 248, 0.08) !important;
+      font-weight: 600;
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+    }
+
+    /* Callout & Quotes */
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: rgba(56, 189, 248, 0.07);
+      padding: 16px 20px;
+      border-radius: 0 8px 8px 0;
+      margin: 20px 0;
+    }
+
+    .callout-title {
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 4px;
+      font-size: 0.95rem;
+    }
+
+    .callout p {
+      margin: 0;
+      font-size: 0.92rem;
+      color: #e2e8f0;
+    }
+
+    /* Trace Simulator Interactive */
+    .trace-container {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 24px 0;
+    }
+
+    .trace-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: rgba(17, 29, 53, 0.7);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .trace-step-buttons {
+      display: flex;
+      gap: 6px;
+    }
+
+    .step-btn {
+      background: var(--card-bg);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .step-btn.active, .step-btn:hover {
+      background: var(--accent);
+      color: #0b1120;
+      border-color: var(--accent);
+    }
+
+    .trace-body {
+      padding: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.875rem;
+    }
+
+    .trace-panel {
+      display: none;
+    }
+
+    .trace-panel.active {
+      display: block;
+      animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .trace-state-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .state-card {
+      background: rgba(22, 36, 68, 0.7);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .state-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .state-val {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .state-val.success {
+      color: var(--easy);
+    }
+
+    .state-val.highlight {
+      color: var(--accent);
+    }
+
+    .trace-narrative {
+      background: rgba(56, 189, 248, 0.05);
+      border-left: 3px solid var(--accent);
+      padding: 12px 16px;
+      border-radius: 0 6px 6px 0;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.92rem;
+      color: #e2e8f0;
+      line-height: 1.5;
+    }
+
+    /* Code Blocks */
+    .code-container {
+      position: relative;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 20px 0;
+    }
+
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      background: rgba(17, 29, 53, 0.6);
+      border-bottom: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+    }
+
+    pre code {
+      display: block;
+      padding: 18px 20px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.88rem;
+      line-height: 1.6;
+      color: #e2e8f0;
+    }
+
+    .kw { color: #f472b6; font-weight: 600; }
+    .type { color: #38bdf8; }
+    .fn { color: #60a5fa; }
+    .num { color: #f59e0b; }
+    .comment { color: #64748b; font-style: italic; }
+    .str { color: #4ade80; }
+
+    /* Traps / Pitfalls */
+    .trap-item {
+      background: rgba(239, 68, 68, 0.05);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      border-radius: 10px;
+      padding: 18px;
+      margin-bottom: 14px;
+    }
+
+    .trap-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      color: #f87171;
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+    }
+
+    .trap-item p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #cbd5e1;
+    }
+
+    /* Checklist */
+    .checklist {
+      list-style: none;
+      margin: 16px 0;
+    }
+
+    .checklist li {
+      position: relative;
+      padding-left: 32px;
+      margin-bottom: 14px;
+      font-size: 0.95rem;
+      color: #e2e8f0;
+    }
+
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 22px;
+      height: 22px;
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      color: var(--easy);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding-top: 40px;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <nav class="top-nav">
+    <div class="nav-left">
+      <a href="../top_50_problems/top_50_leetcode_interview_questions.html" class="back-link">
+        ← Back to Top 50 Blueprint
+      </a>
+    </div>
+    <div class="nav-actions">
+      <a href="two_sum_develoepr_guide.md" class="btn btn-secondary" target="_blank" title="View source markdown file">
+        📝 Raw MD
+      </a>
+      <a href="https://pythontutor.com/visualize.html?via=ai#code=import%20java.util.HashMap%3B%0Aimport%20java.util.Map%3B%0Aimport%20java.util.Arrays%3B%0A%0Apublic%20class%20TwoSumVisualizer%20%7B%0A%20%20%20%20public%20static%20int%5B%5D%20twoSum%28int%5B%5D%20nums%2C%20int%20target%29%20%7B%0A%20%20%20%20%20%20%20%20Map%3CInteger%2C%20Integer%3E%20map%20%3D%20new%20HashMap%3C%3E%28%29%3B%0A%20%20%20%20%20%20%20%20for%20%28int%20i%20%3D%200%3B%20i%20%3C%20nums.length%3B%20i%2B%2B%29%20%7B%0A%20%20%20%20%20%20%20%20%20%20%20%20int%20complement%20%3D%20target%20-%20nums%5Bi%5D%3B%0A%20%20%20%20%20%20%20%20%20%20%20%20if%20%28map.containsKey%28complement%29%29%20%7B%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20return%20new%20int%5B%5D%20%7B%20map.get%28complement%29%2C%20i%20%7D%3B%0A%20%20%20%20%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%20%20%20%20%20%20map.put%28nums%5Bi%5D%2C%20i%29%3B%0A%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%20%20return%20new%20int%5B%5D%20%7B%7D%3B%0A%20%20%20%20%7D%0A%0A%20%20%20%20public%20static%20void%20main%28String%5B%5D%20args%29%20%7B%0A%20%20%20%20%20%20%20%20int%5B%5D%20nums%20%3D%20%7B%203%2C%202%2C%207%20%7D%3B%0A%20%20%20%20%20%20%20%20int%20target%20%3D%209%3B%0A%20%20%20%20%20%20%20%20int%5B%5D%20result%20%3D%20twoSum%28nums%2C%20target%29%3B%0A%20%20%20%20%20%20%20%20System.out.println%28%22Result%20indices%3A%20%22%20%2B%20Arrays.toString%28result%29%29%3B%0A%20%20%20%20%7D%0A%7D&mode=display&py=java" class="btn btn-secondary" target="_blank" title="Step through live in Python Tutor">
+        ⚡ Python Tutor
+      </a>
+      <a href="https://leetcode.com/problems/two-sum/" class="btn btn-primary" target="_blank">
+        Solve on LeetCode #1 ↗
+      </a>
+    </div>
+  </nav>
+
+  <!-- Content Container -->
+  <div class="container">
+    
+    <!-- Document Header -->
+    <header class="doc-header">
+      <div class="doc-category-badge">
+        <span>Arrays & Two Pointers</span>
+      </div>
+      <h1 class="doc-title">Two Sum (#1) — Developer Mental Model & Intuition Guide</h1>
+      <p style="font-size: 1.1rem; color: var(--text-muted); margin-bottom: 0;">
+        How an experienced engineer transforms human parallel intuition into an optimal <span class="mono" style="color: var(--accent);">O(n)</span> single-pass algorithm.
+      </p>
+
+      <div class="meta-pills">
+        <span class="pill pill-easy">● Easy</span>
+        <span class="pill pill-complexity">Time: O(n)</span>
+        <span class="pill pill-complexity">Space: O(n)</span>
+        <span class="pill pill-pattern">Pattern: Hash Map Complement Lookup</span>
+      </div>
+    </header>
+
+    <!-- Core Mental Model Hook -->
+    <section class="section-card">
+      <div class="section-header">
+        <div class="step-number">★</div>
+        <h2>Human Intuition vs. Computer Hardware</h2>
+      </div>
+
+      <p>
+        When you look at an array like <code class="mono">[3, 2, 7]</code> with target <code class="mono">9</code>, your eyes take in all elements simultaneously in parallel. Your brain immediately sees <code class="mono">2 + 7 = 9</code>.
+      </p>
+      <p>
+        A computer, however, is <strong>fundamentally nearsighted</strong>. It can only look through a peephole at one single memory address at any instant in time.
+      </p>
+
+      <div class="contrast-grid">
+        <div class="contrast-box human">
+          <div class="contrast-title">🧠 Human Brain</div>
+          <p>
+            Massively parallel visual recognition. Evaluates combinations effortlessly without conscious arithmetic loops.
+          </p>
+        </div>
+        <div class="contrast-box computer">
+          <div class="contrast-title">💻 Von Neumann Architecture</div>
+          <p>
+            Strictly sequential. Must dereference <code class="mono">nums[i]</code>, increment an index pointer, and load into registers one by one.
+          </p>
+        </div>
+      </div>
+
+      <p>
+        To bridge this gap, experienced software engineers do not write faster loops—they <strong>change the question being asked</strong>.
+      </p>
+    </section>
+
+    <!-- Step 1 -->
+    <section class="section-card">
+      <div class="section-header">
+        <div class="step-number">1</div>
+        <h2>Realize What Your "Inner Eye" Is Actually Doing</h2>
+      </div>
+
+      <p>
+        When your eye lands on <code class="mono">2</code> and then looks for <code class="mono">7</code>, what calculation happened sub-consciously?
+      </p>
+      <ol style="margin-left: 20px; color: #cbd5e1; margin-bottom: 16px;">
+        <li style="margin-bottom: 6px;">You observed the current number: <code class="mono">2</code>.</li>
+        <li style="margin-bottom: 6px;">You computed what was missing to reach the target: <code class="mono">9 - 2 = 7</code>.</li>
+        <li style="margin-bottom: 6px;">You did <strong>not</strong> ask: <em>"What two arbitrary numbers add up to 9?"</em></li>
+        <li>You asked: <strong><em>"Where is the 7?"</em></strong></li>
+      </ol>
+
+      <div class="formula-banner">
+        <code>complement = target - current_number</code>
+        <div class="formula-desc">The Golden Shift: Convert an Addition Problem into a Lookup Problem</div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-title">The Fundamental Interview Question</div>
+        <p>
+          "Have I seen this complement before in my previous iterations, or will I record myself now so someone in the future can find me?"
+        </p>
+      </div>
+    </section>
+
+    <!-- Step 2 -->
+    <section class="section-card">
+      <div class="section-header">
+        <div class="step-number">2</div>
+        <h2>Identify the Bottleneck in the Brute Force</h2>
+      </div>
+
+      <p>
+        Consider the naive double-loop approach:
+      </p>
+
+      <div class="code-container">
+        <div class="code-header">
+          <span>Java (Brute Force — O(n²))</span>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('for (int i = 0; i < nums.length; i++) {\n    for (int j = i + 1; j < nums.length; j++) {\n        if (nums[i] + nums[j] == target) return new int[]{i, j};\n    }\n}')">Copy</button>
+        </div>
+        <pre><code><span class="kw">for</span> (<span class="type">int</span> i = <span class="num">0</span>; i &lt; nums.length; i++) {
+    <span class="kw">for</span> (<span class="type">int</span> j = i + <span class="num">1</span>; j &lt; nums.length; j++) {
+        <span class="kw">if</span> (nums[i] + nums[j] == target) {
+            <span class="kw">return new int</span>[] { i, j };
+        }
+    }
+}</code></pre>
+      </div>
+
+      <p>
+        Ask yourself: <strong>What is the inner loop actually doing?</strong>
+      </p>
+      <ul style="margin-left: 20px; color: #cbd5e1; margin-bottom: 16px;">
+        <li style="margin-bottom: 6px;">It is simply scanning sequentially through the rest of the array to answer: <em>"Is the complement here?"</em></li>
+        <li style="margin-bottom: 6px;">Searching an unsorted array takes <code class="mono">O(n)</code> time.</li>
+        <li style="margin-bottom: 6px;">Running that <code class="mono">O(n)</code> scan across all <code class="mono">n</code> numbers yields <code class="mono">O(n × n) = O(n²)</code> total operations.</li>
+      </ul>
+
+      <div class="callout" style="border-left-color: var(--medium);">
+        <div class="callout-title" style="color: var(--medium);">Algorithmic Heuristic</div>
+        <p>
+          Whenever you see a nested loop whose sole job is to <strong>search for a match</strong>, ask: <em>"Can I trade space (memory) to replace this slow linear scan with an instant lookup data structure?"</em>
+        </p>
+      </div>
+    </section>
+
+    <!-- Step 3 -->
+    <section class="section-card">
+      <div class="section-header">
+        <div class="step-number">3</div>
+        <h2>Why Choose a HashMap? (The Data Structure Matrix)</h2>
+      </div>
+
+      <p>
+        Let's evaluate which data structure provides the exact lookup capabilities needed:
+      </p>
+
+      <div class="table-wrapper">
+        <table class="doc-table">
+          <thead>
+            <tr>
+              <th>Data Structure</th>
+              <th>Search Time</th>
+              <th>Suitability for Two Sum</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Array / List</strong></td>
+              <td class="mono">O(n)</td>
+              <td>Unassisted linear search; causes the <code class="mono">O(n²)</code> bottleneck.</td>
+            </tr>
+            <tr>
+              <td><strong>Sorted Array + Binary Search</strong></td>
+              <td class="mono">O(log n)</td>
+              <td>Fast search, but sorting takes <code class="mono">O(n log n)</code> and scrambling destroys original indices.</td>
+            </tr>
+            <tr>
+              <td><strong>HashSet</strong></td>
+              <td class="mono">O(1)</td>
+              <td>Answers: <em>"Have I seen X?"</em> (boolean only). Fails because the problem demands returning <strong>indices</strong>.</td>
+            </tr>
+            <tr class="highlight-row">
+              <td><strong>HashMap &lt;Value, Index&gt;</strong></td>
+              <td class="mono" style="color: var(--easy);">O(1) amortized</td>
+              <td style="color: var(--text);">Answers: <em>"Have I seen X, and <strong>where</strong> was it located?"</em> Exactly what is required!</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Because the problem contract requires returning <code class="mono">int[] { index1, index2 }</code>, we need to associate each value with its memory index. A key-value store (<code class="mono">Map&lt;Integer, Integer&gt;</code> where <strong>Key = Element Value</strong>, <strong>Value = Array Index</strong>) is mathematically optimal.
+      </p>
+    </section>
+
+    <!-- Step 4 -->
+    <section class="section-card">
+      <div class="section-header">
+        <div class="step-number">4</div>
+        <h2>Interactive Step-by-Step Execution Trace</h2>
+      </div>
+
+      <p>
+        Trace the single-pass traversal for <code class="mono">nums = [3, 2, 7]</code> with <code class="mono">target = 9</code>. Click through each step to watch the internal memory map evolve:
+      </p>
+
+      <div class="trace-container">
+        <div class="trace-toolbar">
+          <span style="font-weight: 600; color: var(--text-muted); font-size: 0.85rem;">Interactive Trace:</span>
+          <div class="trace-step-buttons">
+            <button class="step-btn active" onclick="showTraceStep(0)">Init</button>
+            <button class="step-btn" onclick="showTraceStep(1)">i = 0 (num: 3)</button>
+            <button class="step-btn" onclick="showTraceStep(2)">i = 1 (num: 2)</button>
+            <button class="step-btn" onclick="showTraceStep(3)">i = 2 (num: 7) 🎯</button>
+          </div>
+        </div>
+
+        <div class="trace-body">
+          <!-- Step 0 -->
+          <div class="trace-panel active" id="trace-0">
+            <div class="trace-state-grid">
+              <div class="state-card">
+                <div class="state-label">Index (i)</div>
+                <div class="state-val">—</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">Current Element</div>
+                <div class="state-val">—</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">Complement Needed</div>
+                <div class="state-val">—</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">HashMap State</div>
+                <div class="state-val">{ }</div>
+              </div>
+            </div>
+            <div class="trace-narrative">
+              <strong>Initialization:</strong> Allocate an empty hash table <code class="mono">map = new HashMap&lt;&gt;()</code>. No elements processed yet. We begin iterating at <code class="mono">i = 0</code>.
+            </div>
+          </div>
+
+          <!-- Step 1 -->
+          <div class="trace-panel" id="trace-1">
+            <div class="trace-state-grid">
+              <div class="state-card">
+                <div class="state-label">Index (i)</div>
+                <div class="state-val highlight">0</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">Current Element</div>
+                <div class="state-val highlight">nums[0] = 3</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">Complement Needed</div>
+                <div class="state-val">9 - 3 = 6</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">HashMap State</div>
+                <div class="state-val highlight">{ 3: 0 }</div>
+              </div>
+            </div>
+            <div class="trace-narrative">
+              <strong>Check:</strong> Does <code class="mono">map</code> contain complement <code class="mono">6</code>? <strong style="color:#ef4444;">No</strong> (map is empty).<br>
+              <strong>Action:</strong> We haven't found our match yet, but someone later might need our <code class="mono">3</code> at index <code class="mono">0</code>. Insert <code class="mono">map.put(3, 0)</code>.
+            </div>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="trace-panel" id="trace-2">
+            <div class="trace-state-grid">
+              <div class="state-card">
+                <div class="state-label">Index (i)</div>
+                <div class="state-val highlight">1</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">Current Element</div>
+                <div class="state-val highlight">nums[1] = 2</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">Complement Needed</div>
+                <div class="state-val">9 - 2 = 7</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">HashMap State</div>
+                <div class="state-val highlight">{ 3: 0, 2: 1 }</div>
+              </div>
+            </div>
+            <div class="trace-narrative">
+              <strong>Check:</strong> Does <code class="mono">map</code> contain complement <code class="mono">7</code>? <strong style="color:#ef4444;">No</strong> (map only holds key 3).<br>
+              <strong>Action:</strong> Register our <code class="mono">2</code> at index <code class="mono">1</code> for future numbers: <code class="mono">map.put(2, 1)</code>.
+            </div>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="trace-panel" id="trace-3">
+            <div class="trace-state-grid">
+              <div class="state-card">
+                <div class="state-label">Index (i)</div>
+                <div class="state-val success">2</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">Current Element</div>
+                <div class="state-val success">nums[2] = 7</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">Complement Needed</div>
+                <div class="state-val success">9 - 7 = 2</div>
+              </div>
+              <div class="state-card">
+                <div class="state-label">Result</div>
+                <div class="state-val success">[1, 2] 🎉</div>
+              </div>
+            </div>
+            <div class="trace-narrative" style="border-left-color: var(--easy); background: rgba(34, 197, 94, 0.08);">
+              <strong>Check:</strong> Does <code class="mono">map</code> contain complement <code class="mono">2</code>? <strong style="color:var(--easy);">YES!</strong> Key <code class="mono">2</code> exists at index <code class="mono">1</code>.<br>
+              <strong>Resolution:</strong> Pair found! Complement index = <code class="mono">map.get(2) = 1</code>, current index = <code class="mono">2</code>. Return <code class="mono">new int[]{1, 2}</code> immediately.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 5 -->
+    <section class="section-card">
+      <div class="section-header">
+        <div class="step-number">5</div>
+        <h2>Clean Production Java Implementation</h2>
+      </div>
+
+      <div class="code-container">
+        <div class="code-header">
+          <span>TwoSum.java (Optimal O(n) Single-Pass)</span>
+          <button class="copy-btn" id="copy-sol-btn" onclick="copySolution()">Copy Solution</button>
+        </div>
+        <pre><code id="java-code-block"><span class="kw">import</span> java.util.HashMap;
+<span class="kw">import</span> java.util.Map;
+
+<span class="kw">public class</span> <span class="type">Solution</span> {
+    <span class="kw">public int</span>[] <span class="fn">twoSum</span>(<span class="type">int</span>[] nums, <span class="type">int</span> target) {
+        <span class="comment">// Map: Number Value -> Index in nums</span>
+        <span class="type">Map</span>&lt;<span class="type">Integer</span>, <span class="type">Integer</span>&gt; seen = <span class="kw">new</span> <span class="type">HashMap</span>&lt;&gt;();
+        
+        <span class="kw">for</span> (<span class="type">int</span> i = <span class="num">0</span>; i &lt; nums.length; i++) {
+            <span class="type">int</span> complement = target - nums[i];
+            
+            <span class="comment">// Check if the complement was already encountered</span>
+            <span class="kw">if</span> (seen.containsKey(complement)) {
+                <span class="kw">return new int</span>[] { seen.get(complement), i };
+            }
+            
+            <span class="comment">// Record current number and its index for subsequent lookups</span>
+            seen.put(nums[i], i);
+        }
+        
+        <span class="comment">// Guarantee from problem constraints: exactly one solution exists</span>
+        <span class="kw">throw new</span> <span class="type">IllegalArgumentException</span>(<span class="str">"No two sum solution"</span>);
+    }
+}</code></pre>
+      </div>
+
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px;">
+        <a href="https://pythontutor.com/visualize.html?via=ai#code=import%20java.util.HashMap%3B%0Aimport%20java.util.Map%3B%0Aimport%20java.util.Arrays%3B%0A%0Apublic%20class%20TwoSumVisualizer%20%7B%0A%20%20%20%20public%20static%20int%5B%5D%20twoSum%28int%5B%5D%20nums%2C%20int%20target%29%20%7B%0A%20%20%20%20%20%20%20%20Map%3CInteger%2C%20Integer%3E%20map%20%3D%20new%20HashMap%3C%3E%28%29%3B%0A%20%20%20%20%20%20%20%20for%20%28int%20i%20%3D%200%3B%20i%20%3C%20nums.length%3B%20i%2B%2B%29%20%7B%0A%20%20%20%20%20%20%20%20%20%20%20%20int%20complement%20%3D%20target%20-%20nums%5Bi%5D%3B%0A%20%20%20%20%20%20%20%20%20%20%20%20if%20%28map.containsKey%28complement%29%29%20%7B%0A%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20%20return%20new%20int%5B%5D%20%7B%20map.get%28complement%29%2C%20i%20%7D%3B%0A%20%20%20%20%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%20%20%20%20%20%20map.put%28nums%5Bi%5D%2C%20i%29%3B%0A%20%20%20%20%20%20%20%20%7D%0A%20%20%20%20%20%20%20%20return%20new%20int%5B%5D%20%7B%7D%3B%0A%20%20%20%20%7D%0A%0A%20%20%20%20public%20static%20void%20main%28String%5B%5D%20args%29%20%7B%0A%20%20%20%20%20%20%20%20int%5B%5D%20nums%20%3D%20%7B%203%2C%202%2C%207%20%7D%3B%0A%20%20%20%20%20%20%20%20int%20target%20%3D%209%3B%0A%20%20%20%20%20%20%20%20int%5B%5D%20result%20%3D%20twoSum%28nums%2C%20target%29%3B%0A%20%20%20%20%20%20%20%20System.out.println%28%22Result%20indices%3A%20%22%20%2B%20Arrays.toString%28result%29%29%3B%0A%20%20%20%20%7D%0A%7D&mode=display&py=java" class="btn btn-secondary" target="_blank" title="Step through live in Python Tutor">
+          ⚡ Step Through Live in Python Tutor →
+        </a>
+      </div>
+    </section>
+
+    <!-- Step 6 -->
+    <section class="section-card">
+      <div class="section-header">
+        <div class="step-number">6</div>
+        <h2>The Developer's Mental Checklist for Future Problems</h2>
+      </div>
+
+      <p>
+        Whenever you encounter array or relationship pairing problems, run through this 4-step sequence:
+      </p>
+
+      <ul class="checklist">
+        <li>
+          <strong>Write the algebraic identity:</strong> Convert <code class="mono">a + b = target</code> into <code class="mono">b = target - a</code>.
+        </li>
+        <li>
+          <strong>Classify the search cost:</strong> Notice that while visiting <code class="mono">n</code> items is unavoidable (<code class="mono">O(n)</code>), searching through the remaining items blindly adds another <code class="mono">O(n)</code>.
+        </li>
+        <li>
+          <strong>Trade memory for execution speed:</strong> Ask: <em>"Can I cache elements as I visit them so future elements find their pair in O(1)?"</em>
+        </li>
+        <li>
+          <strong>Choose your data structure by return requirements:</strong>
+          <ul style="margin-left: 20px; margin-top: 6px; list-style: circle; color: #94a3b8;">
+            <li>Need existence only? → <code class="mono">HashSet</code></li>
+            <li>Need existence + metadata (like index or count)? → <code class="mono">HashMap</code></li>
+            <li>Need sorted order or range queries? → <code class="mono">TreeSet / TreeMap / Binary Search</code></li>
+          </ul>
+        </li>
+      </ul>
+    </section>
+
+    <!-- Step 7 -->
+    <section class="section-card">
+      <div class="section-header">
+        <div class="step-number">7</div>
+        <h2>Interview Traps & Edge Cases</h2>
+      </div>
+
+      <div class="trap-item">
+        <div class="trap-header">⚠️ Trap 1: Using the Same Element Twice</div>
+        <p>
+          If <code class="mono">target = 6</code> and the array contains a single <code class="mono">3</code> at index 0, returning <code class="mono">[0, 0]</code> is invalid. Our single-pass approach checks <code class="mono">seen.containsKey(complement)</code> <strong>before</strong> calling <code class="mono">seen.put(nums[i], i)</code>. This guarantees an element cannot pair with itself.
+        </p>
+      </div>
+
+      <div class="trap-item">
+        <div class="trap-header">⚠️ Trap 2: Handling Duplicate Numbers</div>
+        <p>
+          What if <code class="mono">nums = [3, 3]</code> and <code class="mono">target = 6</code>? When <code class="mono">i = 0</code>, <code class="mono">3</code> is inserted into the map. When <code class="mono">i = 1</code>, the complement <code class="mono">6 - 3 = 3</code> is immediately discovered in the map, returning <code class="mono">[0, 1]</code> before any key overwriting occurs.
+        </p>
+      </div>
+
+      <div class="trap-item">
+        <div class="trap-header">⚠️ Trap 3: Sorting vs. HashMap</div>
+        <p>
+          Interviewers often ask: <em>"Can we do this with Two Pointers in O(1) space?"</em> If you sort the array, you can use two pointers, but you lose the original indices and incur <code class="mono">O(n log n)</code> sorting time. Storing pairs <code class="mono">(value, original_index)</code> still requires <code class="mono">O(n)</code> auxiliary space, so HashMap is strictly superior here.
+        </p>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p>Part of the Top 50 Curated Coding Interview Questions Blueprint.</p>
+      <p><a href="../top_50_problems/top_50_leetcode_interview_questions.html">← Return to Main Table</a></p>
+    </footer>
+
+  </div>
+
+  <script>
+    function showTraceStep(step) {
+      document.querySelectorAll('.step-btn').forEach((btn, idx) => {
+        btn.classList.toggle('active', idx === step);
+      });
+      document.querySelectorAll('.trace-panel').forEach((panel, idx) => {
+        panel.classList.toggle('active', idx === step);
+      });
+    }
+
+    function copySolution() {
+      const code = `import java.util.HashMap;\nimport java.util.Map;\n\npublic class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        Map<Integer, Integer> seen = new HashMap<>();\n        for (int i = 0; i < nums.length; i++) {\n            int complement = target - nums[i];\n            if (seen.containsKey(complement)) {\n                return new int[] { seen.get(complement), i };\n            }\n            seen.put(nums[i], i);\n        }\n        throw new IllegalArgumentException("No two sum solution");\n    }\n}`;
+      navigator.clipboard.writeText(code).then(() => {
+        const btn = document.getElementById('copy-sol-btn');
+        btn.textContent = 'Copied! ✓';
+        btn.style.color = '#22c55e';
+        setTimeout(() => {
+          btn.textContent = 'Copy Solution';
+          btn.style.color = '';
+        }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

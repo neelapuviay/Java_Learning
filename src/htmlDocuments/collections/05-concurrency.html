@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 05: Thread-Safe & Concurrent Collections — Java Collections</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="reader.js"></script>
+</head>
+<body>
+
+<div class="module-header-bar">
+  <div class="module-header-breadcrumb">
+    <span class="badge badge-coral">MODULE 05</span> <span>Thread-Safe &amp; Concurrent Collections</span>
+  </div>
+  <a href="index.html" target="_top" class="page-btn" style="padding:4px 10px;font-size:11px;">⊞ Full Portal View</a>
+</div>
+
+<div class="shell single-col">
+  <main>
+    <div class="hero">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+        <span class="badge badge-coral">MODULE 05</span>
+        <span class="badge badge-green">⏱️ 20 min read</span>
+        <span class="badge badge-amber">Concurrency</span>
+      </div>
+      <h1>Thread-Safe &amp; <em>Concurrent Collections</em>.</h1>
+      <p class="lede">Everything here — ConcurrentHashMap, CopyOnWriteArrayList, blocking queues, lock-free skip lists — exists to solve one question: how can multiple CPU cores manipulate shared data without corrupting memory or stalling execution?</p>
+      <div class="promise">
+        <div><b>CAS Mechanics</b>atomic compare-and-swap vs OS thread sleep</div>
+        <div><b>Cooperative Resizing</b>how threads help migrate buckets via ForwardingNode</div>
+        <div><b>Lock-Free Skip Lists</b>probabilistic coin-flip layers and tombstone deletion</div>
+      </div>
+    </div>
+
+    <!-- ================= SECTION: CONCURRENCY BASICS ================= -->
+    <section id="concurrency">
+      <div class="eyebrow">08 — BEFORE ANY "CONCURRENT" CLASS MAKES SENSE</div>
+      <h2>What actually goes wrong when two threads share data</h2>
+      <div class="sub">Everything from here on — ConcurrentHashMap, CopyOnWriteArrayList, blocking queues — exists to solve one problem. Let's see the problem first.</div>
+
+      <p>A <b>thread</b> is an independent sequence of instructions your program runs. Modern CPUs have multiple cores, so multiple threads can genuinely execute <i>at the same instant</i> — not just take turns quickly. That's the whole point of concurrency: real parallel speed. It's also where the trouble starts.</p>
+
+      <div class="analogy">
+        <div class="icon">🏧</div>
+        <div>
+          <div class="k">Analogy: two people, one bank balance, no communication</div>
+          A shared bank balance reads $100. You and your partner both check the balance at the <i>same instant</i>, both see $100, and both decide to withdraw $80. Each of you independently computes "100 − 80 = 20" and writes 20 back. The bank ends up at $20 — even though $160 was withdrawn from an account that only had $100. Nobody did anything individually wrong; the problem is that <b>read, decide, and write</b> weren't a single uninterruptible step. This is exactly what an unsynchronized <code class="inline">counter++</code> does across two threads.
+        </div>
+      </div>
+
+      <p>This is called a <b>race condition</b>: the final result depends on the unpredictable timing of two threads, rather than on the logic of the program. Java gives you two fundamentally different tools to prevent it:</p>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>🔒 Locking — make threads take turns</h4>
+          <p class="dim" style="margin:0;">A <code class="inline">synchronized</code> block or <code class="inline">ReentrantLock</code> lets only one thread execute the protected code at a time. Every other thread trying to enter is <i>parked</i> — put to sleep by the OS — until the lock is free. Simple to reason about, but threads waiting on a lock do zero useful work, and heavy contention means most threads spend their time asleep.</p>
+        </div>
+        <div class="card">
+          <h4>⚡ CAS — bet, then check</h4>
+          <p class="dim" style="margin:0;"><b>Compare-And-Swap</b> is a single CPU instruction: "if this memory location still holds the value I expect, replace it with my new value — atomically, as one indivisible step. Tell me if it worked." No thread ever sleeps. If the swap fails because someone else got there first, the thread just re-reads the current value and tries again. This is called <b>lock-free</b> programming.</p>
+        </div>
+      </div>
+
+      <div id="cas-sim"></div>
+      <div class="viz">
+        <div class="viz-controls">
+          <button class="btn" onclick="casDemo.runUnsafe()">simulate: unsynchronized counter++ ×2 threads</button>
+          <button class="btn" onclick="casDemo.runCAS()">simulate: CAS-protected increment</button>
+          <button class="btn alt" onclick="casDemo.reset()">reset</button>
+        </div>
+        <div id="cas-out" style="font-family:var(--mono);font-size:13px;white-space:pre-line;line-height:1.8;"></div>
+      </div>
+
+      <p>CAS is what lets a data structure be thread-safe <i>without</i> ever putting a thread to sleep for the common case — which is exactly the trick <code class="inline">ConcurrentHashMap</code>, <code class="inline">LongAdder</code>, and <code class="inline">ConcurrentSkipListMap</code> all lean on.</p>
+    </section>
+
+    <!-- ================= SECTION: CONCURRENTHASHMAP ================= -->
+    <section id="chm">
+      <div class="eyebrow">09 — THE STANDARD THREAD-SAFE MAP</div>
+      <h2>ConcurrentHashMap: CAS where it can, a tiny lock where it must</h2>
+      <div class="sub">The most important upgrade in ConcurrentHashMap's history: Java 7 locked in coarse 16-way stripes. Java 8 rebuilt it to lock almost nothing.</div>
+
+      <h3>The old way (Java 7): segment striping</h3>
+      <p>Java 7's ConcurrentHashMap pre-split the table into 16 independent <code class="inline">Segment</code>s, each guarded by its own lock. Up to 16 threads could write simultaneously — one per segment — but any operation needing a global view (like computing overall size, or resizing) had to lock across <i>all</i> segments at once.</p>
+
+      <div id="chm-cas"></div>
+      <h3>The current design (Java 8+): per-bucket, not per-segment</h3>
+      <p>Java 8 threw out segments entirely. The table now looks just like HashMap's — a flat array of buckets — but every operation on a bucket is protected individually and as cheaply as possible:</p>
+
+      <div class="viz">
+        <svg viewBox="0 0 820 260" width="100%" style="max-width:820px;">
+          <style>.ct{font-family:'IBM Plex Mono',monospace;font-size:12.5px;fill:#E7EDF7;} .cb{fill:#101B30;stroke:#3E8E88;stroke-width:1.2;}</style>
+          <rect x="20" y="20" width="360" height="66" rx="6" class="cb" style="stroke:#7FD99B;"/>
+          <text x="200" y="44" text-anchor="middle" class="ct" style="fill:#7FD99B;">table[i] == null</text>
+          <text x="200" y="66" text-anchor="middle" class="ct" style="font-size:11px;color:#93A3BE;">CAS insert directly — no lock at all</text>
+
+          <rect x="440" y="20" width="360" height="66" rx="6" class="cb" style="stroke:#F5B563;"/>
+          <text x="620" y="44" text-anchor="middle" class="ct" style="fill:#F5B563;">table[i] != null</text>
+          <text x="620" y="66" text-anchor="middle" class="ct" style="font-size:11px;">synchronized(bucket-head) — lock ONE bucket only</text>
+
+          <rect x="60" y="120" width="700" height="120" rx="6" class="cb"/>
+          <text x="80" y="146" class="ct" style="fill:#93A3BE;">Inside that one-bucket lock, three sub-cases:</text>
+          <text x="80" y="176" class="ct">1. Plain chain → append/traverse the linked list as normal</text>
+          <text x="80" y="200" class="ct">2. Treeified bucket (TreeBin) → delegate to its own internal reader-writer lock, letting concurrent reads pass even while one writer rotates the tree</text>
+          <text x="80" y="224" class="ct">3. ForwardingNode found (bucket mid-migration) → thread <span style="color:#6EE7D8;">helps finish the resize</span> instead of waiting</text>
+        </svg>
+      </div>
+
+      <p>The insight: locking one bucket's head node blocks nothing else in the table. Two threads writing to two different buckets run fully in parallel — even though both technically "hold a lock" at that moment.</p>
+
+      <div id="chm-resize"></div>
+      <h3>Cooperative resizing: nobody blocks, everybody helps</h3>
+      <p>A single-threaded HashMap resize just stops and copies everything. A concurrent map can't get away with "stop the world" — other threads must be able to keep working. ConcurrentHashMap solves this with two shared counters:</p>
+      <ul class="max">
+        <li><code class="inline">sizeCtl</code> — when negative, encodes that a resize is in progress, packing a generation stamp and a count of active migrating threads into one int</li>
+        <li><code class="inline">transferIndex</code> — the next unclaimed stretch of buckets still needing migration</li>
+      </ul>
+      <p>Any thread that stumbles onto a <code class="inline">ForwardingNode</code> (a marker left on an already-migrated bucket) doesn't wait around — it calls <code class="inline">helpTransfer()</code> and claims its own stride of buckets to migrate via a CAS decrement on <code class="inline">transferIndex</code>. Whichever threads happen to be around during a resize simply pitch in; the resize finishes faster the busier the map is.</p>
+
+      <div id="chm-null"></div>
+      <div class="callout">
+        <div class="k">Why null is banned</div>
+        <code class="inline">map.get(key)</code> returning <code class="inline">null</code> is ambiguous in a single thread: is the key mapped to null, or just absent? You'd normally resolve this with a follow-up <code class="inline">containsKey(key)</code> call. In a concurrent map, another thread can insert or remove that exact key <i>between</i> your two calls — so the two-step check is no longer atomic and can lie to you. Doug Lea's fix was simpler than any locking scheme: ConcurrentHashMap just refuses to store <code class="inline">null</code> at all, and throws <code class="inline">NullPointerException</code> immediately if you try.
+      </div>
+
+      <h3>Counting size without a global lock: LongAdder</h3>
+      <p>If every thread updated one shared counter with CAS, all of them would repeatedly collide on the exact same memory address — the CPU cache line backing that counter gets invalidated on every single update (more on this in the mechanical sympathy section). <code class="inline">LongAdder</code> instead keeps a base counter plus an <i>array</i> of independent striped counters. Under contention, each thread hashes to its own stripe and updates that instead — collisions become rare — and <code class="inline">sum()</code> just adds every stripe together when a total is actually needed.</p>
+
+      <!-- Quick Knowledge Check Accordion -->
+      <div class="quiz-box">
+        <div class="quiz-header">
+          <span class="quiz-badge">💡 Quick Knowledge Check</span>
+          <button type="button" class="quiz-toggle" aria-expanded="false">Test Your Intuition <span class="quiz-toggle-icon">▼</span></button>
+        </div>
+        <div class="quiz-question">Why does <code>ConcurrentHashMap.get(key)</code> require ZERO locks or synchronization blocks, even while another thread is concurrently inserting or modifying entries?</div>
+        <div class="quiz-answer">
+          <b>Answer:</b> In Java's <code>ConcurrentHashMap</code>, <code>Node.val</code> and <code>Node.next</code> are declared <code>volatile</code>. Volatile reads guarantee happens-before memory visibility directly from CPU cache coherency (MESI protocol) without stale register caching. If a read races with rehashing, it transparently follows immutable <code>ForwardingNode</code> references to the new table, so reads never block or contend for locks!
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION: COPY-ON-WRITE ================= -->
+    <section id="cow">
+      <div class="eyebrow">10 — READ-HEAVY, WRITE-RARE</div>
+      <h2>CopyOnWriteArrayList: reads that never even see a lock</h2>
+      <div class="sub">An entirely different bet: what if writes were expensive, so reads could be completely free?</div>
+
+      <p><code class="inline">CopyOnWriteArrayList</code> stores its data in a <code class="inline">volatile Object[] array</code>. Reads just read that reference directly — no lock, no CAS retry loop, nothing. They're as fast as reading a plain array, and they can never throw <code class="inline">ConcurrentModificationException</code>, because they never even look at whether the array has changed.</p>
+
+      <p>The cost is paid entirely by writers. Every single mutation — even adding one element — does this under a <code class="inline">ReentrantLock</code>:</p>
+      <pre><span class="kw">public boolean</span> add(E e) {
+    lock.lock();
+    <span class="kw">try</span> {
+        Object[] newElements = Arrays.copyOf(getArray(), len + 1);
+        newElements[len] = e;
+        setArray(newElements);  <span class="c1">// swap the volatile reference — readers now see it</span>
+    } <span class="kw">finally</span> { lock.unlock(); }
+}</pre>
+
+      <div class="analogy">
+        <div class="icon">📋</div>
+        <div>
+          <div class="k">Analogy: a clipboard that gets fully re-photocopied on every edit</div>
+          Anyone can glance at the clipboard on the wall at any moment without asking permission — they just see whatever page is currently pinned up. But to make an edit, you have to photocopy the entire page, mark it up, and pin the new copy over the old one. If the clipboard has 50,000 lines, every single edit means recopying all 50,000 lines. Fine if edits are rare. Ruinous if edits happen constantly.
+        </div>
+      </div>
+
+      <p>An iterator created over a CopyOnWriteArrayList captures the array reference at that instant — a snapshot. It will never reflect later writes, and it doesn't support <code class="inline">remove()</code>/<code class="inline">set()</code>/<code class="inline">add()</code> through the iterator at all. This makes it a strong fit for things like listener/observer lists — read constantly, modified almost never — and a poor fit for anything write-heavy.</p>
+
+      <div class="callout" style="margin-top:16px;border-color:rgba(110,231,216,0.3);">
+        <div class="k">List Architecture &amp; Operations Deep Dive</div>
+        For the complete memory layout, 4-way comparison against <code class="inline">Vector</code> and <code class="inline">Collections.synchronizedList()</code>, and an interactive snapshot simulator, see <a href="02-lists.html#cow-list" target="content-frame" style="color:var(--cyan);font-weight:600;">Module 02 · Section 09: CopyOnWriteArrayList →</a>.
+      </div>
+    </section>
+
+    <!-- ================= SECTION: BLOCKING QUEUES ================= -->
+    <section id="bqueues">
+      <div class="eyebrow">11 — PRODUCER / CONSUMER PIPELINES</div>
+      <h2>Blocking queues: when threads should actually wait</h2>
+      <div class="sub">Sometimes waiting is correct — a consumer thread with nothing to do genuinely should sleep rather than spin. These queues make that safe and efficient.</div>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>ArrayBlockingQueue</h4>
+          <p class="dim">Fixed-size array, bounded capacity fixed at creation. One single <code class="inline">ReentrantLock</code> guards both <code class="inline">put()</code> and <code class="inline">take()</code>, with two condition variables (<code class="inline">notEmpty</code>, <code class="inline">notFull</code>) used to park and wake threads efficiently. Because producers and consumers share the one lock, they can contend with each other under bursty load — but memory use is minimal and fully predictable.</p>
+        </div>
+        <div class="card">
+          <h4>LinkedBlockingQueue</h4>
+          <p class="dim">Unbounded by default, built from linked nodes. Uses <b>two separate locks</b> — <code class="inline">putLock</code> and <code class="inline">takeLock</code> — so producers and consumers stop contending with each other entirely. The trade-off: every insertion allocates a new node, adding garbage-collection pressure that the array-backed queue avoids.</p>
+        </div>
+      </div>
+
+      <h3>SynchronousQueue: a queue with zero capacity</h3>
+      <p>This one holds nothing at all. Every <code class="inline">put()</code> must rendezvous directly with a waiting <code class="inline">take()</code> — it's a pure hand-off between two threads, not storage. Internally it's a lock-free "dual" structure (a dual-stack for LIFO mode, a dual-queue for FIFO mode) where nodes represent either "I have data waiting" or "I want data." This is the queue behind <code class="inline">Executors.newCachedThreadPool()</code>, where a new task should hand directly to an idle worker thread.</p>
+
+      <h3>LinkedTransferQueue: the "give me everything" queue</h3>
+      <p>Combines ideas from all of the above into one unbounded, lock-free queue. Its signature addition is <code class="inline">transfer(e)</code>: it blocks until some consumer actually takes the element, guaranteeing direct hand-off semantics even though the queue is otherwise unbounded and non-blocking for normal <code class="inline">put()</code>/<code class="inline">take()</code> use.</p>
+
+      <table>
+        <tr><th>Queue</th><th>Synchronization</th><th>Blocks?</th><th>Best for</th></tr>
+        <tr><td class="mono">ArrayBlockingQueue</td><td>1 lock, 2 conditions</td><td>Yes</td><td>Strict memory bound, simple pipelines</td></tr>
+        <tr><td class="mono">LinkedBlockingQueue</td><td>2 locks (put/take)</td><td>Yes</td><td>High-throughput producer/consumer, GC tolerant</td></tr>
+        <tr><td class="mono">SynchronousQueue</td><td>lock-free dual structure</td><td>Yes (rendezvous)</td><td>Direct thread hand-off, cached thread pools</td></tr>
+        <tr><td class="mono">LinkedTransferQueue</td><td>lock-free CAS</td><td>Optional (transfer)</td><td>Mixed hand-off + buffered workloads</td></tr>
+      </table>
+    </section>
+
+    <!-- ================= SECTION: SKIP LIST ================= -->
+    <section id="skiplist">
+      <div class="eyebrow">12 — CONCURRENT + SORTED, WITHOUT A TREE</div>
+      <h2>ConcurrentSkipListMap: an express-lane linked list</h2>
+      <div class="sub">Balanced trees (Red-Black, AVL) rebalance by rotating nodes across multiple levels — brutal to do safely without locking large parts of the tree. Skip lists sidestep the whole problem.</div>
+
+      <p>A skip list is just several linked lists stacked on top of each other. Level 0 holds every element in sorted order — nothing fancy. Each level above it holds a randomly-chosen, thinner subset of the level below, like an express train that only stops at some of the same stations as the local train.</p>
+
+      <div class="viz">
+        <svg viewBox="0 0 780 200" width="100%" style="max-width:780px;">
+          <style>.sn{fill:#101B30;stroke:#3E8E88;stroke-width:1.3;} .st2{font-family:'IBM Plex Mono',monospace;font-size:12px;fill:#E7EDF7;} .se{stroke:#5D6D8A;stroke-width:1.1;}</style>
+          <text x="10" y="24" class="st2" style="fill:#5D6D8A;">L2</text>
+          <line x1="40" y1="20" x2="720" y2="20" class="se"/>
+          <circle cx="40" cy="20" r="4" fill="#6EE7D8"/>
+          <circle cx="420" cy="20" r="4" fill="#6EE7D8"/>
+          <text x="420" y="12" text-anchor="middle" class="st2">40</text>
+
+          <text x="10" y="74" class="st2" style="fill:#5D6D8A;">L1</text>
+          <line x1="40" y1="70" x2="720" y2="70" class="se"/>
+          <circle cx="40" cy="70" r="4" fill="#6EE7D8"/>
+          <circle cx="220" cy="70" r="4" fill="#6EE7D8"/>
+          <circle cx="420" cy="70" r="4" fill="#6EE7D8"/>
+          <text x="220" y="62" text-anchor="middle" class="st2">20</text>
+
+          <text x="10" y="124" class="st2" style="fill:#5D6D8A;">L0</text>
+          <line x1="40" y1="120" x2="720" y2="120" class="se"/>
+          <circle cx="40" cy="120" r="4" fill="#6EE7D8"/>
+          <circle cx="120" cy="120" r="4" fill="#F5B563"/>
+          <circle cx="220" cy="120" r="4" fill="#6EE7D8"/>
+          <circle cx="320" cy="120" r="4" fill="#F5B563"/>
+          <circle cx="420" cy="120" r="4" fill="#6EE7D8"/>
+          <text x="120" y="140" text-anchor="middle" class="st2" style="fill:#F5B563;">5</text>
+          <text x="320" y="140" text-anchor="middle" class="st2" style="fill:#F5B563;">30</text>
+          <line x1="720" y1="0" x2="720" y2="130" class="se" style="stroke-dasharray:2,2;"/>
+          <text x="740" y="70" class="st2" style="fill:#5D6D8A;font-size:11px;">→ ∞</text>
+          <text x="40" y="180" class="st2" style="fill:#93A3BE;">Search "30": start top level → overshoot at 40 → drop a level → find between 20 and 40 → drop → land on 30. ~O(log n).</text>
+        </svg>
+      </div>
+
+      <p>Whether a new node gets promoted to a higher level is decided by a random coin flip at insertion time (typically 50/50 per level) — no rebalancing operation is ever needed, because the structure's shape is probabilistic by construction rather than something that must be actively maintained.</p>
+
+      <div id="tombstone"></div>
+      <h3>Deleting without locking: the tombstone protocol</h3>
+      <p>Removing a node safely while other threads are mid-traversal, without a lock, takes three CAS-driven steps:</p>
+      <ol class="max">
+        <li><b>Logical deletion</b> — CAS the node's value to null. It's now "dead" but still physically linked in.</li>
+        <li><b>Marker insertion</b> — CAS in a special tombstone node right after it, so any thread walking past knows this node is being removed.</li>
+        <li><b>Physical unlinking</b> — the next thread that happens to walk past (any thread — not necessarily the deleter) finishes the job, rewiring the previous node's pointer to skip over both the dead node and its tombstone.</li>
+      </ol>
+      <p class="dim">That last step is the elegant part: cleanup work is shared opportunistically across whichever threads happen to pass by, instead of being one thread's exclusive responsibility.</p>
+      <p><code class="inline">ConcurrentSkipListMap</code> is the map to reach for when you need both <b>sorted order</b> and <b>thread safety</b> — <code class="inline">ConcurrentHashMap</code> gives you thread safety but no ordering at all.</p>
+    </section>
+
+    <!-- Module Complete Card -->
+    <div class="chapter-complete-card">
+      <div class="chapter-complete-info">
+        <h4>Completed Module 05?</h4>
+        <p>Mark Concurrency as complete to update your curriculum progress.</p>
+      </div>
+      <button type="button" class="btn-mark-complete" data-module="05">
+        <span>○</span> Mark as Completed
+      </button>
+    </div>
+
+    <!-- Pagination Footer -->
+    <div class="module-pagination">
+      <a href="04-queues-and-sequenced.html" class="page-btn">← Module 04 · Queues &amp; Sequenced</a>
+      <a href="06-advanced-performance.html" class="page-btn primary">Next: Module 06 · Performance &amp; Caching →</a>
+    </div>
+
+    <footer>Built for lead-level Java interview preparation · every mechanism traced to the JDK source behavior it describes</footer>
+  </main>
+</div>
+
+<script>
+  // ---- CAS vs unsynchronized race simulator ----
+  const casDemo = (function(){
+    const out = document.getElementById('cas-out');
+    function runUnsafe(){
+      let shared = 100;
+      const threadARead = shared;
+      const threadBRead = shared;
+      const threadAWrite = threadARead + 1;
+      const threadBWrite = threadBRead + 1;
+      shared = threadBWrite;
+      out.textContent =
+`start: counter = 100
+Thread A reads 100 → computes 101
+Thread B reads 100 (before A wrote back) → computes 101
+Thread A writes 101
+Thread B writes 101   ← overwrites A's update
+final counter = ${shared}   (expected 102 — an increment was LOST, no exception thrown)`;
+    }
+    function runCAS(){
+      let shared = 100;
+      let log = [`start: counter = 100 (as an AtomicInteger)`];
+      let expected = shared;
+      let success = (shared === expected);
+      if(success){ shared = expected + 1; }
+      log.push(`Thread A: compareAndSet(expected=100, new=101) → succeeds. counter = ${shared}`);
+      expected = 100;
+      success = (shared === expected);
+      log.push(`Thread B: compareAndSet(expected=100, new=101) → FAILS (counter is now 101, not 100)`);
+      expected = shared;
+      shared = expected + 1;
+      log.push(`Thread B retries: compareAndSet(expected=101, new=102) → succeeds. counter = ${shared}`);
+      log.push(`final counter = ${shared}   (correct — CAS forced Thread B to notice the change and retry)`);
+      out.textContent = log.join('\n');
+    }
+    function reset(){ out.textContent = ''; }
+    return {runUnsafe, runCAS, reset};
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,2931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Module 02: Lists in Depth — Arrays, ArrayList, LinkedList &amp; CopyOnWriteArrayList</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="reader.js"></script>
+<style>
+  /* Custom interactive widget styling */
+  .calc-container {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 22px;
+    margin: 22px 0;
+  }
+  .calc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .calc-field label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    letter-spacing: 0.04em;
+  }
+  .calc-field input, .calc-field select {
+    width: 100%;
+    background: var(--bg-alt);
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    padding: 8px 12px;
+    color: var(--text-bright);
+    font-family: var(--mono);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .calc-field input:focus, .calc-field select:focus {
+    border-color: var(--accent);
+  }
+  .calc-output-box {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 16px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .calc-formula {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    color: var(--text);
+  }
+  .calc-formula .hl {
+    color: var(--cyan);
+    font-weight: 600;
+  }
+  .calc-formula .res {
+    color: var(--amber);
+    font-weight: 700;
+    font-size: 15px;
+  }
+  .ram-strip {
+    display: flex;
+    overflow-x: auto;
+    gap: 4px;
+    padding: 14px 4px 6px;
+  }
+  .ram-block {
+    flex: 0 0 78px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    border-radius: 4px;
+    padding: 8px 4px;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .ram-block.active {
+    border-color: var(--amber);
+    background: rgba(245, 181, 99, 0.16);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(245, 181, 99, 0.2);
+  }
+  .ram-block .rb-idx {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--text-faint);
+  }
+  .ram-block .rb-val {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    margin: 3px 0;
+  }
+  .ram-block .rb-addr {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--cyan);
+  }
+  .ram-block.active .rb-addr {
+    color: var(--amber);
+    font-weight: 600;
+  }
+
+  /* Glossary tag chips */
+  .glossary-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .glossary-term {
+    font-family: var(--sans);
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--cyan);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .glossary-def {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin: 0;
+    line-height: 1.5;
+  }
+  .glossary-analogy {
+    font-size: 13px;
+    color: var(--amber);
+    margin-top: 4px;
+  }
+
+  /* Decision badges */
+  .choice-good {
+    color: var(--green);
+    font-weight: 600;
+  }
+  .choice-bad {
+    color: var(--coral);
+    font-weight: 600;
+  }
+  .choice-warn {
+    color: var(--amber);
+    font-weight: 600;
+  }
+
+  /* CopyOnWrite simulator widget */
+  .cow-widget {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 22px;
+    margin: 24px 0;
+  }
+  .cow-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .cow-stage {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 768px) {
+    .cow-stage { grid-template-columns: 1fr; }
+  }
+  .cow-lane {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 16px;
+  }
+  .cow-lane-title {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .cow-pointer-badge {
+    background: rgba(110, 231, 216, 0.15);
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: var(--mono);
+    font-weight: 600;
+  }
+  .cow-array-card {
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    padding: 12px 14px;
+    background: var(--panel);
+    margin-bottom: 14px;
+    transition: all 0.3s ease;
+  }
+  .cow-array-card.active-pointer {
+    border-color: var(--cyan);
+    box-shadow: 0 0 16px rgba(110, 231, 216, 0.18);
+  }
+  .cow-array-card.stale {
+    border-color: rgba(240, 131, 122, 0.45);
+    background: rgba(240, 131, 122, 0.05);
+    border-style: dashed;
+  }
+  .cow-array-card.reclaimed {
+    opacity: 0.35;
+    filter: grayscale(1);
+    border-color: var(--line);
+  }
+  .cow-cells-row {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 6px 0;
+  }
+  .cow-cell {
+    flex: 0 0 58px;
+    height: 44px;
+    background: var(--bg-alt);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+  }
+  .cow-cell.new {
+    border-color: var(--amber);
+    background: rgba(245, 181, 99, 0.18);
+    color: var(--amber);
+    font-weight: 600;
+  }
+  .cow-thread-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    margin: 4px 4px 4px 0;
+  }
+  .cow-thread-reader {
+    background: rgba(127, 217, 155, 0.15);
+    border: 1px solid var(--green);
+    color: var(--green);
+  }
+  .cow-thread-writer {
+    background: rgba(245, 181, 99, 0.15);
+    border: 1px solid var(--amber);
+    color: var(--amber);
+  }
+  .cow-log-box {
+    margin-top: 14px;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text-dim);
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* Two-Pointer removeIf Interactive Widget */
+  .tp-widget {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 22px;
+    margin: 22px 0;
+  }
+  .tp-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .tp-status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .tp-strip {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 14px 4px 20px;
+    align-items: flex-end;
+  }
+  .tp-cell {
+    flex: 0 0 66px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 4px;
+    text-align: center;
+    position: relative;
+    transition: all 0.25s ease;
+  }
+  .tp-cell.removed {
+    background: rgba(240, 131, 122, 0.12);
+    border-color: var(--coral);
+    opacity: 0.55;
+  }
+  .tp-cell.kept {
+    background: rgba(127, 217, 155, 0.12);
+    border-color: var(--green);
+  }
+  .tp-cell .tp-idx {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-faint);
+  }
+  .tp-cell .tp-val {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 4px 0;
+  }
+  .tp-ptr-row {
+    display: flex;
+    gap: 10px;
+    padding: 4px 4px 10px;
+  }
+  .tp-ptr-col {
+    flex: 0 0 66px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .tp-ptr-badge {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .tp-ptr-read {
+    background: rgba(110, 231, 216, 0.15);
+    color: var(--cyan);
+    border: 1px solid var(--cyan-dim);
+  }
+  .tp-ptr-write {
+    background: rgba(245, 181, 99, 0.15);
+    color: var(--amber);
+    border: 1px solid rgba(245, 181, 99, 0.3);
+  }
+  .tp-log {
+    margin-top: 14px;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="module-header-bar">
+  <div class="module-header-breadcrumb">
+    <span class="badge badge-amber">MODULE 02</span> <span>Lists in Depth: Arrays, ArrayList, LinkedList &amp; CopyOnWriteArrayList</span>
+  </div>
+  <a href="index.html" target="_top" class="page-btn" style="padding:4px 10px;font-size:11px;">⊞ Full Portal View</a>
+</div>
+
+<div class="shell single-col">
+  <main>
+    <div class="hero">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+        <span class="badge badge-amber">MODULE 02</span>
+        <span class="badge badge-green">⏱️ 22 min read</span>
+        <span class="badge badge-cyan">Data Structures</span>
+      </div>
+      <h1>Arrays, ArrayList &amp; <em>LinkedList</em>.</h1>
+      <p class="lede">Before you can understand how Java's <code class="inline">List</code> implementations work, you have to look at what physical computer memory actually does. Their speed differences are not high-level magic—they are direct mathematical consequences of how RAM, CPU caches, and pointers are wired together.</p>
+      <div class="promise">
+        <div><b>Contiguous RAM &amp; O(1) Math</b>hardware offset calculation with zero searching</div>
+        <div><b>The modCount &amp; Fail-Fast Engine</b>why single-threaded loops crash with CME &amp; how it.remove() fixes it</div>
+        <div><b>The 3 Eras of Lists</b>from Vector in Java 1.0 to modern lock-free CopyOnWriteArrayList</div>
+        <div><b>CPU Cache Locality</b>why contiguous arrays beat pointer-chasing in real benchmarks</div>
+        <div><b>Stack vs. Heap Isolation</b>why readers never see or wait for concurrent writers in COWList</div>
+      </div>
+    </div>
+
+    <!-- Rapid Interview Revision Jump Banner -->
+    <div class="callout warn" style="margin:22px 0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;border-left:4px solid var(--amber);">
+      <div>
+        <div style="font-family:var(--sans);font-weight:700;color:var(--amber);font-size:15px;margin-bottom:3px;">
+          ⚡ Preparing for an Interview? Need a Rapid 5-Minute Final Revision?
+        </div>
+        <div style="font-size:13.5px;color:var(--text-dim);">
+          Skip the lengthy reading and jump straight to the high-level cheatsheet: 1-line elevator pitches, key formulas, top gotchas, and decision rules.
+        </div>
+      </div>
+      <a href="#interview-prep" class="page-btn primary" style="padding:7px 16px;font-size:12px;text-transform:none;letter-spacing:normal;font-weight:600;white-space:nowrap;">
+        ⚡ Rapid Interview Revision Sheet →
+      </a>
+    </div>
+
+    <!-- ================= SECTION 0: JARGON BUSTER ================= -->
+    <section id="jargon-buster">
+      <div class="eyebrow">00 — PLAIN ENGLISH FOUNDATIONS</div>
+      <h2>The Jargon Buster: Hardware &amp; Memory Terms Made Simple</h2>
+      <div class="sub">Computers have fancy words for very simple real-world ideas. Here is what each technical term actually means before we see any code:</div>
+
+      <div class="grid2">
+        <div class="glossary-card">
+          <div class="glossary-term"><span>🖥️</span> RAM (Random Access Memory)</div>
+          <p class="glossary-def">The computer's high-speed, temporary workspace where active programs and data live while running.</p>
+          <div class="glossary-analogy">💡 <b>Analogy:</b> A huge wall of numbered storage lockers.</div>
+        </div>
+
+        <div class="glossary-card">
+          <div class="glossary-term"><span>⚙️</span> JVM (Java Virtual Machine)</div>
+          <p class="glossary-def">The engine that executes your Java code and manages all memory allocation and cleanup on your computer.</p>
+          <div class="glossary-analogy">💡 <b>Analogy:</b> The building manager overseeing the lockers.</div>
+        </div>
+
+        <div class="glossary-card">
+          <div class="glossary-term"><span>🧱</span> Contiguous Memory</div>
+          <p class="glossary-def">Memory slots that sit directly side-by-side in an unbroken row with zero gaps between them.</p>
+          <div class="glossary-analogy">💡 <b>Analogy:</b> Houses #100, #101, #102 on the exact same street block.</div>
+        </div>
+
+        <div class="glossary-card">
+          <div class="glossary-term"><span>📍</span> Pointer / Reference</div>
+          <p class="glossary-def">A 4-to-8 byte memory address that tells the computer where an object actually sits inside RAM.</p>
+          <div class="glossary-analogy">💡 <b>Analogy:</b> A sticky note with someone's house address written on it.</div>
+        </div>
+
+        <div class="glossary-card">
+          <div class="glossary-term"><span>🚪</span> Dereferencing</div>
+          <p class="glossary-def">The act of following that memory address to visit, inspect, or modify the actual object in RAM.</p>
+          <div class="glossary-analogy">💡 <b>Analogy:</b> Driving to the address written on your note and knocking on the door.</div>
+        </div>
+
+        <div class="glossary-card">
+          <div class="glossary-term"><span>🧹</span> Garbage Collection (GC)</div>
+          <p class="glossary-def">Java's automatic background cleaner. When an object has no more references pointing to it, the GC frees its memory.</p>
+          <div class="glossary-analogy">💡 <b>Analogy:</b> A cleaning crew that recycles abandoned storage lockers.</div>
+        </div>
+
+        <div class="glossary-card">
+          <div class="glossary-term"><span>⚡</span> CPU Cache &amp; Cache Line</div>
+          <p class="glossary-def">Super-fast memory built directly on the CPU chip. It reads RAM in 64-byte chunks called <i>cache lines</i> so the CPU never waits.</p>
+          <div class="glossary-analogy">💡 <b>Analogy:</b> Keeping the 5 most-used books on your desk instead of walking to the library.</div>
+        </div>
+
+        <div class="glossary-card">
+          <div class="glossary-term"><span>📊</span> Amortized Time</div>
+          <p class="glossary-def">An operation that is occasionally expensive, but because it happens rarely, the average cost spread over thousands of runs is tiny (O(1)).</p>
+          <div class="glossary-analogy">💡 <b>Analogy:</b> Buying groceries once a month makes the average daily cooking prep very fast.</div>
+        </div>
+
+        <div class="glossary-card">
+          <div class="glossary-term"><span>📋</span> Copy-on-Write (Snapshot)</div>
+          <p class="glossary-def">A concurrency strategy where readers read an unchanging array with zero locks, and writers clone the entire array to apply changes before swapping the pointer.</p>
+          <div class="glossary-analogy">💡 <b>Analogy:</b> Photocopying a document to make edits while other readers continue looking at the original pinned copy.</div>
+        </div>
+
+        <div class="glossary-card">
+          <div class="glossary-term"><span>🛡️</span> Fail-Safe vs. Fail-Fast Iteration</div>
+          <p class="glossary-def"><b>Fail-Fast:</b> Throws <code class="inline">ConcurrentModificationException</code> instantly if modified mid-loop. <b>Fail-Safe:</b> Iterates on a frozen point-in-time snapshot and never crashes.</p>
+          <div class="glossary-analogy">💡 <b>Analogy:</b> Reading a printed book (fail-safe snapshot) vs. reading a live whiteboard someone is actively wiping clean.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 1: ARRAYS & HARDWARE MATH ================= -->
+    <section id="arrays-hardware">
+      <div class="eyebrow">01 — PHYSICAL HARDWARE</div>
+      <h2>The Core Secret of Arrays: Contiguous Memory &amp; O(1) Math</h2>
+      <div class="sub">An array is not just an ordered list of items. In hardware, an array is physically allocated as an unbroken, contiguous block of bytes in RAM.</div>
+
+      <p>Because there are <b>zero gaps</b> between array slots, the computer never loops, scans, or iterates through earlier elements to find index <code class="inline">i</code>. Instead, the CPU calculates the exact physical byte address in hardware with a single, lightning-fast math formula:</p>
+
+      <div class="callout">
+        <div class="k">The Hardware Address Formula</div>
+        <div style="font-size:18px;font-family:var(--mono);color:var(--cyan);margin:8px 0;">
+          Physical Address = Base Address + (Index × Element Size)
+        </div>
+        <ul style="margin:8px 0 0;padding-left:20px;font-size:14px;color:var(--text-dim);">
+          <li><b>Base Address:</b> The memory byte location in RAM where index <code class="inline">0</code> begins.</li>
+          <li><b>Index (<code class="inline">i</code>):</b> Which slot you want to read.</li>
+          <li><b>Element Size:</b> How many bytes each item takes (e.g., 4 bytes for an <code class="inline">int</code>, 8 bytes for a <code class="inline">double</code>, 4 or 8 bytes for an object reference).</li>
+        </ul>
+      </div>
+
+      <!-- Memory Layout Diagram -->
+      <div class="viz">
+        <svg viewBox="0 0 840 200" width="100%" style="max-width:840px;">
+          <style>
+            .abox { fill: #101B30; stroke: #3E8E88; stroke-width: 1.5; }
+            .abox-active { fill: rgba(245, 181, 99, 0.15); stroke: #F5B563; stroke-width: 2; }
+            .atxt { font-family: 'IBM Plex Mono', monospace; font-size: 13px; fill: #E7EDF7; font-weight: 500; }
+            .asub { font-family: 'IBM Plex Mono', monospace; font-size: 10px; fill: #5D6D8A; }
+            .aaddr { font-family: 'IBM Plex Mono', monospace; font-size: 11px; fill: #6EE7D8; }
+            .formula-text { font-family: 'IBM Plex Mono', monospace; font-size: 12px; fill: #F5B563; }
+          </style>
+          <!-- RAM Blocks -->
+          <g transform="translate(40, 50)">
+            <!-- Slot 0 -->
+            <rect x="0" y="0" width="140" height="70" rx="4" class="abox"/>
+            <text x="70" y="28" text-anchor="middle" class="atxt">arr[0] = 42</text>
+            <text x="70" y="48" text-anchor="middle" class="asub">4 bytes (offset +0)</text>
+            <text x="70" y="62" text-anchor="middle" class="aaddr">RAM 0x1000</text>
+            <text x="70" y="-12" text-anchor="middle" class="formula-text">Base (0x1000)</text>
+
+            <!-- Slot 1 -->
+            <rect x="140" y="0" width="140" height="70" rx="4" class="abox"/>
+            <text x="210" y="28" text-anchor="middle" class="atxt">arr[1] = 88</text>
+            <text x="210" y="48" text-anchor="middle" class="asub">4 bytes (offset +4)</text>
+            <text x="210" y="62" text-anchor="middle" class="aaddr">RAM 0x1004</text>
+
+            <!-- Slot 2 -->
+            <rect x="280" y="0" width="140" height="70" rx="4" class="abox"/>
+            <text x="350" y="28" text-anchor="middle" class="atxt">arr[2] = 19</text>
+            <text x="350" y="48" text-anchor="middle" class="asub">4 bytes (offset +8)</text>
+            <text x="350" y="62" text-anchor="middle" class="aaddr">RAM 0x1008</text>
+
+            <!-- Slot 3 (Active Target) -->
+            <rect x="420" y="0" width="140" height="70" rx="4" class="abox-active"/>
+            <text x="490" y="28" text-anchor="middle" class="atxt" style="fill:#F5B563;">arr[3] = 95</text>
+            <text x="490" y="48" text-anchor="middle" class="asub" style="fill:#F5B563;">4 bytes (offset +12)</text>
+            <text x="490" y="62" text-anchor="middle" class="aaddr" style="fill:#F5B563;">RAM 0x100C</text>
+
+            <!-- Slot 4 -->
+            <rect x="560" y="0" width="140" height="70" rx="4" class="abox"/>
+            <text x="630" y="28" text-anchor="middle" class="atxt">arr[4] = 31</text>
+            <text x="630" y="48" text-anchor="middle" class="asub">4 bytes (offset +16)</text>
+            <text x="630" y="62" text-anchor="middle" class="aaddr">RAM 0x1010</text>
+          </g>
+
+          <text x="420" y="165" text-anchor="middle" class="atxt" style="font-size:12.5px;fill:#93A3BE;">
+            To read arr[3]: <tspan fill="#6EE7D8">0x1000</tspan> + (<tspan fill="#F5B563">3</tspan> × <tspan fill="#6EE7D8">4 bytes</tspan>) = <tspan fill="#F5B563" font-weight="bold">0x100C</tspan>. Done in 1 CPU clock cycle!
+          </text>
+        </svg>
+        <div class="viz-caption">Every slot is physically stuck to its neighbor in RAM. The CPU jumps directly to index 3 without touching index 0, 1, or 2.</div>
+      </div>
+
+      <div class="analogy">
+        <div class="icon">💡</div>
+        <div>
+          <div class="k">Why does Java use 0-based indexing?</div>
+          The number <code class="inline">0</code> is <b>not a rank</b> (like 1st place). It represents a <b>distance offset</b> from the starting base address!
+          <br>
+          <code class="inline">Base + (0 × Element Size) = Base</code>.
+          <br>
+          Index 0 means: <i>"Move 0 bytes away from the start."</i> Index 3 means: <i>"Move 3 full elements away from the start."</i>
+        </div>
+      </div>
+
+      <p>Whether your array has 5 elements or 5,000,000 elements, calculating <code class="inline">arr[0]</code> or <code class="inline">arr[4999999]</code> takes the exact same number of CPU cycles (one multiply, one add). This is why array lookups are strictly <b>O(1) constant time</b>.</p>
+
+      <!-- INTERACTIVE CALCULATOR -->
+      <div class="calc-container">
+        <h4 style="margin-top:0;color:var(--amber);">⚡ Try It: Hardware Memory Address Calculator</h4>
+        <p class="dim" style="font-size:13.5px;">Change the values below to see how the CPU calculates the exact RAM memory address for any array index in real time:</p>
+        
+        <div class="calc-grid">
+          <div class="calc-field">
+            <label for="calc-base">Base RAM Address (Bytes)</label>
+            <input type="number" id="calc-base" value="2000" min="1000" step="100">
+          </div>
+          <div class="calc-field">
+            <label for="calc-type">Data Type (Element Size)</label>
+            <select id="calc-type">
+              <option value="4" selected>int (4 bytes)</option>
+              <option value="8">double / long (8 bytes)</option>
+              <option value="4">Object Reference (4 bytes - 32-bit/compressed)</option>
+              <option value="8">Object Reference (8 bytes - 64-bit uncompressed)</option>
+              <option value="2">char / short (2 bytes)</option>
+              <option value="1">byte / boolean (1 byte)</option>
+            </select>
+          </div>
+          <div class="calc-field">
+            <label for="calc-idx">Target Index (i)</label>
+            <input type="number" id="calc-idx" value="6" min="0" max="15">
+          </div>
+        </div>
+
+        <div class="calc-output-box">
+          <div class="calc-formula" id="calc-formula-display">
+            Physical Address = <span class="hl">2000</span> + (<span class="hl">6</span> × <span class="hl">4</span>) = <span class="res">2024</span>
+          </div>
+          <span class="badge badge-cyan">1 CPU Multiply + 1 Add · O(1)</span>
+        </div>
+
+        <div class="ram-strip" id="ram-strip-display">
+          <!-- Populated by JavaScript -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 2: STACK VS HEAP ================= -->
+    <section id="stack-heap-arrays">
+      <div class="eyebrow">02 — MEMORY LAYOUT</div>
+      <h2>Stack vs. Heap: Where Does Array Memory Actually Live?</h2>
+      <div class="sub">A common misunderstanding is thinking that an array lives on the Stack if you declare it inside a method. In Java, this never happens.</div>
+
+      <div class="callout warn">
+        <div class="k">The Golden Rule of Java Memory</div>
+        In Java, <b>all arrays are objects</b>, and <b>all objects live on the Heap</b>. An array is <b>never</b> allocated on the Stack—even if it is declared as a local variable inside a method, and even if it holds primitive numbers like <code class="inline">int[]</code>!
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>Case A: Local Variable Inside a Method</h4>
+          <pre style="margin:10px 0;"><span class="kw">void</span> <span class="fn">process</span>() {
+    <span class="kw">int</span>[] numbers = <span class="kw">new</span> <span class="kw">int</span>[3];
+}</pre>
+          <p class="dim" style="font-size:13.5px;margin:0;">
+            The Stack frame stores only a tiny 4-to-8 byte <b>reference variable</b> named <code class="inline">numbers</code>. That variable holds an address pointing into the <b>Heap</b>, where the unbroken, contiguous 3-slot array object is physically created.
+          </p>
+        </div>
+
+        <div class="card">
+          <h4>Case B: Instance Field Inside a Class</h4>
+          <pre style="margin:10px 0;"><span class="kw">class</span> <span class="ty">Company</span> {
+    <span class="kw">private</span> <span class="ty">Employee</span>[] staff = <span class="kw">new</span> <span class="ty">Employee</span>[3];
+}</pre>
+          <p class="dim" style="font-size:13.5px;margin:0;">
+            The parent <code class="inline">Company</code> object lives on the <b>Heap</b>. Its internal <code class="inline">staff</code> field holds a pointer to another object on the <b>Heap</b>: the contiguous array block of references.
+          </p>
+        </div>
+      </div>
+
+      <!-- Stack vs Heap SVG Diagram -->
+      <div class="viz">
+        <svg viewBox="0 0 840 260" width="100%" style="max-width:840px;">
+          <style>
+            .stk-box { fill: #0D1526; stroke: #5D6D8A; stroke-width: 1.5; stroke-dasharray: 4 4; }
+            .heap-box { fill: #0D1526; stroke: #3E8E88; stroke-width: 1.5; }
+            .mem-label { font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+            .ptr-line { stroke: #F5B563; stroke-width: 2; fill: none; marker-end: url(#arrow-amber); }
+            .obj-ptr-line { stroke: #6EE7D8; stroke-width: 1.5; fill: none; marker-end: url(#arrow-cyan); }
+          </style>
+          <defs>
+            <marker id="arrow-amber" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#F5B563"/>
+            </marker>
+            <marker id="arrow-cyan" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#6EE7D8"/>
+            </marker>
+          </defs>
+
+          <!-- STACK REGION -->
+          <rect x="20" y="20" width="240" height="220" rx="8" class="stk-box"/>
+          <text x="35" y="44" class="mem-label" fill="#5D6D8A">Stack (Method Frame)</text>
+
+          <rect x="35" y="65" width="210" height="42" rx="4" fill="#101B30" stroke="#5D6D8A"/>
+          <text x="45" y="90" class="atxt" style="font-size:12px;">numbers (pointer: 0x5A)</text>
+
+          <rect x="35" y="125" width="210" height="42" rx="4" fill="#101B30" stroke="#5D6D8A"/>
+          <text x="45" y="150" class="atxt" style="font-size:12px;">emps (pointer: 0x9B)</text>
+
+          <!-- HEAP REGION -->
+          <rect x="300" y="20" width="520" height="220" rx="8" class="heap-box"/>
+          <text x="320" y="44" class="mem-label" fill="#6EE7D8">Heap (Shared Object Warehouse)</text>
+
+          <!-- Heap int[] -->
+          <rect x="330" y="65" width="240" height="42" rx="4" fill="#101B30" stroke="#3E8E88"/>
+          <text x="340" y="90" class="atxt" style="font-size:11.5px;">[ 0 | 0 | 0 ] (contiguous int[])</text>
+          <text x="500" y="60" class="asub">@ 0x5A</text>
+
+          <!-- Heap Employee[] -->
+          <rect x="330" y="125" width="240" height="42" rx="4" fill="#101B30" stroke="#3E8E88"/>
+          <text x="340" y="150" class="atxt" style="font-size:11.5px;">[ ref0 | ref1 | ref2 ]</text>
+          <text x="500" y="120" class="asub">@ 0x9B</text>
+
+          <!-- Heap Employee Objects -->
+          <rect x="630" y="95" width="170" height="34" rx="4" fill="#15223C" stroke="#6EE7D8"/>
+          <text x="640" y="117" class="atxt" style="font-size:11px;">Employee: "Alice"</text>
+
+          <rect x="630" y="140" width="170" height="34" rx="4" fill="#15223C" stroke="#6EE7D8"/>
+          <text x="640" y="162" class="atxt" style="font-size:11px;">Employee: "Bob"</text>
+
+          <rect x="630" y="185" width="170" height="34" rx="4" fill="#15223C" stroke="#6EE7D8"/>
+          <text x="640" y="207" class="atxt" style="font-size:11px;">Employee: "Carol"</text>
+
+          <!-- Pointers -->
+          <path d="M 245 86 L 325 86" class="ptr-line"/>
+          <path d="M 245 146 L 325 146" class="ptr-line"/>
+
+          <path d="M 400 167 C 450 180, 560 112, 625 112" class="obj-ptr-line"/>
+          <path d="M 450 167 C 500 175, 560 157, 625 157" class="obj-ptr-line"/>
+          <path d="M 500 167 C 540 190, 570 202, 625 202" class="obj-ptr-line"/>
+        </svg>
+        <div class="viz-caption">The Stack only ever holds lightweight pointers (addresses). The actual unbroken array blocks and all target objects live out on the Heap.</div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 3: PRIMITIVE VS REFERENCE ARRAYS ================= -->
+    <section id="primitive-vs-reference">
+      <div class="eyebrow">03 — DATA TYPES</div>
+      <h2>Primitive Arrays vs. Object Reference Arrays</h2>
+      <div class="sub">How contiguous memory is used depends completely on whether you are storing raw primitive types or objects.</div>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>1. Primitive Arrays (<code class="inline">int[]</code>, <code class="inline">double[]</code>)</h4>
+          <p class="dim" style="margin:0 0 12px;font-size:14px;">
+            The raw numbers live <b>directly inside the contiguous memory slots</b> side-by-side.
+          </p>
+          <div style="background:#080D18;padding:10px 14px;border-radius:4px;border:1px solid var(--line);font-family:var(--mono);font-size:12.5px;color:var(--green);">
+            [ 10 | 20 | 30 | 40 | 50 ]
+          </div>
+          <p class="dim" style="margin:12px 0 0;font-size:13px;">
+            • Zero pointers to follow.<br>
+            • Zero secondary lookups.<br>
+            • Reading <code class="inline">arr[i]</code> immediately loads the raw integer into the CPU.
+          </p>
+        </div>
+
+        <div class="card">
+          <h4>2. Object Arrays (<code class="inline">Employee[]</code>, <code class="inline">String[]</code>)</h4>
+          <p class="dim" style="margin:0 0 12px;font-size:14px;">
+            Java <b>never</b> packs object fields side-by-side in array memory. It stores a contiguous block of <b>references (pointers)</b>.
+          </p>
+          <div style="background:#080D18;padding:10px 14px;border-radius:4px;border:1px solid var(--line);font-family:var(--mono);font-size:12.5px;color:var(--cyan);">
+            [ ptr0 | ptr1 | ptr2 | ptr3 | ptr4 ]
+          </div>
+          <p class="dim" style="margin:12px 0 0;font-size:13px;">
+            • When you do <code class="inline">new Employee[3]</code>, Java allocates 3 slots filled with <code class="inline">null</code>.<br>
+            • When you assign <code class="inline">emps[0] = new Employee("Alice")</code>, the <code class="inline">Employee</code> is created on the heap, and its memory address is written into slot 0.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout danger">
+        <div class="k">The Two-Step Cost of Reading an Object Array</div>
+        When you access an element in an object array (e.g. <code class="inline">emps[i].getName()</code>), the CPU must perform <b>two distinct steps</b>:
+        <ol style="margin:8px 0 0;padding-left:20px;font-size:14px;">
+          <li><b>Offset Math ($O(1)$):</b> Calculate the array slot address and read the pointer stored there.</li>
+          <li><b>Dereference:</b> Jump to that pointer address on the Heap to inspect the actual <code class="inline">Employee</code> object's fields.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 4: WHY PLAIN ARRAYS AREN'T ENOUGH ================= -->
+    <section id="why-collections">
+      <div class="eyebrow">04 — EVOLUTION TO COLLECTIONS</div>
+      <h2>Why Plain Arrays Aren't Enough (The Need for Lists)</h2>
+      <div class="sub">Plain arrays are the fastest data structure the hardware can offer. So why didn't Java stop there? Why did we invent ArrayList and LinkedList?</div>
+
+      <p>Plain arrays have fatal architectural limitations that make building real-world software painful:</p>
+
+      <div class="grid3">
+        <div class="card">
+          <h4>1. Fixed Size at Creation</h4>
+          <p class="dim" style="font-size:13px;margin:0;">
+            Once you create <code class="inline">new int[10]</code>, it can <b>never</b> grow to 11 or shrink to 9. If your database query returns 11 rows, your program crashes with <code class="inline">ArrayIndexOutOfBoundsException</code> unless you manually build a bigger array and copy everything over.
+          </p>
+        </div>
+
+        <div class="card">
+          <h4>2. No Built-In Operations</h4>
+          <p class="dim" style="font-size:13px;margin:0;">
+            Want to insert an item into the middle of a plain array? Want to remove an item and close the gap? Want to check if an item exists (<code class="inline">contains</code>)? You must write manual <code class="inline">for</code> loops and array-shifting logic from scratch every single time.
+          </p>
+        </div>
+
+        <div class="card">
+          <h4>3. No Collections Integration</h4>
+          <p class="dim" style="font-size:13px;margin:0;">
+            Plain arrays do not implement the <code class="inline">Collection</code> or <code class="inline">List</code> interfaces. They cannot be used with Java Streams, <code class="inline">Collections.sort()</code>, or generic algorithms without awkward manual conversion wrappers.
+          </p>
+        </div>
+      </div>
+
+      <div class="analogy">
+        <div class="icon">🚧</div>
+        <div>
+          <div class="k">Why can't an array simply "grow in place" in RAM?</div>
+          Because an array <b>must remain an unbroken contiguous block</b>. If an array occupies RAM bytes <code class="inline">1000</code> to <code class="inline">1040</code>, the very next byte (<code class="inline">1041</code>) might already be taken by another thread, another variable, or JVM internal data. The computer cannot just "stretch" the array forward without overwriting someone else's memory!
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 5: ARRAYLIST IN DEPTH ================= -->
+    <section id="lists">
+      <div class="eyebrow">05 — DYNAMIC ARRAYS</div>
+      <h2>ArrayList: The Contiguous Dynamic Shelf</h2>
+      <div class="sub">An ArrayList gives you the blazing speed of raw contiguous arrays, but eliminates the fixed-size limitation through automated dynamic resizing.</div>
+
+      <div id="lists-array"></div>
+      <h3>How ArrayList Works Under the Hood</h3>
+      <p>Inside the JDK, an <code class="inline">ArrayList&lt;E&gt;</code> is remarkably simple: it is just a normal Java class wrapping an internal plain array called <code class="inline">transient Object[] elementData</code> and an integer <code class="inline">size</code> counter.</p>
+
+      <p>When you create <code class="inline">new ArrayList&lt;&gt;()</code>, Java sets up an empty internal array. When you add the first element, it assigns a default capacity of <b>10 slots</b>. But what happens when slot 10 is full and you call <code class="inline">add(11)</code>?</p>
+
+      <div class="callout warn">
+        <div class="k">The 4-Step Dynamic Resize Sequence</div>
+        <ol style="margin:6px 0 0;padding-left:20px;font-size:14px;">
+          <li><b>Allocate:</b> The JVM searches the Heap for a <b>brand-new, larger contiguous block</b> of memory—specifically <b>1.5× the old capacity</b> (<code class="inline">newCapacity = oldCapacity + (oldCapacity &gt;&gt; 1)</code>).</li>
+          <li><b>Copy:</b> All existing elements/pointers are copied from the old array into the new array via <code class="inline">System.arraycopy()</code> (a lightning-fast, C-level native CPU memory block copy).</li>
+          <li><b>Insert:</b> The new 11th element is placed into the first empty slot.</li>
+          <li><b>Re-point &amp; Discard:</b> The internal <code class="inline">elementData</code> reference is updated to point to the new array address. The old array is abandoned, becoming eligible for <b>Garbage Collection (GC)</b>.</li>
+        </ol>
+      </div>
+
+      <!-- Resize Diagram -->
+      <div class="viz">
+        <svg viewBox="0 0 840 210" width="100%" style="max-width:840px;">
+          <style>
+            .old-arr { fill: #101B30; stroke: #F0837A; stroke-width: 1.5; }
+            .new-arr { fill: #101B30; stroke: #6EE7D8; stroke-width: 1.5; }
+            .copy-arrow { stroke: #F5B563; stroke-width: 1.5; stroke-dasharray: 4 3; fill: none; marker-end: url(#arrow-amber); }
+          </style>
+          <!-- Old Array -->
+          <g transform="translate(40, 30)">
+            <text x="0" y="-10" class="atxt" style="fill:#F0837A;font-size:12px;">Old Array (Capacity 4 — FULL):</text>
+            <rect x="0" y="0" width="60" height="40" rx="3" class="old-arr"/><text x="30" y="25" text-anchor="middle" class="atxt">A</text>
+            <rect x="60" y="0" width="60" height="40" rx="3" class="old-arr"/><text x="90" y="25" text-anchor="middle" class="atxt">B</text>
+            <rect x="120" y="0" width="60" height="40" rx="3" class="old-arr"/><text x="150" y="25" text-anchor="middle" class="atxt">C</text>
+            <rect x="180" y="0" width="60" height="40" rx="3" class="old-arr"/><text x="210" y="25" text-anchor="middle" class="atxt">D</text>
+            <text x="250" y="25" class="asub" style="fill:#F0837A;">❌ Out of space!</text>
+          </g>
+
+          <!-- System.arraycopy arrows -->
+          <path d="M 70 75 L 70 120" class="copy-arrow"/>
+          <path d="M 130 75 L 130 120" class="copy-arrow"/>
+          <path d="M 190 75 L 190 120" class="copy-arrow"/>
+          <path d="M 250 75 L 250 120" class="copy-arrow"/>
+          <text x="270" y="102" class="formula-text" style="font-size:11px;">System.arraycopy() native block transfer</text>
+
+          <!-- New Array -->
+          <g transform="translate(40, 130)">
+            <text x="0" y="-10" class="atxt" style="fill:#6EE7D8;font-size:12px;">New Array (Capacity 6 — 1.5× Growth):</text>
+            <rect x="0" y="0" width="60" height="40" rx="3" class="new-arr"/><text x="30" y="25" text-anchor="middle" class="atxt">A</text>
+            <rect x="60" y="0" width="60" height="40" rx="3" class="new-arr"/><text x="90" y="25" text-anchor="middle" class="atxt">B</text>
+            <rect x="120" y="0" width="60" height="40" rx="3" class="new-arr"/><text x="150" y="25" text-anchor="middle" class="atxt">C</text>
+            <rect x="180" y="0" width="60" height="40" rx="3" class="new-arr"/><text x="210" y="25" text-anchor="middle" class="atxt">D</text>
+            <rect x="240" y="0" width="60" height="40" rx="3" class="new-arr" style="stroke:#F5B563;fill:rgba(245,181,99,0.15);"/><text x="270" y="25" text-anchor="middle" class="atxt" style="fill:#F5B563;">E</text>
+            <rect x="300" y="0" width="60" height="40" rx="3" class="new-arr" style="stroke-dasharray:3 3;"/><text x="330" y="25" text-anchor="middle" class="asub">null</text>
+            <text x="375" y="25" class="asub" style="fill:#6EE7D8;">✓ 1 free slot left</text>
+          </g>
+        </svg>
+        <div class="viz-caption">When full, ArrayList creates a 1.5× larger block, copies references over natively, adds the new item, and sends the old block to the Garbage Collector.</div>
+      </div>
+
+      <div class="analogy">
+        <div class="icon">💳</div>
+        <div>
+          <div class="k">What does "Amortized O(1)" really mean?</div>
+          Copying an entire array during a resize is an $O(n)$ operation. So why do textbooks say <code class="inline">ArrayList.add()</code> is <b>O(1)</b>?
+          <br><br>
+          Think of paying rent: once a month, you pay a large sum. But because you only pay it once every 30 days, your <i>daily average cost</i> is small and predictable. Because ArrayList grows exponentially (1.5×), resizes happen very rarely. 99.9% of your <code class="inline">add()</code> calls just write straight into the next empty slot with zero copying. When you spread the rare resize cost across all the cheap appends, the average cost per element remains strictly <b>O(1) constant time</b>!
+        </div>
+      </div>
+
+      <div id="al-sim"></div>
+      <h3>Live Interactive Shift Visualizer: Append vs. Insert at Index 0</h3>
+      <p>Watch in real-time what happens to physical array slots when you append to the end versus inserting at the front:</p>
+
+      <div class="viz">
+        <div class="viz-controls">
+          <button class="btn" onclick="alDemo.append()">append(x) [End] →</button>
+          <button class="btn alt" onclick="alDemo.insertFront()">insert at index 0 [Front] ⚡</button>
+          <button class="btn" onclick="alDemo.reset()">reset array</button>
+        </div>
+        <div id="al-cells" style="display:flex;flex-wrap:wrap;gap:2px;"></div>
+        <div class="viz-caption" id="al-caption">Watch: appending to the end is cheap. Inserting at the front forces every element to shift right by one slot — an O(n) memory shuffle.</div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 6: LINKEDLIST IN DEPTH ================= -->
+    <section id="lists-linked">
+      <div class="eyebrow">06 — POINTER CHAINS</div>
+      <h2>LinkedList: The Scattered Scavenger Hunt</h2>
+      <div class="sub">A LinkedList contains zero arrays. It stores elements as independent node objects scattered randomly across the Heap, tied together by pointer references.</div>
+
+      <p>In Java, <code class="inline">LinkedList&lt;E&gt;</code> is a <b>doubly linked list</b>. Every single value you add is wrapped inside an internal object called a <code class="inline">Node</code>:</p>
+
+      <pre><span class="kw">private static class</span> <span class="ty">Node</span>&lt;<span class="ty">E</span>&gt; {
+    <span class="ty">E</span> item;          <span class="c1">// pointer to the actual data object</span>
+    <span class="ty">Node</span>&lt;<span class="ty">E</span>&gt; next;    <span class="c1">// pointer to the next Node on the Heap</span>
+    <span class="ty">Node</span>&lt;<span class="ty">E</span>&gt; prev;    <span class="c1">// pointer to the previous Node on the Heap</span>
+}</pre>
+
+      <div class="viz">
+        <svg viewBox="0 0 820 180" width="100%" style="max-width:820px;">
+          <style>
+            .lln{ fill:#101B30; stroke:#3E8E88; stroke-width:1.5; }
+            .llt{ font-family:'IBM Plex Mono',monospace; font-size:12px; fill:#E7EDF7; }
+            .lle{ stroke:#5D6D8A; stroke-width:1.4; fill:none; marker-end:url(#arrow-cyan); }
+            .lle-back{ stroke:#F5B563; stroke-width:1.4; fill:none; marker-end:url(#arrow-amber); }
+          </style>
+          <g transform="translate(30,40)">
+            <rect width="160" height="65" rx="6" class="lln"/>
+            <text x="80" y="24" text-anchor="middle" class="llt">item: "Anna"</text>
+            <text x="80" y="44" text-anchor="middle" class="llt" style="fill:#5D6D8A;font-size:11px;">prev: null | next: 0x8C</text>
+            <text x="80" y="58" text-anchor="middle" class="asub">@ Heap 0x1A</text>
+          </g>
+          <g transform="translate(330,85)">
+            <rect width="160" height="65" rx="6" class="lln"/>
+            <text x="80" y="24" text-anchor="middle" class="llt">item: "Ravi"</text>
+            <text x="80" y="44" text-anchor="middle" class="llt" style="fill:#5D6D8A;font-size:11px;">prev: 0x1A | next: 0x4F</text>
+            <text x="80" y="58" text-anchor="middle" class="asub">@ Heap 0x8C</text>
+          </g>
+          <g transform="translate(630,25)">
+            <rect width="160" height="65" rx="6" class="lln"/>
+            <text x="80" y="24" text-anchor="middle" class="llt">item: "Chen"</text>
+            <text x="80" y="44" text-anchor="middle" class="llt" style="fill:#5D6D8A;font-size:11px;">prev: 0x8C | next: null</text>
+            <text x="80" y="58" text-anchor="middle" class="asub">@ Heap 0x4F</text>
+          </g>
+
+          <!-- Forward Links (next) -->
+          <path class="lle" d="M 190,65 C 260,65 260,110 325,110"/>
+          <path class="lle" d="M 490,110 C 560,110 560,50 625,50"/>
+
+          <!-- Backward Links (prev) -->
+          <path class="lle-back" d="M 330,120 C 260,120 260,78 195,78"/>
+          <path class="lle-back" d="M 630,62 C 560,62 560,122 495,122"/>
+        </svg>
+        <div class="viz-caption">Three nodes of the same LinkedList, scattered across random Heap addresses. Cyan arrows show <code class="inline">next</code>; Amber arrows show <code class="inline">prev</code>.</div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h4>Why <code class="inline">get(500)</code> is Slow: O(n)</h4>
+          <p class="dim" style="font-size:13.5px;margin:0;">
+            There is no mathematical formula for finding node 500. Java only knows where the <code class="inline">first</code> and <code class="inline">last</code> nodes sit. To find index 500, the CPU must start at the beginning and walk through 500 individual nodes one by one following pointer after pointer.
+          </p>
+        </div>
+
+        <div class="card">
+          <h4>Why Insertions at a Known Node are Fast: O(1)</h4>
+          <p class="dim" style="font-size:13.5px;margin:0;">
+            If you are already standing right at a node (for example, using a <code class="inline">ListIterator</code>), inserting a new item requires <b>zero element shifting</b>. You just create the new node and rewire four pointers:
+            <code class="inline">newNode.next = curr.next; curr.next = newNode;</code>.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout danger">
+        <div class="k">The Hidden Cost: Massive Memory Overhead</div>
+        Because every single element requires its own standalone <code class="inline">Node</code> object on the Heap, LinkedList wastes a tremendous amount of RAM:
+        <ul style="margin:8px 0 0;padding-left:20px;font-size:14px;color:var(--text-dim);">
+          <li><b>Object Header:</b> 12 to 16 bytes (every Java object has a header storing GC metadata and class info).</li>
+          <li><b>Three Pointers:</b> <code class="inline">item</code>, <code class="inline">next</code>, <code class="inline">prev</code> (4 to 8 bytes each = 12 to 24 bytes).</li>
+          <li><b>Memory Alignment Padding:</b> JVM rounds objects to multiples of 8 bytes.</li>
+          <li><b>Total:</b> <b>24 to 48 bytes per element</b> in LinkedList, compared to just <b>4 to 8 bytes</b> per element in ArrayList!</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 7: HARDWARE CACHE LOCALITY ================= -->
+    <section id="cpu-cache">
+      <div class="eyebrow">07 — HARDWARE REALITY</div>
+      <h2>Hardware Cache Locality: Why ArrayList Almost Always Wins</h2>
+      <div class="sub">On paper in algorithm textbooks, LinkedList looks good for insertions. In real life on real physical CPUs, ArrayList blows LinkedList out of the water. Here is why.</div>
+
+      <p>Modern CPUs operate thousands of times faster than main RAM. To avoid waiting on slow RAM, the CPU features ultra-fast on-chip memory called the <b>L1/L2/L3 Cache</b>.</p>
+
+      <div class="analogy">
+        <div class="icon">🚀</div>
+        <div>
+          <div class="k">How the CPU reads memory: The 64-Byte Cache Line</div>
+          When the CPU asks RAM for a single byte, the hardware memory controller does not fetch just that one byte. It fetches an entire <b>64-byte block called a Cache Line</b>.
+          <br><br>
+          The CPU’s hardware prefetcher assumes: <i>"If the programmer just read slot 0, they will probably read slot 1, 2, and 3 next."</i>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card" style="border-color:rgba(110,231,216,0.3);">
+          <h4 style="color:var(--cyan);">ArrayList: Cache Line Friendly (Spatial Locality)</h4>
+          <p class="dim" style="font-size:13.5px;margin:0 0 10px;">
+            Because ArrayList's internal array is one continuous block of RAM, a single 64-byte cache line brings in <b>8 to 16 consecutive pointers at once</b>!
+          </p>
+          <div style="font-size:13px;color:var(--green);font-family:var(--mono);">
+            ✓ Slot 0 read (loads Cache Line)<br>
+            ✓ Slot 1 read (CACHE HIT — 0 delay!)<br>
+            ✓ Slot 2 read (CACHE HIT — 0 delay!)<br>
+            ✓ Slot 3 read (CACHE HIT — 0 delay!)
+          </div>
+        </div>
+
+        <div class="card" style="border-color:rgba(240,131,122,0.3);">
+          <h4 style="color:var(--coral);">LinkedList: Pointer Chasing (Cache Miss Stall)</h4>
+          <p class="dim" style="font-size:13.5px;margin:0 0 10px;">
+            Because LinkedList nodes are scattered randomly across the Heap warehouse, fetching <code class="inline">node.next</code> jumps to an unpredictable memory address.
+          </p>
+          <div style="font-size:13px;color:var(--coral);font-family:var(--mono);">
+            ✗ Node 0 read (loads unrelated bytes)<br>
+            ✗ Node 1 read (CACHE MISS — CPU pauses)<br>
+            ✗ Node 2 read (CACHE MISS — CPU pauses)<br>
+            ✗ Node 3 read (CACHE MISS — CPU pauses)
+          </div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="k">The Real-World Benchmark Verdict</div>
+        Because CPU cache misses stall the processor for hundreds of cycles, <b>iterating through an ArrayList is 5× to 10× faster than iterating through a LinkedList</b>.
+        <br><br>
+        Even more surprisingly: shifting elements in an ArrayList using <code class="inline">System.arraycopy</code> is so heavily optimized by CPU hardware that an <code class="inline">ArrayList</code> often beats a <code class="inline">LinkedList</code> even for insertions and removals up to tens of thousands of elements!
+      </div>
+
+      <!-- Quick Knowledge Check Accordion -->
+      <div class="quiz-box">
+        <div class="quiz-header">
+          <span class="quiz-badge">💡 Quick Knowledge Check</span>
+          <button type="button" class="quiz-toggle" aria-expanded="false">Test Your Intuition <span class="quiz-toggle-icon">▼</span></button>
+        </div>
+        <div class="quiz-question">In theory, <code>LinkedList.add(0, item)</code> is O(1) while <code>ArrayList.add(0, item)</code> is O(N) due to shifting. Why does <code>ArrayList</code> still frequently outperform <code>LinkedList</code> in practical benchmarks?</div>
+        <div class="quiz-answer">
+          <b>Answer:</b> Two hardware realities: <b>1. CPU Cache Lines (L1/L2):</b> <code>ArrayList</code> elements are contiguous memory, so the CPU hardware prefetcher loads 64-byte chunks with zero cache misses. <code>LinkedList</code> nodes are scattered across the heap, triggering a CPU stall (cache miss) on every node dereference. <b>2. SIMD &amp; <code>System.arraycopy</code>:</b> Modern CPUs copy contiguous memory blocks in bulk using hardware vector instructions, making array shifts blisteringly fast for moderate collection sizes.
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 8: LIST ITERATION & FAIL-FAST MECHANICS ================= -->
+    <section id="list-iteration">
+      <div class="eyebrow">08 — ITERATION &amp; FAIL-FAST MECHANICS</div>
+      <h2>How List Iteration Works: Iterators, For-Each &amp; the modCount Engine</h2>
+      <div class="sub">How does Java loop through a list? Why does deleting an item during a loop crash your program—even with only one thread? Here is the exact internal mechanism.</div>
+
+      <p>Before dealing with multi-threaded concurrency, we must understand how Java visits items in a single thread. When you loop over an <code class="inline">ArrayList</code> or <code class="inline">LinkedList</code>, Java uses an <b>Iterator</b> helper object behind the scenes.</p>
+
+      <h3>1. What is an Iterator &amp; Is It Thread-Safe?</h3>
+      <p>An <b>Iterator</b> is a simple helper object that acts like your index finger while reading a book. It points to one item at a time, gives you that item when asked, and moves forward to the next item. You do not need to worry about how the list stores data internally (array or linked nodes)—the Iterator handles the stepping for you.</p>
+
+      <p>Inside an <code class="inline">ArrayList</code>, the Iterator tracks its position using two simple integer variables:</p>
+      <ul style="margin:6px 0 16px;padding-left:20px;font-size:15px;">
+        <li><code class="inline">cursor</code>: The index of the next element to return (starts at <code class="inline">0</code>).</li>
+        <li><code class="inline">lastRet</code>: The index of the element returned by the previous call to <code class="inline">next()</code> (starts at <code class="inline">-1</code>).</li>
+      </ul>
+
+      <!-- SVG Visualization 1: Conceptual Pointer Model of an Iterator -->
+      <div class="viz">
+        <svg viewBox="0 0 840 210" width="100%" style="max-width:840px;">
+          <style>
+            .it-box { fill: #101B30; stroke: #3E8E88; stroke-width: 1.5; }
+            .it-box-current { fill: rgba(110, 231, 216, 0.14); stroke: #6EE7D8; stroke-width: 2; }
+            .it-box-read { fill: rgba(127, 217, 155, 0.12); stroke: #7FD99B; stroke-width: 1.5; }
+            .it-txt { font-family: 'IBM Plex Mono', monospace; font-size: 13px; fill: #E7EDF7; font-weight: 500; }
+            .it-sub { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; fill: #5D6D8A; }
+            .it-addr { font-family: 'IBM Plex Mono', monospace; font-size: 11px; fill: #6EE7D8; }
+            .it-lbl { font-family: 'Space Grotesk', sans-serif; font-size: 12px; fill: #F5B563; font-weight: 600; }
+            .it-stat { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; fill: #93A3BE; }
+          </style>
+          <defs>
+            <marker id="it-arr-amber" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#F5B563" />
+            </marker>
+            <marker id="it-arr-green" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#7FD99B" />
+            </marker>
+          </defs>
+
+          <!-- Array Elements Strip -->
+          <g transform="translate(40, 35)">
+            <!-- Slot 0: Already Returned ("Apple") -->
+            <rect x="0" y="0" width="170" height="75" rx="6" class="it-box-read"/>
+            <text x="85" y="28" text-anchor="middle" class="it-txt" style="fill:#7FD99B;">[0] "Apple"</text>
+            <text x="85" y="48" text-anchor="middle" class="it-sub">Already visited</text>
+            <text x="85" y="64" text-anchor="middle" class="it-stat">lastRet = 0</text>
+
+            <!-- Slot 1: Current Next Target ("Banana") -->
+            <rect x="195" y="0" width="170" height="75" rx="6" class="it-box-current"/>
+            <text x="280" y="28" text-anchor="middle" class="it-txt" style="fill:#6EE7D8;font-weight:700;">[1] "Banana"</text>
+            <text x="280" y="48" text-anchor="middle" class="it-sub" style="fill:#6EE7D8;">Next element to return</text>
+            <text x="280" y="64" text-anchor="middle" class="it-addr">cursor = 1</text>
+
+            <!-- Slot 2: Unvisited ("Cherry") -->
+            <rect x="390" y="0" width="170" height="75" rx="6" class="it-box"/>
+            <text x="475" y="28" text-anchor="middle" class="it-txt">[2] "Cherry"</text>
+            <text x="475" y="48" text-anchor="middle" class="it-sub">Waiting in line</text>
+            <text x="475" y="64" text-anchor="middle" class="it-sub">cursor = 2</text>
+
+            <!-- Slot 3: Unvisited ("Date") -->
+            <rect x="585" y="0" width="170" height="75" rx="6" class="it-box"/>
+            <text x="670" y="28" text-anchor="middle" class="it-txt">[3] "Date"</text>
+            <text x="670" y="48" text-anchor="middle" class="it-sub">Waiting in line</text>
+            <text x="670" y="64" text-anchor="middle" class="it-sub">cursor = 3</text>
+          </g>
+
+          <!-- Pointers from Below -->
+          <!-- Pointer to lastRet (Slot 0) -->
+          <path d="M 125, 175 L 125, 120" stroke="#7FD99B" stroke-width="2" marker-end="url(#it-arr-green)"/>
+          <text x="125" y="195" text-anchor="middle" class="it-stat" style="fill:#7FD99B;">lastRet = 0 (returned by previous next())</text>
+
+          <!-- Pointer to cursor (Slot 1) -->
+          <path d="M 320, 175 L 320, 120" stroke="#F5B563" stroke-width="2.5" marker-end="url(#it-arr-amber)"/>
+          <text x="320" y="195" text-anchor="middle" class="it-lbl">cursor = 1 (will be returned by next it.next())</text>
+        </svg>
+        <div class="viz-caption">The Iterator Pointer Model: The cursor tracks your position. Calling <code>next()</code> returns the element at <code>cursor</code> and increments the pointer.</div>
+      </div>
+
+      <div class="callout danger">
+        <div class="k">Is an Iterator Thread-Safe?</div>
+        <b>NO. Standard iterators are strictly NOT thread-safe.</b>
+        <br>
+        An iterator has internal variables (<code class="inline">cursor</code> and <code class="inline">lastRet</code>) that change every time an item is read. It is built to be used by <b>only one thread</b>. If two threads share the same iterator, their calls will scramble the cursor, skip items, or crash.
+      </div>
+
+      <h3>2. For-Each Loop vs. Manual Iterator</h3>
+      <p>Many developers think the enhanced <code class="inline">for-each</code> loop is a completely different feature. In truth, it is simply <b>syntactic sugar</b> (a shorthand shortcut). Behind the scenes, the Java compiler automatically translates your clean for-each loop into a standard <code class="inline">Iterator</code> loop:</p>
+
+      <div class="grid2">
+        <div class="card">
+          <h4 style="color:var(--cyan);">What You Write (For-Each Loop)</h4>
+          <pre style="margin:10px 0 0;"><span class="kw">for</span> (String fruit : list) {
+    System.out.println(fruit);
+}</pre>
+          <p class="dim" style="font-size:13px;margin-top:8px;">Clean and easy to read, with zero index variables to manage.</p>
+        </div>
+
+        <div class="card">
+          <h4 style="color:var(--amber);">What Java Actually Runs (Bytecode)</h4>
+          <pre style="margin:10px 0 0;">Iterator&lt;String&gt; it = list.iterator();
+<span class="kw">while</span> (it.hasNext()) {
+    String fruit = it.next();
+    System.out.println(fruit);
+}</pre>
+          <p class="dim" style="font-size:13px;margin-top:8px;">The Java compiler rewrites your for-each into this exact code!</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="k">When to Use Which?</div>
+        <ul style="margin:6px 0 0;padding-left:20px;font-size:14px;">
+          <li><b>Use For-Each:</b> When you only need to read elements. It is clean, readable, and eliminates off-by-one index bugs.</li>
+          <li><b>Use Manual Iterator:</b> When you need to remove elements while looping via <code class="inline">it.remove()</code>, or when you need bidirectional navigation using <code class="inline">ListIterator</code>.</li>
+        </ul>
+      </div>
+
+      <h3>3. The modCount Engine &amp; ConcurrentModificationException</h3>
+      <div class="callout warn">
+        <div class="k">Myth Buster: CME Does NOT Require Multiple Threads!</div>
+        One of the most common mistakes in Java interviews is assuming that <code class="inline">ConcurrentModificationException</code> only happens when multiple threads are running. <b>That is false!</b> You can easily trigger this crash with a single thread in just 3 lines of code.
+      </div>
+
+      <p>How does Java detect that a collection was modified during iteration? It uses an internal counter mechanism called <b>Fail-Fast</b>:</p>
+
+      <ol style="font-size:15px;line-height:1.7;padding-left:22px;color:var(--text-dim);">
+        <li>Inside <code class="inline">ArrayList</code> (inherited from <code class="inline">AbstractList</code>), there is a counter field:
+          <br><code class="inline" style="color:var(--cyan);">protected transient int modCount = 0;</code>
+        </li>
+        <li>Every structural modification method (<code class="inline">add()</code>, <code class="inline">remove()</code>, <code class="inline">clear()</code>) increments this counter:
+          <br><code class="inline" style="color:var(--amber);">modCount++;</code>
+        </li>
+        <li>When you create an iterator, it snapshots that count into its own private field:
+          <br><code class="inline" style="color:var(--cyan);">int expectedModCount = modCount;</code>
+        </li>
+        <li>Every single time you call <code class="inline">it.next()</code> or <code class="inline">it.remove()</code>, the iterator verifies that the list was not touched:
+<pre style="margin:8px 0;"><span class="kw">if</span> (modCount != expectedModCount) {
+    <span class="kw">throw new</span> ConcurrentModificationException();
+}</pre>
+        </li>
+      </ol>
+
+      <div class="grid2">
+        <div class="card" style="border-color:rgba(240,131,122,0.3);">
+          <h4 style="color:var(--coral);">❌ The Single-Threaded Crash Example</h4>
+          <pre style="margin:10px 0;"><span class="ty">List</span>&lt;<span class="ty">String</span>&gt; list = <span class="kw">new</span> ArrayList&lt;&gt;();
+list.add(<span class="st">"Apple"</span>);
+list.add(<span class="st">"Banana"</span>);
+
+<span class="kw">for</span> (String s : list) {
+    <span class="kw">if</span> (s.equals(<span class="st">"Apple"</span>)) {
+        list.remove(s); <span class="c1">// 💥 CRASH!</span>
+    }
+}</pre>
+          <p class="dim" style="font-size:13px;margin:0;">
+            <b>Why it crashes:</b> <code class="inline">list.remove()</code> increments <code class="inline">modCount</code> from 2 to 3. On the next loop step, the iterator's <code class="inline">next()</code> sees that <code class="inline">expectedModCount (2) != modCount (3)</code> and throws <code class="inline">ConcurrentModificationException</code> instantly!
+          </p>
+        </div>
+
+        <div class="card" style="border-color:rgba(127,217,155,0.3);">
+          <h4 style="color:var(--green);">✓ The Safe Way: Iterator.remove()</h4>
+          <pre style="margin:10px 0;"><span class="ty">Iterator</span>&lt;<span class="ty">String</span>&gt; it = list.iterator();
+<span class="kw">while</span> (it.hasNext()) {
+    String s = it.next();
+    <span class="kw">if</span> (s.equals(<span class="st">"Apple"</span>)) {
+        it.remove(); <span class="c1">// ✓ 100% SAFE!</span>
+    }
+}</pre>
+          <p class="dim" style="font-size:13px;margin:0;">
+            <b>Why it works:</b> <code class="inline">it.remove()</code> deletes the item from the backing array AND immediately updates <code class="inline">expectedModCount = modCount</code>. Both numbers stay in perfect sync!
+          </p>
+        </div>
+      </div>
+
+      <h3>4. Modern In-Loop Removal: list.removeIf() &amp; The DSA Two-Pointer Shift</h3>
+      <div class="sub">How does removeIf() delete items up to 1,000× faster than an Iterator loop? Why is this identical to classic LeetCode array compaction? Here is the exact internal algorithm.</div>
+
+      <p>Starting in Java 8, Java added a much cleaner way to remove items matching a condition:</p>
+
+      <pre><span class="c1">// Removes all items starting with "A" in one clean line:</span>
+list.removeIf(item -&gt; item.startsWith(<span class="st">"A"</span>));</pre>
+
+      <p>Many developers think <code class="inline">removeIf()</code> is just a fancy shortcut for an <code class="inline">Iterator</code> while-loop. <b>It is not!</b> Under the hood, <code class="inline">removeIf()</code> uses a completely different, highly optimized algorithm that is fundamentally faster and directly connects to Data Structures &amp; Algorithms (DSA).</p>
+
+      <h4>The Big Problem: Why Naive Iterator Removal is Slow ($O(N^2)$ Trap in DSA)</h4>
+      <p>Why can't we just use a regular <code class="inline">Iterator</code> loop with <code class="inline">it.remove()</code>? Look at what happens inside RAM:</p>
+
+      <div class="grid2">
+        <div class="card" style="border-color:rgba(240,131,122,0.3);">
+          <h4 style="color:var(--coral);">The Naive Iterator Shift Problem</h4>
+          <p class="dim" style="font-size:13.5px;margin:0 0 10px;">
+            In an <code class="inline">ArrayList</code>, elements sit side-by-side in continuous memory. Every time you call <code class="inline">it.remove()</code>, Java calls <code class="inline">System.arraycopy</code> to shift <b>every single element behind it one slot to the left</b>.
+          </p>
+          <div style="font-size:13px;color:var(--coral);font-family:var(--mono);line-height:1.5;">
+            • Array has 10,000 items; remove 5,000 items<br>
+            • Delete #1 ➔ shifts 9,999 items left<br>
+            • Delete #2 ➔ shifts 9,998 items left<br>
+            • Total work: ~25,000,000 memory copies!<br>
+            • modCount incremented 5,000 times!
+          </div>
+          <p class="dim" style="font-size:12.5px;margin-top:10px;color:var(--coral);">
+            💥 In coding interviews and DSA platforms (like LeetCode), this repeated shifting causes <b>Time Limit Exceeded (TLE)</b>!
+          </p>
+        </div>
+
+        <div class="card" style="border-color:rgba(127,217,155,0.3);">
+          <h4 style="color:var(--green);">The removeIf() Two-Pointer Solution</h4>
+          <p class="dim" style="font-size:13.5px;margin:0 0 10px;">
+            Instead of shifting on every delete, <code class="inline">removeIf()</code> scans the array <b>in a single pass</b> using two pointers. Surviving elements slide directly into their final positions!
+          </p>
+          <div style="font-size:13px;color:var(--green);font-family:var(--mono);line-height:1.5;">
+            • Array has 10,000 items; remove 5,000 items<br>
+            • Scans 10,000 items in 1 pass<br>
+            • Copies surviving 5,000 items directly to front<br>
+            • Total work: ~10,000 operations (1,000× faster!)<br>
+            • modCount incremented ONCE at the end!
+          </div>
+          <p class="dim" style="font-size:12.5px;margin-top:10px;color:var(--green);">
+            ⚡ Linear time <b>O(N)</b> and zero extra array allocation!
+          </p>
+        </div>
+      </div>
+
+      <h4>The DSA Algorithm: In-Place Two-Pointer Compaction</h4>
+      <p>How does a Senior Engineer or LeetCode solver delete elements from an array in $O(N)$ time without allocating a second array? They use the <b>Two-Pointer Compaction Technique</b> (the exact pattern used in LeetCode #27: <i>Remove Element</i> and #26: <i>Remove Duplicates</i>):</p>
+
+      <div class="grid2">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span class="badge badge-cyan">POINTER 1</span>
+            <h4 style="margin:0;color:var(--cyan);">The Scanner: Read Pointer (i)</h4>
+          </div>
+          <p class="dim" style="font-size:13.5px;margin:0;">
+            Moves from index <code class="inline">0</code> to <code class="inline">size - 1</code>, inspecting every element to see if it matches the deletion condition.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span class="badge badge-amber">POINTER 2</span>
+            <h4 style="margin:0;color:var(--amber);">The Packer: Write Pointer (j)</h4>
+          </div>
+          <p class="dim" style="font-size:13.5px;margin:0;">
+            Points to the next open slot at the front of the array where the next <b>surviving</b> element should be written.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="k">The Two-Pointer Rules in Plain English</div>
+        <ol style="margin:6px 0 0;padding-left:20px;font-size:14.5px;line-height:1.7;color:var(--text-dim);">
+          <li><b>Element Matches Condition (Delete):</b> Do NOT copy it! The Scanner (<code class="inline">i</code>) simply moves forward to the next index. The Packer (<code class="inline">j</code>) waits patiently.</li>
+          <li><b>Element Does NOT Match (Keep):</b> Copy the survivor directly into the Packer's slot: <code class="inline">elementData[j] = elementData[i]</code>. Then advance the Packer: <code class="inline">j++</code>!</li>
+          <li><b>Result:</b> Every survivor is moved <b>at most once</b> directly to its final home at the front of the list. No elements are shifted repeatedly!</li>
+        </ol>
+      </div>
+
+      <!-- SVG Visualization: The Two-Pointer Sliding Compaction -->
+      <div class="viz">
+        <svg viewBox="0 0 840 280" width="100%" style="max-width:840px;">
+          <style>
+            .tp-box-keep { fill: rgba(127, 217, 155, 0.12); stroke: #7FD99B; stroke-width: 1.5; rx: 5px; }
+            .tp-box-drop { fill: rgba(240, 131, 122, 0.12); stroke: #F0837A; stroke-width: 1.5; rx: 5px; stroke-dasharray: 4 2; }
+            .tp-box-null { fill: #080D18; stroke: rgba(140, 170, 220, 0.2); stroke-width: 1.2; rx: 5px; stroke-dasharray: 3 3; }
+            .tp-text { font-family: 'IBM Plex Mono', monospace; font-size: 12px; fill: #E7EDF7; font-weight: 500; }
+            .tp-subtext { font-family: 'IBM Plex Mono', monospace; font-size: 10px; fill: #5D6D8A; }
+            .tp-title { font-family: 'Space Grotesk', sans-serif; font-size: 12.5px; font-weight: 700; fill: #93A3BE; }
+          </style>
+          <defs>
+            <marker id="tp-arr-cyan" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#6EE7D8" />
+            </marker>
+            <marker id="tp-arr-amber" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#F5B563" />
+            </marker>
+            <marker id="tp-slide" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#7FD99B" />
+            </marker>
+          </defs>
+
+          <!-- Step 1 Title -->
+          <text x="40" y="25" class="tp-title">1. INITIAL ARRAY: Condition = removeIf(word -&gt; word.startsWith("A"))</text>
+
+          <!-- Row 1: Original Array -->
+          <g transform="translate(40, 38)">
+            <!-- [0] Apple (DROP) -->
+            <rect x="0" y="0" width="115" height="55" class="tp-box-drop"/>
+            <text x="57" y="24" text-anchor="middle" class="tp-text" style="fill:#F0837A;">[0] Apple</text>
+            <text x="57" y="42" text-anchor="middle" class="tp-subtext" style="fill:#F0837A;">❌ DISCARD</text>
+
+            <!-- [1] Banana (KEEP) -->
+            <rect x="125" y="0" width="115" height="55" class="tp-box-keep"/>
+            <text x="182" y="24" text-anchor="middle" class="tp-text" style="fill:#7FD99B;">[1] Banana</text>
+            <text x="182" y="42" text-anchor="middle" class="tp-subtext" style="fill:#7FD99B;">✓ KEEP</text>
+
+            <!-- [2] Apricot (DROP) -->
+            <rect x="250" y="0" width="115" height="55" class="tp-box-drop"/>
+            <text x="307" y="24" text-anchor="middle" class="tp-text" style="fill:#F0837A;">[2] Apricot</text>
+            <text x="307" y="42" text-anchor="middle" class="tp-subtext" style="fill:#F0837A;">❌ DISCARD</text>
+
+            <!-- [3] Cherry (KEEP) -->
+            <rect x="375" y="0" width="115" height="55" class="tp-box-keep"/>
+            <text x="432" y="24" text-anchor="middle" class="tp-text" style="fill:#7FD99B;">[3] Cherry</text>
+            <text x="432" y="42" text-anchor="middle" class="tp-subtext" style="fill:#7FD99B;">✓ KEEP</text>
+
+            <!-- [4] Avocado (DROP) -->
+            <rect x="500" y="0" width="115" height="55" class="tp-box-drop"/>
+            <text x="557" y="24" text-anchor="middle" class="tp-text" style="fill:#F0837A;">[4] Avocado</text>
+            <text x="557" y="42" text-anchor="middle" class="tp-subtext" style="fill:#F0837A;">❌ DISCARD</text>
+
+            <!-- [5] Date (KEEP) -->
+            <rect x="625" y="0" width="115" height="55" class="tp-box-keep"/>
+            <text x="682" y="24" text-anchor="middle" class="tp-text" style="fill:#7FD99B;">[5] Date</text>
+            <text x="682" y="42" text-anchor="middle" class="tp-subtext" style="fill:#7FD99B;">✓ KEEP</text>
+          </g>
+
+          <!-- Sliding Motion Curves -->
+          <!-- Banana [1] slides to [0] -->
+          <path d="M 222, 95 C 222, 125 97, 125 97, 155" fill="none" stroke="#7FD99B" stroke-width="2" marker-end="url(#tp-slide)"/>
+          <!-- Cherry [3] slides to [1] -->
+          <path d="M 472, 95 C 472, 125 222, 125 222, 155" fill="none" stroke="#7FD99B" stroke-width="2" marker-end="url(#tp-slide)"/>
+          <!-- Date [5] slides to [2] -->
+          <path d="M 722, 95 C 722, 125 347, 125 347, 155" fill="none" stroke="#7FD99B" stroke-width="2" marker-end="url(#tp-slide)"/>
+
+          <!-- Step 2 Title -->
+          <text x="40" y="145" class="tp-title">2. COMPACTED RESULT: Survivors packed at front, trailing slots cleared to null for GC</text>
+
+          <!-- Row 2: Compacted Array -->
+          <g transform="translate(40, 160)">
+            <!-- [0] Banana -->
+            <rect x="0" y="0" width="115" height="55" class="tp-box-keep"/>
+            <text x="57" y="24" text-anchor="middle" class="tp-text" style="fill:#7FD99B;font-weight:700;">[0] Banana</text>
+            <text x="57" y="42" text-anchor="middle" class="tp-subtext" style="fill:#6EE7D8;">Packed at slot 0</text>
+
+            <!-- [1] Cherry -->
+            <rect x="125" y="0" width="115" height="55" class="tp-box-keep"/>
+            <text x="182" y="24" text-anchor="middle" class="tp-text" style="fill:#7FD99B;font-weight:700;">[1] Cherry</text>
+            <text x="182" y="42" text-anchor="middle" class="tp-subtext" style="fill:#6EE7D8;">Packed at slot 1</text>
+
+            <!-- [2] Date -->
+            <rect x="250" y="0" width="115" height="55" class="tp-box-keep"/>
+            <text x="307" y="24" text-anchor="middle" class="tp-text" style="fill:#7FD99B;font-weight:700;">[2] Date</text>
+            <text x="307" y="42" text-anchor="middle" class="tp-subtext" style="fill:#6EE7D8;">Packed at slot 2</text>
+
+            <!-- [3] null -->
+            <rect x="375" y="0" width="115" height="55" class="tp-box-null"/>
+            <text x="432" y="24" text-anchor="middle" class="tp-text" style="fill:#5D6D8A;font-style:italic;">[3] null</text>
+            <text x="432" y="42" text-anchor="middle" class="tp-subtext" style="fill:#5D6D8A;">GC Ready 🧹</text>
+
+            <!-- [4] null -->
+            <rect x="500" y="0" width="115" height="55" class="tp-box-null"/>
+            <text x="557" y="24" text-anchor="middle" class="tp-text" style="fill:#5D6D8A;font-style:italic;">[4] null</text>
+            <text x="557" y="42" text-anchor="middle" class="tp-subtext" style="fill:#5D6D8A;">GC Ready 🧹</text>
+
+            <!-- [5] null -->
+            <rect x="625" y="0" width="115" height="55" class="tp-box-null"/>
+            <text x="682" y="24" text-anchor="middle" class="tp-text" style="fill:#5D6D8A;font-style:italic;">[5] null</text>
+            <text x="682" y="42" text-anchor="middle" class="tp-subtext" style="fill:#5D6D8A;">GC Ready 🧹</text>
+          </g>
+
+          <text x="420" y="255" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="12" fill="#93A3BE">
+            New Size = <tspan fill="#F5B563" font-weight="bold">3</tspan>. Total moves: only <tspan fill="#7FD99B" font-weight="bold">3 copies</tspan> in 1 pass. modCount incremented <tspan fill="#6EE7D8" font-weight="bold">only ONCE</tspan>!
+          </text>
+        </svg>
+        <div class="viz-caption">The Two-Pointer Sliding Compaction: Read pointer scans across. Surviving items jump straight into their final forward slots. Trailing slots are nulled out in batch.</div>
+      </div>
+
+      <h4>The Memory Secret: Why Trailing Slots MUST Be Set to null</h4>
+      <p>Look closely at slots 3, 4, and 5 in the diagram above. Notice that Java explicitly sets them to <code class="inline">null</code>:</p>
+      <pre><span class="c1">// OpenJDK ArrayList.java cleanup loop:</span>
+<span class="kw">for</span> (<span class="kw">int</span> k = newSize; k &lt; size; k++) {
+    elementData[k] = <span class="kw">null</span>;  <span class="c1">// Let Garbage Collector do its work!</span>
+}</pre>
+
+      <div class="callout danger">
+        <div class="k">What happens if Java does NOT set trailing slots to null? (Object Loitering)</div>
+        In Java, as long as an array slot holds a reference to an object, <b>the Garbage Collector is strictly forbidden from removing that object from memory</b>!
+        <br><br>
+        If Java simply updated <code class="inline">this.size = 3</code> without clearing slots 3, 4, and 5, the backing array would still hold pointers to <code class="inline">"Cherry"</code>, <code class="inline">"Avocado"</code>, and <code class="inline">"Date"</code> in memory. Even though the developer deleted them from the list, they would remain stuck in RAM forever. In software engineering and interviews, this is called a <b>Memory Leak via Object Loitering</b>.
+      </div>
+
+      <!-- ================= INTERACTIVE TWO-POINTER STEPPER ================= -->
+      <h4>⚡ Interactive Two-Pointer Stepper: Watch removeIf() in Action</h4>
+      <p>Step through the algorithm below to see the Read Pointer (<code class="inline">i</code>) and Write Pointer (<code class="inline">j</code>) compact an array in real time:</p>
+
+      <div class="tp-widget">
+        <div class="tp-controls">
+          <button class="btn" onclick="twoPointerDemo.nextStep()">▶ Step Forward (Read &amp; Pack)</button>
+          <button class="btn" style="background:var(--cyan);color:#080D18;" onclick="twoPointerDemo.autoRun()">⚡ Auto Play</button>
+          <button class="btn alt" onclick="twoPointerDemo.reset()">Reset</button>
+        </div>
+
+        <div class="tp-status-bar">
+          <div>Read Pointer (<code class="inline" style="color:var(--cyan);">i</code>): <span id="tp-read-idx" style="color:var(--cyan);font-weight:700;">Not Started</span></div>
+          <div>Write Pointer (<code class="inline" style="color:var(--amber);">j</code>): <span id="tp-write-idx" style="color:var(--amber);font-weight:700;">Index 0</span></div>
+          <div>Copies in removeIf: <span id="tp-copy-count" style="color:var(--green);font-weight:700;">0</span> (vs Naive Shifts: <span id="tp-naive-count" style="color:var(--coral);font-weight:700;">0</span>)</div>
+        </div>
+
+        <div class="tp-strip" id="tp-cells-display">
+          <!-- Populated via JavaScript -->
+        </div>
+
+        <div class="tp-log" id="tp-log">
+          System idle: 6 elements loaded. Filter condition: remove words starting with "A". Click "Step Forward" to watch.
+        </div>
+      </div>
+
+      <h4>DSA Performance Comparison: Naive Iterator vs. removeIf()</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Characteristic</th>
+            <th class="mono">Naive Iterator Loop (it.remove())</th>
+            <th class="mono">list.removeIf() (Two-Pointer Shift)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Time Complexity</b></td>
+            <td class="mono choice-bad">O(N²) — Shifts remainder on every delete</td>
+            <td class="mono choice-good">O(N) — Single pass linear compaction</td>
+          </tr>
+          <tr>
+            <td><b>Work for 10,000 items (5,000 deleted)</b></td>
+            <td class="mono choice-bad">~25,000,000 memory copies (TLE!)</td>
+            <td class="mono choice-good">~10,000 single-pass operations (1,000× faster!)</td>
+          </tr>
+          <tr>
+            <td><b>Iterator Allocation</b></td>
+            <td class="mono choice-warn">Creates an Iterator object on the Heap</td>
+            <td class="mono choice-good">Zero iterator allocation (0 bytes)</td>
+          </tr>
+          <tr>
+            <td><b>modCount Counter Updates</b></td>
+            <td class="mono choice-bad">Incremented 5,000 times (on every delete)</td>
+            <td class="mono choice-good">Incremented ONLY ONCE at the end</td>
+          </tr>
+          <tr>
+            <td><b>Memory Leak Prevention</b></td>
+            <td>Clears 1 trailing slot per delete</td>
+            <td>Batched loop clears all trailing slots to null for GC</td>
+          </tr>
+          <tr>
+            <td><b>Direct DSA Equivalent</b></td>
+            <td class="mono choice-bad">Inefficient nested array shifts</td>
+            <td class="mono choice-good">LeetCode #27 (Remove Element) Two-Pointer</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout danger" style="margin-top:18px;">
+        <div class="k">Common Interview Trap: Never Call removeIf() Inside a For-Each Loop!</div>
+        Calling <code class="inline">list.removeIf()</code> while inside an active <code class="inline">for (String s : list)</code> loop will immediately throw <code class="inline">ConcurrentModificationException</code>! The outer loop's iterator is still actively watching <code class="inline">modCount</code>. You use <code class="inline">removeIf()</code> <b>instead of</b> a loop, never inside one.
+      </div>
+    </section>
+
+    <!-- ================= SECTION 9: LEGACY LISTS & THE 3 ERAS ================= -->
+    <section id="lists-vector">
+      <div class="eyebrow">09 — LEGACY LISTS &amp; THE 3 ERAS</div>
+      <h2>Vector, Stack &amp; The 3 Eras of Java Lists</h2>
+      <div class="sub">Java was created in 1995. How did we go from slow synchronized lists to modern high-speed concurrent lists? Here is the 3-era evolution every developer should know.</div>
+
+      <p>To understand why Java lists behave the way they do today, we must look at how Java evolved across three distinct eras:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Era &amp; Version</th>
+            <th>Collections Available</th>
+            <th>Design Philosophy &amp; Real-World Tradeoffs</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Era 1: Java 1.0 / 1.1 (1996)</b></td>
+            <td class="mono">Vector, Hashtable, Stack</td>
+            <td>
+              <b>Safe by default, but slow.</b> Every public method was marked <code class="inline">synchronized</code>. In 99% of programs that only use a single thread, the CPU wasted heavy time acquiring and releasing locks for no reason.
+            </td>
+          </tr>
+          <tr>
+            <td><b>Era 2: Java 1.2 (1998)</b></td>
+            <td class="mono">ArrayList, Collections.synchronizedList()</td>
+            <td>
+              <b>Fast by default (No locks).</b> The Java Collections Framework was born. Collections were made non-synchronized for maximum speed. For multi-threaded programs, Java introduced wrapper bridges via <code class="inline">Collections.synchronizedList()</code>.
+            </td>
+          </tr>
+          <tr>
+            <td><b>Era 3: Java 5.0 (2004)</b></td>
+            <td class="mono">CopyOnWriteArrayList, ConcurrentHashMap</td>
+            <td>
+              <b>Lock-free readers.</b> Doug Lea created <code class="inline">java.util.concurrent</code>. Replaced heavy whole-list locks with lock-free reading, memory snapshots, and fine-grained thread safety.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Why did Java introduce Collections.synchronizedList()?</h3>
+      <p>In Java 1.2, Java created the standardized <code class="inline">List</code> interface. Developers wanted to use modern classes like <code class="inline">ArrayList</code>, but sometimes still needed thread safety. Instead of forcing developers to stick with legacy <code class="inline">Vector</code> or write custom locking code, Java provided <code class="inline">Collections.synchronizedList()</code>. It works like a protective jacket: it wraps any list and puts a monitor lock around every method call.</p>
+
+      <div class="callout danger">
+        <div class="k">Why Vector and Stack are Obsolete Today</div>
+        <ul style="margin:6px 0 0;padding-left:20px;font-size:14px;color:var(--text-dim);">
+          <li><b>Unnecessary Locking Overhead:</b> In 99% of programs, collections are used within a single thread. Vector forces your CPU to acquire and release a thread lock on every single <code class="inline">get()</code>, <code class="inline">add()</code>, and <code class="inline">size()</code> call, crushing throughput.</li>
+          <li><b>Broken Encapsulation in Stack:</b> Because <code class="inline">Stack extends Vector</code>, it inherits general list methods like <code class="inline">stack.add(2, "oops")</code>. This lets developers insert or remove elements in the middle of a stack, breaking the fundamental LIFO (Last-In, First-Out) rule!</li>
+          <li><b>Modern Replacement:</b> For single-threaded stack or queue operations, the official Java documentation recommends <code class="inline">ArrayDeque</code>. For multi-threaded lists, use <code class="inline">CopyOnWriteArrayList</code> or modern concurrency tools.</li>
+        </ul>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Class</th>
+            <th>Backing Structure</th>
+            <th>Thread-Safe?</th>
+            <th>Verdict Today</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">Vector</td>
+            <td>Growable contiguous array</td>
+            <td>Yes (synchronized methods)</td>
+            <td class="choice-bad">Obsolete — Use ArrayList</td>
+          </tr>
+          <tr>
+            <td class="mono">Stack</td>
+            <td>Growable contiguous array (extends Vector)</td>
+            <td>Yes (inherited locks)</td>
+            <td class="choice-bad">Obsolete — Use ArrayDeque</td>
+          </tr>
+          <tr>
+            <td class="mono">ArrayList</td>
+            <td>Contiguous 1.5× growable array</td>
+            <td>No (fast, lock-free)</td>
+            <td class="choice-good">Standard Default List</td>
+          </tr>
+          <tr>
+            <td class="mono">ArrayDeque</td>
+            <td>Circular contiguous array</td>
+            <td>No (fast, lock-free)</td>
+            <td class="choice-good">Standard Default Stack/Queue</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================= SECTION 10: COPY-ON-WRITE ARRAYLIST ================= -->
+    <section id="cow-list">
+      <div class="eyebrow">10 — CONCURRENT COLLECTIONS</div>
+      <h2>CopyOnWriteArrayList: The Lock-Free Reader's Paradise</h2>
+      <div class="sub">What if read operations never touched a lock, never waited on other threads, and never threw ConcurrentModificationException—by making writes copy the entire array?</div>
+
+      <p>So far, we have looked at single-threaded lists (<code class="inline">ArrayList</code>, <code class="inline">LinkedList</code>) and archaic synchronized lists (<code class="inline">Vector</code>). But in modern multi-core server applications, dozens of threads read and write shared data concurrently. This brings us to a critical engineering dilemma:</p>
+
+      <div class="grid2">
+        <div class="card" style="border-color:rgba(240,131,122,0.3);">
+          <h4 style="color:var(--coral);">1. The ArrayList Concurrency Catastrophe</h4>
+          <p class="dim" style="font-size:13.5px;margin:0 0 10px;">
+            <code class="inline">ArrayList</code> is not thread-safe. Concurrent writes cause silent data loss, corrupt <code class="inline">size</code> fields, or buffer overruns. Even worse: if Thread A iterates over the list while Thread B adds an item, Thread A immediately crashes with:
+          </p>
+          <div style="font-size:12.5px;color:var(--coral);font-family:var(--mono);background:#080D18;padding:8px 10px;border-radius:4px;border:1px solid rgba(240,131,122,0.2);">
+            java.util.ConcurrentModificationException<br>
+            <span style="color:var(--text-faint);">at ArrayList$Itr.checkForComodification()</span>
+          </div>
+        </div>
+
+        <div class="card" style="border-color:rgba(245,181,99,0.3);">
+          <h4 style="color:var(--amber);">2. The Vector &amp; SynchronizedList Trap</h4>
+          <p class="dim" style="font-size:13.5px;margin:0 0 10px;">
+            <code class="inline">Vector</code> and <code class="inline">Collections.synchronizedList()</code> wrap every method in a monitor lock. If 100 threads read configuration, they serialize into a single-file queue, killing throughput.
+          </p>
+          <div style="font-size:12.5px;color:var(--amber);font-family:var(--mono);background:#080D18;padding:8px 10px;border-radius:4px;border:1px solid rgba(245,181,99,0.2);">
+            ⚠️ <b>The Iteration Trap:</b> Foreach loops on synchronizedList still crash with ConcurrentModificationException unless you manually lock the entire list!
+          </div>
+        </div>
+      </div>
+
+      <div class="callout danger" style="margin-top:18px;">
+        <div class="k">The Official JDK Warning on Collections.synchronizedList()</div>
+        The official Java standard library documentation explicitly warns:
+        <pre style="margin:10px 0 6px;"><span class="c1">// Must manually synchronize on the returned list when iterating:</span>
+List&lt;String&gt; syncList = Collections.synchronizedList(<span class="kw">new</span> ArrayList&lt;&gt;());
+...
+<span class="kw">synchronized</span> (syncList) {  <span class="c1">// Missing this block = INSTANT CRASH under concurrency!</span>
+    <span class="kw">for</span> (String s : syncList) {
+        process(s);
+    }
+}</pre>
+        If your iteration takes 10 milliseconds, all other threads in your entire application are <b>completely blocked</b> from reading or writing for 10 full milliseconds!
+      </div>
+
+      <!-- SVG Visualization 2: The SynchronizedList Race Condition Step-by-Step -->
+      <div class="viz">
+        <svg viewBox="0 0 840 235" width="100%" style="max-width:840px;">
+          <style>
+            .tl-axis { stroke: #5D6D8A; stroke-width: 2; }
+            .tl-step-danger { fill: rgba(240, 131, 122, 0.12); stroke: #F0837A; stroke-width: 1.8; rx: 6px; }
+            .tl-step-warn { fill: rgba(245, 181, 99, 0.12); stroke: #F5B563; stroke-width: 1.8; rx: 6px; }
+            .tl-step-info { fill: rgba(110, 231, 216, 0.1); stroke: #6EE7D8; stroke-width: 1.8; rx: 6px; }
+            .tl-title { font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; }
+            .tl-detail { font-family: 'IBM Plex Mono', monospace; font-size: 11px; fill: #93A3BE; }
+          </style>
+          <defs>
+            <marker id="tl-arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#5D6D8A" />
+            </marker>
+          </defs>
+
+          <!-- Timeline Arrow -->
+          <line x1="40" y1="40" x2="800" y2="40" class="tl-axis" marker-end="url(#tl-arr)"/>
+          <text x="805" y="44" font-family="'IBM Plex Mono', monospace" font-size="11" fill="#5D6D8A">Time</text>
+
+          <!-- Step 1: Thread A hasNext() -->
+          <circle cx="150" cy="40" r="7" fill="#6EE7D8"/>
+          <text x="150" y="24" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="11" fill="#6EE7D8">T = 0 ms</text>
+          <g transform="translate(45, 60)">
+            <rect width="210" height="145" class="tl-step-info"/>
+            <text x="105" y="26" text-anchor="middle" class="tl-title" style="fill:#6EE7D8;">1. Thread A: hasNext()</text>
+            <text x="16" y="52" class="tl-detail">• Acquires mutex lock</text>
+            <text x="16" y="72" class="tl-detail">• Checks items: true</text>
+            <text x="16" y="94" class="tl-detail" style="fill:#F5B563;font-weight:700;">• RELEASES lock!</text>
+            <text x="16" y="116" class="tl-detail" style="fill:#5D6D8A;">Lock is now dropped...</text>
+            <text x="16" y="132" class="tl-detail" style="fill:#5D6D8A;">Door is wide open!</text>
+          </g>
+
+          <!-- Step 2: Thread B Sneaks In -->
+          <circle cx="420" cy="40" r="7" fill="#F5B563"/>
+          <text x="420" y="24" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="11" fill="#F5B563">T = 2 ms</text>
+          <g transform="translate(315, 60)">
+            <rect width="210" height="145" class="tl-step-warn"/>
+            <text x="105" y="26" text-anchor="middle" class="tl-title" style="fill:#F5B563;">2. Thread B: add("C")</text>
+            <text x="16" y="52" class="tl-detail">• Sneaks in &amp; grabs lock</text>
+            <text x="16" y="72" class="tl-detail">• Appends "C" to list</text>
+            <text x="16" y="94" class="tl-detail" style="fill:#F0837A;font-weight:700;">• modCount: 2 ➔ 3</text>
+            <text x="16" y="116" class="tl-detail">• Releases lock</text>
+            <text x="16" y="132" class="tl-detail" style="fill:#5D6D8A;">List count changed!</text>
+          </g>
+
+          <!-- Step 3: Thread A next() crashes -->
+          <circle cx="690" cy="40" r="7" fill="#F0837A"/>
+          <text x="690" y="24" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="11" fill="#F0837A">T = 4 ms</text>
+          <g transform="translate(585, 60)">
+            <rect width="210" height="145" class="tl-step-danger"/>
+            <text x="105" y="26" text-anchor="middle" class="tl-title" style="fill:#F0837A;">3. Thread A: next()</text>
+            <text x="16" y="52" class="tl-detail">• Re-acquires mutex lock</text>
+            <text x="16" y="72" class="tl-detail">• Checks modCount:</text>
+            <text x="16" y="94" class="tl-detail" style="fill:#F0837A;font-weight:700;">  expected(2) != actual(3)</text>
+            <text x="16" y="118" class="tl-detail" style="fill:#F0837A;font-weight:700;">💥 CRASH: CME Thrown!</text>
+            <text x="16" y="134" class="tl-detail" style="fill:#5D6D8A;">Loop dies immediately</text>
+          </g>
+        </svg>
+        <div class="viz-caption">The SynchronizedList Race Condition: Because the lock drops between <code>hasNext()</code> and <code>next()</code>, an interleaving writer changes <code>modCount</code>, causing the next step to fail-fast.</div>
+      </div>
+
+      <h3>Enter CopyOnWriteArrayList: The Doug Lea Architectural Masterpiece</h3>
+      <p>Introduced in Java 5 inside <code class="inline">java.util.concurrent</code>, <code class="inline">CopyOnWriteArrayList</code> implements the standard <code class="inline">List&lt;E&gt;</code> interface with an entirely fresh philosophy:</p>
+      
+      <div class="analogy">
+        <div class="icon">📋</div>
+        <div>
+          <div class="k">The Bulletin Board Analogy: The Zero-Lock Principle</div>
+          Imagine a company bulletin board pinned with the company holiday calendar. 
+          <br><br>
+          Thousands of employees walk past and read the calendar simultaneously. Nobody waits, nobody takes a number, nobody acquires a lock. 
+          <br><br>
+          Once a year, HR wants to add a new holiday. Instead of tearing down the active board and making 5,000 employees wait, HR takes the master sheet, <b>photocopies the entire sheet onto fresh paper</b>, writes the new holiday on the copy, and instantly unpins the old paper and pins the new copy up!
+        </div>
+      </div>
+
+      <h3>Under The Hood: The Volatile Array &amp; Clone-on-Write Dance</h3>
+      <p>Looking inside the OpenJDK source code of <code class="inline">CopyOnWriteArrayList</code>, its entire data state is governed by two fields:</p>
+
+      <pre><span class="kw">public class</span> CopyOnWriteArrayList&lt;E&gt; <span class="kw">implements</span> List&lt;E&gt;, RandomAccess, Cloneable, Serializable {
+    
+    <span class="c1">/** The lock protecting all mutating operations */</span>
+    <span class="kw">final transient</span> Object lock = <span class="kw">new</span> Object(); <span class="c1">// or ReentrantLock in older JDKs</span>
+
+    <span class="c1">/** The internal array — declared VOLATILE for instant CPU cache visibility */</span>
+    <span class="kw">private transient volatile</span> Object[] array;
+}</pre>
+
+      <p>Notice the genius of making the array pointer <b><code class="inline">volatile</code></b>: in the Java Memory Model (JMM), writes to a volatile reference establish a "happens-before" relationship. The instant the pointer is updated, all CPU cores see the new array reference with <b>zero locks and zero CAS spin-loops</b>!</p>
+
+      <div class="grid2">
+        <div class="card" style="border-color:rgba(110,231,216,0.3);">
+          <h4 style="color:var(--cyan);">How Reading Works (100% Lock-Free O(1))</h4>
+          <pre style="margin:8px 0;"><span class="kw">public</span> E get(<span class="kw">int</span> index) {
+    <span class="kw">return</span> (E) getArray()[index];
+}</pre>
+          <p class="dim" style="font-size:13px;margin:0;">
+            Zero synchronization! Reads just fetch the current volatile array pointer and read the index directly using RAM offset math. Blazing fast, immune to thread contention.
+          </p>
+        </div>
+
+        <div class="card" style="border-color:rgba(245,181,99,0.3);">
+          <h4 style="color:var(--amber);">How Writing Works (Clone &amp; Swap O(N))</h4>
+          <pre style="margin:8px 0;"><span class="kw">public boolean</span> add(E e) {
+    <span class="kw">synchronized</span> (lock) {
+        Object[] es = getArray();
+        <span class="kw">int</span> len = es.length;
+        es = Arrays.copyOf(es, len + 1); <span class="c1">// CLONE</span>
+        es[len] = e;                     <span class="c1">// MUTATE</span>
+        setArray(es);                    <span class="c1">// SWAP</span>
+        <span class="kw">return true</span>;
+    }
+}</pre>
+          <p class="dim" style="font-size:13px;margin:0;">
+            Writers acquire a lock so two writes never race. They clone the entire backing array, add the element to the clone, and swap the volatile reference atomically.
+          </p>
+        </div>
+      </div>
+
+      <h3>Snapshot Iterators: Why ConcurrentModificationException is Impossible</h3>
+      <p>When you call <code class="inline">list.iterator()</code> or write a <code class="inline">for (E item : list)</code> loop, <code class="inline">CopyOnWriteArrayList</code> does something remarkable:</p>
+
+      <pre><span class="kw">public</span> Iterator&lt;E&gt; iterator() {
+    <span class="kw">return new</span> COWIterator&lt;E&gt;(getArray(), 0);
+}</pre>
+
+      <p>The iterator takes a reference to the array that existed at the exact instant the iterator was born—a frozen <b>Snapshot</b>. Even if 10 other threads call <code class="inline">add()</code> or <code class="inline">remove()</code> while your loop is running, those writers are busy creating <i>brand new arrays</i>. Your iterator quietly traverses its private snapshot array without any interference!</p>
+
+      <div class="callout">
+        <div class="k">Snapshot Iterator Rules to Remember for Interviews</div>
+        <ul style="margin:6px 0 0;padding-left:20px;font-size:14px;color:var(--text-dim);">
+          <li><b>Fail-Safe:</b> It will <b>NEVER</b> throw <code class="inline">ConcurrentModificationException</code>. Zero manual synchronization required!</li>
+          <li><b>Read-Only View:</b> Because mutating a frozen past snapshot makes no sense, calling <code class="inline">iterator.remove()</code>, <code class="inline">iterator.add()</code>, or <code class="inline">iterator.set()</code> throws <code class="inline">UnsupportedOperationException</code>.</li>
+          <li><b>Point-In-Time Consistency:</b> The iterator will not see any modifications made to the list after the iterator was created.</li>
+        </ul>
+      </div>
+
+      <div class="card" style="margin:16px 0 22px;border-color:rgba(110,231,216,0.25);">
+        <h4 style="color:var(--cyan);margin-bottom:8px;">Does CopyOnWriteArrayList Use modCount?</h4>
+        <p style="margin:0;font-size:14.5px;color:var(--text-dim);line-height:1.65;">
+          <b>NO. CopyOnWriteArrayList has NO modCount field at all!</b><br>
+          In a standard <code class="inline">ArrayList</code>, <code class="inline">modCount</code> is required because writers can change the array while an iterator is actively reading from it. But in <code class="inline">CopyOnWriteArrayList</code>, the backing array in memory is <b>never changed in place</b> once created. Writers always allocate a brand-new array. Because the reader thread's snapshot array is completely frozen and immutable, the iterator never needs to check any modification counter.
+        </p>
+      </div>
+
+      <!-- ================= INTERACTIVE COPY-ON-WRITE SIMULATOR ================= -->
+      <h3>⚡ Interactive Simulation: Watch the Snapshot &amp; Clone Dance</h3>
+      <p>Experience how concurrent reader threads and writer threads interact without blocking each other in real-time:</p>
+
+      <div class="cow-widget">
+        <div class="cow-controls">
+          <button class="btn" onclick="cowDemo.spawnReader()">1. Spawn Reader Thread (Snapshot)</button>
+          <button class="btn" style="background:var(--amber);color:#080D18;" onclick="cowDemo.performWrite()">2. Concurrent Write: add("Route_D")</button>
+          <button class="btn alt" onclick="cowDemo.finishReader()">3. Finish Reader Thread</button>
+          <button class="btn alt" onclick="cowDemo.reset()">Reset</button>
+        </div>
+
+        <div class="cow-stage">
+          <!-- Lane 1: Active Threads & References -->
+          <div class="cow-lane">
+            <div class="cow-lane-title">
+              <span>Active Threads in System</span>
+              <span id="cow-thread-count" style="font-family:var(--mono);color:var(--cyan);">1 Thread</span>
+            </div>
+            <div id="cow-threads-display">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Lane 2: Physical Heap Arrays & Volatile Pointer -->
+          <div class="cow-lane">
+            <div class="cow-lane-title">
+              <span>JVM Heap Arrays &amp; Pointer</span>
+              <span class="cow-pointer-badge" id="cow-pointer-status">volatile array ➔ Array 0</span>
+            </div>
+            <div id="cow-arrays-display">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+
+        <div class="cow-log-box" id="cow-log">
+          System idle: Backing volatile array holds 3 items ['Route_A', 'Route_B', 'Route_C']. Click "Spawn Reader" to begin.
+        </div>
+      </div>
+
+      <!-- ================= JVM ARCHITECTURE: REFERENCE ISOLATION ================= -->
+      <h3>Stack Frame vs. Heap Memory: Reference Isolation</h3>
+      <p>This answers a fundamental question often asked in senior interviews: <i>"If Thread B adds an item and swaps the list's array reference, why doesn't Thread A's iterator start reading the new array or crash?"</i></p>
+      <p>To understand why, we look at how computer memory separates <b>Thread Stacks</b> from the <b>Shared JVM Heap</b>:</p>
+
+      <!-- SVG Visualization 3: JVM Architecture: Stack Local Reference vs Heap Array Isolation -->
+      <div class="viz">
+        <svg viewBox="0 0 840 340" width="100%" style="max-width:840px;">
+          <style>
+            .mem-stack-a { fill: #0C1626; stroke: #6EE7D8; stroke-width: 1.5; rx: 8px; }
+            .mem-stack-b { fill: #0C1626; stroke: #F0837A; stroke-width: 1.5; rx: 8px; }
+            .mem-heap { fill: #101B30; stroke: #F5B563; stroke-width: 1.5; rx: 8px; }
+            .mem-box { fill: #080D18; stroke: rgba(140,170,220,0.25); stroke-width: 1.2; rx: 5px; }
+            .mem-box-active { fill: rgba(110,231,216,0.08); stroke: #6EE7D8; stroke-width: 1.5; rx: 5px; }
+            .mem-box-new { fill: rgba(245,181,99,0.1); stroke: #F5B563; stroke-width: 1.5; rx: 5px; }
+            .mem-header { font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; fill: #E7EDF7; }
+            .mem-txt { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; fill: #E7EDF7; }
+            .mem-sub { font-family: 'IBM Plex Mono', monospace; font-size: 10px; fill: #5D6D8A; }
+          </style>
+          <defs>
+            <marker id="ptr-cyan" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#6EE7D8" />
+            </marker>
+            <marker id="ptr-coral" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#F0837A" />
+            </marker>
+            <marker id="ptr-amber" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#F5B563" />
+            </marker>
+          </defs>
+
+          <!-- Col 1: Thread A Stack (Private) -->
+          <g transform="translate(20, 20)">
+            <rect width="220" height="300" class="mem-stack-a"/>
+            <text x="110" y="32" text-anchor="middle" class="mem-header" style="fill:#6EE7D8;">Thread A Stack (Reader)</text>
+            <text x="110" y="50" text-anchor="middle" class="mem-sub">Private to Thread A</text>
+
+            <!-- Stack Frame: COWIterator -->
+            <g transform="translate(15, 75)">
+              <rect width="190" height="100" class="mem-box-active"/>
+              <text x="95" y="24" text-anchor="middle" class="mem-header" style="font-size:12px;fill:#6EE7D8;">COWIterator Frame</text>
+              <text x="12" y="50" class="mem-txt">snapshot = <tspan fill="#6EE7D8">0x1000</tspan></text>
+              <text x="12" y="70" class="mem-txt">cursor = 0</text>
+              <text x="12" y="90" class="mem-sub">Pinned to 0x1000 in RAM</text>
+            </g>
+          </g>
+
+          <!-- Col 2: Shared JVM Heap -->
+          <g transform="translate(270, 20)">
+            <rect width="300" height="300" class="mem-heap"/>
+            <text x="150" y="32" text-anchor="middle" class="mem-header" style="fill:#F5B563;">JVM Shared Heap</text>
+            <text x="150" y="50" text-anchor="middle" class="mem-sub">Visible to All Threads</text>
+
+            <!-- Old Array at 0x1000 -->
+            <g transform="translate(20, 65)">
+              <rect width="260" height="58" class="mem-box-active"/>
+              <text x="130" y="22" text-anchor="middle" class="mem-txt" style="fill:#6EE7D8;font-weight:600;">Array @ 0x1000 (Frozen)</text>
+              <text x="130" y="44" text-anchor="middle" class="mem-txt">["Apple", "Banana"]</text>
+            </g>
+
+            <!-- COWList Master Instance -->
+            <g transform="translate(20, 138)">
+              <rect width="260" height="65" class="mem-box"/>
+              <text x="130" y="22" text-anchor="middle" class="mem-header" style="font-size:11.5px;fill:#F5B563;">CopyOnWriteArrayList Object</text>
+              <text x="130" y="42" text-anchor="middle" class="mem-txt">volatile array = <tspan fill="#F5B563">0x2000</tspan></text>
+              <text x="130" y="58" text-anchor="middle" class="mem-sub">Pointer swapped to new array!</text>
+            </g>
+
+            <!-- New Array at 0x2000 -->
+            <g transform="translate(20, 220)">
+              <rect width="260" height="60" class="mem-box-new"/>
+              <text x="130" y="22" text-anchor="middle" class="mem-txt" style="fill:#F5B563;font-weight:600;">New Clone @ 0x2000</text>
+              <text x="130" y="44" text-anchor="middle" class="mem-txt">["Apple", "Banana", "Cherry"]</text>
+            </g>
+          </g>
+
+          <!-- Col 3: Thread B Stack (Writer) -->
+          <g transform="translate(600, 20)">
+            <rect width="220" height="300" class="mem-stack-b"/>
+            <text x="110" y="32" text-anchor="middle" class="mem-header" style="fill:#F0837A;">Thread B Stack (Writer)</text>
+            <text x="110" y="50" text-anchor="middle" class="mem-sub">Private to Thread B</text>
+
+            <!-- Stack Frame: add() -->
+            <g transform="translate(15, 75)">
+              <rect width="190" height="100" class="mem-box"/>
+              <text x="95" y="24" text-anchor="middle" class="mem-header" style="font-size:12px;fill:#F0837A;">list.add("Cherry")</text>
+              <text x="12" y="48" class="mem-txt">1. Clones to 0x2000</text>
+              <text x="12" y="68" class="mem-txt">2. Adds "Cherry"</text>
+              <text x="12" y="88" class="mem-txt" style="fill:#F5B563;">3. Swaps volatile array</text>
+            </g>
+          </g>
+
+          <!-- Connecting Reference Pointers -->
+          <!-- Thread A to Array @ 0x1000 -->
+          <path d="M 225, 145 L 285, 105" stroke="#6EE7D8" stroke-width="2.5" marker-end="url(#ptr-cyan)"/>
+
+          <!-- COWList to Array @ 0x2000 -->
+          <path d="M 420, 203 L 420, 218" stroke="#F5B563" stroke-width="2.5" marker-end="url(#ptr-amber)"/>
+
+          <!-- Thread B to Array @ 0x2000 -->
+          <path d="M 615, 155 L 555, 230" stroke="#F0837A" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#ptr-coral)"/>
+        </svg>
+        <div class="viz-caption">JVM Reference Isolation: Thread A's call stack keeps a direct pointer to the old array at <code>0x1000</code>. Even though Thread B created a new array at <code>0x2000</code> and updated the list object, Thread A continues reading its own private snapshot safely.</div>
+      </div>
+
+      <div class="callout">
+        <div class="k">The 4 Rules of Reference Swapping Safety</div>
+        <ol style="margin:6px 0 0;padding-left:20px;font-size:14.5px;line-height:1.7;color:var(--text-dim);">
+          <li><b>Thread Stacks are 100% Private:</b> Variables inside Thread A's call stack belong only to Thread A. Thread B cannot see or modify variables on Thread A's stack.</li>
+          <li><b>Pinned Snapshot Address:</b> When Thread A created its iterator, it copied the array's memory address (<code class="inline">snapshot = this.array (0x1000)</code>). It does not look back at the list object again.</li>
+          <li><b>Heap Array Immutability:</b> When Thread B adds an item, it allocates a fresh array at <code class="inline">0x2000</code> and updates the list's reference pointer. It <b>never</b> modifies the old array at <code class="inline">0x1000</code>.</li>
+          <li><b>Safe Garbage Collection:</b> Thread A finishes reading the old array at <code class="inline">0x1000</code> with zero locks and zero interference. Once all readers finish and no stack references point to <code class="inline">0x1000</code>, the JVM Garbage Collector automatically frees that memory.</li>
+        </ol>
+      </div>
+
+      <h3>The Catch: Why You Must Never Use It for Everything</h3>
+      <p>CopyOnWriteArrayList sounds like the holy grail of collections: fast O(1) indexed reads and 100% thread safety without read locks. So why isn't it the default List everywhere?</p>
+
+      <div class="grid2">
+        <div class="card" style="border-color:rgba(240,131,122,0.3);">
+          <h4 style="color:var(--coral);">1. Massive Write Amplification: O(N) Every Write</h4>
+          <p class="dim" style="font-size:13.5px;margin:0;">
+            Appending to an <code class="inline">ArrayList</code> is O(1) amortized. But appending to a <code class="inline">CopyOnWriteArrayList</code> with 100,000 elements forces the JVM to allocate a brand-new 100,001-element array and copy 100,000 64-bit object references through memory! A batch insert of 1,000 items copies millions of pointers.
+          </p>
+        </div>
+
+        <div class="card" style="border-color:rgba(240,131,122,0.3);">
+          <h4 style="color:var(--coral);">2. Severe GC Churn (Garbage Collection Pressure)</h4>
+          <p class="dim" style="font-size:13.5px;margin:0;">
+            Every single mutation discards the previous backing array. If writes happen frequently, the JVM Young Generation (Eden space) is flooded with discarded arrays, triggering frequent stop-the-world Garbage Collection pauses that stall the entire application.
+          </p>
+        </div>
+      </div>
+
+      <h3>Production Decision: When to Use vs. When to Run Away</h3>
+      <div class="callout warn">
+        <div class="k">The Golden Rule for CopyOnWriteArrayList</div>
+        Only use <code class="inline">CopyOnWriteArrayList</code> when your read-to-write ratio is at least <b>100:1 or 1,000:1</b> (reads happen constantly, writes happen rarely).
+        <br><br>
+        <b>✓ Prime Production Use Cases:</b>
+        <ul style="margin:6px 0 0;padding-left:20px;font-size:14px;">
+          <li><b>Observer / Listener Pattern:</b> Registering event listeners in GUI frameworks, Spring ApplicationListeners, or Netty pipeline handlers. Listeners are attached once during application startup, but events fire millions of times per hour across worker threads.</li>
+          <li><b>Routing &amp; Whitelist Caches:</b> An API gateway storing allowed IP CIDR ranges or service routing tables. Lookups occur on every incoming HTTP request (lock-free!), while configuration updates arrive only once a day via an admin webhook.</li>
+        </ul>
+        <br>
+        <b>✗ Terrible Anti-Patterns:</b>
+        <ul style="margin:6px 0 0;padding-left:20px;font-size:14px;">
+          <li>Message queues, job buffers, or streaming pipelines where producers continuously add items and consumers remove them. Use <code class="inline">ArrayBlockingQueue</code> or <code class="inline">ConcurrentLinkedQueue</code> instead!</li>
+          <li>Lists holding tens of thousands of items with frequent mutations.</li>
+        </ul>
+      </div>
+
+      <h3>The 4-Way Thread-Safe List Comparison Matrix</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Characteristic</th>
+            <th class="mono">ArrayList</th>
+            <th class="mono">Vector</th>
+            <th class="mono">Collections.synchronizedList</th>
+            <th class="mono">CopyOnWriteArrayList</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Read Performance (<code class="inline">get</code>)</b></td>
+            <td class="mono choice-good">O(1) Lock-free</td>
+            <td class="mono choice-bad">O(1) Synchronized (Slow)</td>
+            <td class="mono choice-bad">O(1) Synchronized (Slow)</td>
+            <td class="mono choice-good">O(1) Lock-free (Fastest)</td>
+          </tr>
+          <tr>
+            <td><b>Write Performance (<code class="inline">add</code>)</b></td>
+            <td class="mono choice-good">O(1) amortized</td>
+            <td class="mono choice-warn">O(1) amortized (Locked)</td>
+            <td class="mono choice-warn">O(1) amortized (Locked)</td>
+            <td class="mono choice-bad">O(N) Full Array Clone</td>
+          </tr>
+          <tr>
+            <td><b>Foreach Loop Thread-Safe?</b></td>
+            <td class="choice-bad">No (Crashes with CME)</td>
+            <td class="choice-bad">No (Crashes with CME)</td>
+            <td class="choice-bad">No (Requires manual lock!)</td>
+            <td class="choice-good">Yes (100% Fail-Safe Snapshot)</td>
+          </tr>
+          <tr>
+            <td><b>Iterator Mutability</b></td>
+            <td class="choice-good">Full <code class="inline">remove()</code> support</td>
+            <td class="choice-good">Full <code class="inline">remove()</code> support</td>
+            <td class="choice-good">Full <code class="inline">remove()</code> support</td>
+            <td class="choice-bad">Read-Only (Throws Exception)</td>
+          </tr>
+          <tr>
+            <td><b>Memory Overhead</b></td>
+            <td class="choice-good">Minimal (1.5× capacity)</td>
+            <td class="choice-good">Minimal (2× capacity)</td>
+            <td class="choice-good">Minimal (Wrapper object)</td>
+            <td class="choice-bad">High during writes (GC churn)</td>
+          </tr>
+          <tr>
+            <td><b>Verdict Today</b></td>
+            <td class="choice-good">Default for single threads</td>
+            <td class="choice-bad">Obsolete legacy code</td>
+            <td class="choice-warn">Rarely used; error-prone iteration</td>
+            <td class="choice-good">Default for read-heavy shared lists</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout" style="margin-top:20px;border-color:rgba(110,231,216,0.3);">
+        <div class="k">Deep Dive into JVM Concurrency</div>
+        Curious about memory barriers, false sharing, and how <code class="inline">ConcurrentHashMap</code> uses cooperative multi-threaded resizing? 
+        Explore our companion deep dive in <a href="05-concurrency.html#cow" target="content-frame" style="color:var(--cyan);font-weight:600;">Module 05 · Thread-Safe &amp; Concurrent Collections →</a>.
+      </div>
+    </section>
+
+    <!-- ================= SECTION 11: DECISION MATRIX & MENTAL MODELS ================= -->
+    <section id="decision-matrix">
+      <div class="eyebrow">11 — ARCHITECTURAL CHEAT SHEET</div>
+      <h2>The Architectural Decision Matrix &amp; Mental Models</h2>
+      <div class="sub">How to answer interview questions and make the right choices in production code with 100% confidence.</div>
+
+      <div class="grid2">
+        <div class="analogy" style="margin:0;">
+          <div class="icon">📖</div>
+          <div>
+            <div class="k">Mental Model: ArrayList</div>
+            An <b>Address Book</b> with numbered lines printed consecutively on a single sheet of paper. You can jump directly to line 500 instantly in one glance, read the address, and go straight to the house.
+          </div>
+        </div>
+
+        <div class="analogy" style="margin:0;">
+          <div class="icon">🗺️</div>
+          <div>
+            <div class="k">Mental Model: LinkedList</div>
+            A <b>Scavenger Hunt</b> across town. You are given only the address of Clue 1. You must walk to Clue 1 to read where Clue 2 is, then walk to Clue 2 to find Clue 3, all the way to clue 500.
+          </div>
+        </div>
+      </div>
+
+      <div class="analogy" style="margin-top:14px;">
+        <div class="icon">📌</div>
+        <div>
+          <div class="k">Mental Model: CopyOnWriteArrayList</div>
+          The <b>Company Bulletin Board &amp; Photocopy</b>. Hundreds of employees read the pinned notice without standing in line or asking permission. To make an update, the office manager photocopies the notice, marks the edit on the photocopy, and swaps the pinned sheet. Reads are completely free; edits require copying the sheet.
+        </div>
+      </div>
+
+      <h3 style="margin-top:32px;">The Complete Operation Comparison</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Operation</th>
+            <th class="mono">Plain Array</th>
+            <th class="mono">ArrayList</th>
+            <th class="mono">LinkedList</th>
+            <th class="mono">CopyOnWriteArrayList</th>
+            <th>Why the Difference Exists</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Random Access (<code class="inline">get(i)</code>)</b></td>
+            <td class="mono choice-good">O(1)</td>
+            <td class="mono choice-good">O(1)</td>
+            <td class="mono choice-bad">O(n)</td>
+            <td class="mono choice-good">O(1) Lock-free</td>
+            <td>Array = instant hardware math. Linked = must walk pointers. COW = lock-free volatile array.</td>
+          </tr>
+          <tr>
+            <td><b>Append at End (<code class="inline">add(x)</code>)</b></td>
+            <td class="mono choice-bad">N/A (fixed)</td>
+            <td class="mono choice-good">O(1) amortized</td>
+            <td class="mono choice-good">O(1)</td>
+            <td class="mono choice-bad">O(n) Array Clone</td>
+            <td>ArrayList writes next slot; LinkedList links tail; COW clones entire array.</td>
+          </tr>
+          <tr>
+            <td><b>Insert at Front (<code class="inline">add(0, x)</code>)</b></td>
+            <td class="mono choice-bad">N/A (fixed)</td>
+            <td class="mono choice-bad">O(n)</td>
+            <td class="mono choice-good">O(1)</td>
+            <td class="mono choice-bad">O(n) Array Clone</td>
+            <td>ArrayList shifts elements right; LinkedList rewires head; COW clones with new front element.</td>
+          </tr>
+          <tr>
+            <td><b>Delete Mid-List</b></td>
+            <td class="mono choice-bad">N/A (fixed)</td>
+            <td class="mono choice-bad">O(n)</td>
+            <td class="mono choice-good">O(1) via Iterator</td>
+            <td class="mono choice-bad">O(n) Array Clone</td>
+            <td>ArrayList shifts elements left; LinkedList unlinks node; COW clones; Iterator remove unsupported.</td>
+          </tr>
+          <tr>
+            <td><b>Memory per Element</b></td>
+            <td class="mono choice-good">Raw value / 4-8B</td>
+            <td class="mono choice-good">4–8 bytes</td>
+            <td class="mono choice-bad">24–48 bytes</td>
+            <td class="mono choice-warn">4–8B (+ GC clones)</td>
+            <td>LinkedList adds 24-48B node header + prev/next pointers; COW creates GC pressure on writes.</td>
+          </tr>
+          <tr>
+            <td><b>CPU Cache Friendly</b></td>
+            <td class="mono choice-good">Exceptional</td>
+            <td class="mono choice-good">Exceptional</td>
+            <td class="mono choice-bad">Very Poor</td>
+            <td class="mono choice-good">Exceptional</td>
+            <td>Contiguous blocks load cleanly into 64-byte CPU cache lines.</td>
+          </tr>
+          <tr>
+            <td><b>Thread-Safe &amp; Iteration</b></td>
+            <td class="mono choice-bad">No (Manual)</td>
+            <td class="mono choice-bad">No (Fail-Fast CME)</td>
+            <td class="mono choice-bad">No (Fail-Fast CME)</td>
+            <td class="mono choice-good">Yes (Fail-Safe Snapshot)</td>
+            <td>COW iterators traverse an immutable snapshot; never throw ConcurrentModificationException.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>The Production Rule of Thumb (What should I actually use?)</h3>
+      <div class="callout warn">
+        <div class="k">The Senior Engineer's Rule of Thumb</div>
+        <ul style="margin:6px 0 0;padding-left:20px;font-size:14px;">
+          <li><b>95%+ of the time (Single-Threaded):</b> Always default to <code class="inline">ArrayList</code>. Its contiguous memory layout, instant indexing, and CPU cache friendliness make it the fastest general-purpose list.</li>
+          <li><b>Need a Multi-Threaded Read-Heavy List?</b> Use <code class="inline">CopyOnWriteArrayList</code>. Perfect for listener registries, event dispatchers, and whitelist caches where reads outnumber writes 100:1 or more.</li>
+          <li><b>Need a Multi-Threaded Write-Heavy Queue or Buffer?</b> Do NOT use CopyOnWriteArrayList. Use <code class="inline">ArrayBlockingQueue</code>, <code class="inline">ConcurrentLinkedQueue</code>, or <code class="inline">ConcurrentHashMap</code>.</li>
+          <li><b>Need a FIFO Queue or LIFO Stack?</b> Use <code class="inline">ArrayDeque</code>. It is faster than both <code class="inline">Stack</code> and <code class="inline">LinkedList</code>, with zero pointer-node overhead.</li>
+          <li><b>When would you ever use LinkedList?</b> Almost never in modern Java. The only rare case is if you are doing massive amounts of insertions and deletions in the middle of the list while streaming through it with an active <code class="inline">ListIterator</code>, and you never perform random index lookups.</li>
+          <li><b>When to use Plain Arrays?</b> When you need maximum possible performance with primitive numbers (<code class="inline">int[]</code>, <code class="inline">byte[]</code>), high-performance audio/image/network byte buffers, or multidimensional matrix math.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ================= SECTION 12: RAPID INTERVIEW REVISION SHEET ================= -->
+    <section id="interview-prep">
+      <div class="eyebrow">12 — RAPID INTERVIEW REVISION</div>
+      <h2>⚡ 5-Minute Rapid Interview Revision: All Concepts at a Glance</h2>
+      <div class="sub">The ultimate last-minute interview cheat sheet: 1-line elevator pitches, key formulas, top gotchas, and decision rules—written in elementary English for fast recall.</div>
+
+      <!-- Part 1: Elevator Pitches -->
+      <h3 style="margin-top:20px;">1. The 30-Second Elevator Pitch for Every List</h3>
+      <div class="grid3">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span class="badge badge-cyan">FIXED MEMORY</span>
+          </div>
+          <h4 style="margin:0 0 6px;color:var(--cyan);">Plain Array (T[])</h4>
+          <p class="dim" style="font-size:13px;line-height:1.55;margin:0;">
+            A fixed contiguous row of memory lockers. Instant math access (<code class="inline">O(1)</code>) in 1 CPU cycle. Fixed size at birth. Best for primitive numbers (<code class="inline">int[]</code>, <code class="inline">byte[]</code>), audio/image buffers, or known fixed sizes.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span class="badge badge-green">DEFAULT (99%)</span>
+          </div>
+          <h4 style="margin:0 0 6px;color:var(--green);">ArrayList</h4>
+          <p class="dim" style="font-size:13px;line-height:1.55;margin:0;">
+            A dynamic contiguous array that grows by 50% (<code class="inline">1.5×</code>). <code class="inline">O(1)</code> random indexing, <code class="inline">O(1)</code> amortized append, <code class="inline">O(N)</code> shift on middle insert/delete. Beats LinkedList in 99% of benchmarks because continuous memory matches CPU 64-byte cache lines.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span class="badge badge-coral">AVOID IN PROD</span>
+          </div>
+          <h4 style="margin:0 0 6px;color:var(--coral);">LinkedList</h4>
+          <p class="dim" style="font-size:13px;line-height:1.55;margin:0;">
+            A chain of separate Node objects scattered across the Heap with <code class="inline">prev</code> and <code class="inline">next</code> pointers. Huge memory bloat (24–48 bytes per item). Slow <code class="inline">O(N)</code> random search. Loses to ArrayList in practice due to CPU cache misses ("pointer chasing").
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span class="badge badge-coral">LEGACY 1.0</span>
+          </div>
+          <h4 style="margin:0 0 6px;color:var(--coral);">Vector &amp; Stack</h4>
+          <p class="dim" style="font-size:13px;line-height:1.55;margin:0;">
+            Every public method is marked <code class="inline">synchronized</code>. Very slow for single threads due to constant locking overhead. <code class="inline">Stack</code> extends <code class="inline">Vector</code>, breaking LIFO encapsulation. Modern replacement: use <code class="inline">ArrayDeque</code>.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span class="badge badge-amber">WRAPPER TRAP</span>
+          </div>
+          <h4 style="margin:0 0 6px;color:var(--amber);">SynchronizedList</h4>
+          <p class="dim" style="font-size:13px;line-height:1.55;margin:0;">
+            Wraps any list with method-level monitor locks. Thread-safe for single calls, but <b>for-each loops still crash with CME</b> because the lock drops between <code class="inline">hasNext()</code> and <code class="inline">next()</code>! You must manually wrap loops in <code class="inline">synchronized(syncList)</code>.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span class="badge badge-cyan">LOCK-FREE READ</span>
+          </div>
+          <h4 style="margin:0 0 6px;color:var(--cyan);">CopyOnWriteArrayList</h4>
+          <p class="dim" style="font-size:13px;line-height:1.55;margin:0;">
+            Reads and iterations are 100% lock-free using frozen snapshot arrays and volatile pointers. Writes clone the whole array (<code class="inline">O(N)</code>). Has <b>no</b> <code class="inline">modCount</code> because snapshots never change. Best for 99% reads / 1% writes (event listeners, caches).
+          </p>
+        </div>
+      </div>
+
+      <!-- Part 2: Core Numbers & Formulas -->
+      <h3 style="margin-top:28px;">2. The 6 Core Formulas &amp; Algorithms You Must Remember</h3>
+      <div class="grid2">
+        <div class="card" style="border-color:rgba(110,231,216,0.25);">
+          <h4 style="color:var(--cyan);">1. Hardware Memory Formula (O(1) Access)</h4>
+          <pre style="margin:6px 0 8px;padding:10px 12px;font-size:12.5px;">Physical Address = Base Address + (Index × Element Size)</pre>
+          <p class="dim" style="font-size:13px;margin:0;">
+            Calculated in 1 CPU clock cycle (one multiply, one add). This is why Java uses 0-based indexing: index 0 means "0 bytes offset from base address".
+          </p>
+        </div>
+
+        <div class="card" style="border-color:rgba(245,181,99,0.25);">
+          <h4 style="color:var(--amber);">2. ArrayList 1.5× Growth Formula</h4>
+          <pre style="margin:6px 0 8px;padding:10px 12px;font-size:12.5px;">int newCapacity = oldCapacity + (oldCapacity &gt;&gt; 1);</pre>
+          <p class="dim" style="font-size:13px;margin:0;">
+            Bit-shifting right by 1 divides by 2, meaning the array grows by 50% (<code class="inline">1.5×</code>). Balances memory overhead with minimizing expensive array reallocations.
+          </p>
+        </div>
+
+        <div class="card" style="border-color:rgba(127,217,155,0.25);">
+          <h4 style="color:var(--green);">3. CPU Cache Spatial Locality (64-byte Lines)</h4>
+          <p class="dim" style="font-size:13px;margin:6px 0 0;">
+            Modern CPUs fetch memory from RAM in <b>64-byte Cache Lines</b>. In an <code class="inline">ArrayList</code>, loading slot 0 automatically brings slots 1 through 7 directly into the ultra-fast L1 CPU cache (Cache Hit). In a <code class="inline">LinkedList</code>, nodes sit at random heap locations, causing constant CPU Cache Miss stalls.
+          </p>
+        </div>
+
+        <div class="card" style="border-color:rgba(240,131,122,0.25);">
+          <h4 style="color:var(--coral);">4. The modCount Fail-Fast Engine (4 Steps)</h4>
+          <p class="dim" style="font-size:13px;margin:6px 0 0;">
+            (1) <code class="inline">modCount = 0</code> ➔ (2) Mutating methods call <code class="inline">modCount++</code> ➔ (3) Iterator captures <code class="inline">expectedModCount = modCount</code> ➔ (4) Every call to <code class="inline">next()</code> checks <code class="inline">if (modCount != expectedModCount) throw CME</code>.
+          </p>
+        </div>
+
+        <div class="card" style="border-color:rgba(110,231,216,0.25);">
+          <h4 style="color:var(--cyan);">5. Two-Pointer removeIf() Compaction (O(N))</h4>
+          <p class="dim" style="font-size:13px;margin:6px 0 0;">
+            Scanner (<code class="inline">i</code>) reads every element; Packer (<code class="inline">j</code>) slides kept survivors directly forward in 1 pass. Trailing slots are nulled out in batch to prevent <b>Object Loitering</b> memory leaks. Increments <code class="inline">modCount</code> <b>only once</b> at the end!
+          </p>
+        </div>
+
+        <div class="card" style="border-color:rgba(245,181,99,0.25);">
+          <h4 style="color:var(--amber);">6. Reference Isolation in CopyOnWriteArrayList</h4>
+          <p class="dim" style="font-size:13px;margin:6px 0 0;">
+            Reader thread's call stack pins a local pointer to the old array (<code class="inline">0x1000</code>). Writer thread clones to a new array (<code class="inline">0x2000</code>) and swaps the volatile pointer on the heap. Reader finishes reading its frozen snapshot without locks or CME.
+          </p>
+        </div>
+      </div>
+
+      <!-- Part 3: Top 7 Gotchas -->
+      <h3 style="margin-top:28px;">3. Top 7 Interview Traps &amp; Gotchas (What Interviewers Test)</h3>
+      
+      <div class="card" style="margin-bottom:12px;border-left:4px solid var(--coral);">
+        <h4 style="margin:0 0 4px;font-size:15px;color:var(--text);">❌ Trap 1: "Does ConcurrentModificationException require multiple threads?"</h4>
+        <p style="font-size:13.5px;color:var(--text-dim);margin:0;">
+          <b>Reality: NO!</b> A single thread calling <code class="inline">list.remove()</code> inside an enhanced for-each loop throws CME immediately! The loop's iterator sees <code class="inline">expectedModCount != modCount</code>. <i>Fix:</i> Use <code class="inline">it.remove()</code> inside a manual iterator loop, or use <code class="inline">list.removeIf()</code>.
+        </p>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;border-left:4px solid var(--amber);">
+        <h4 style="margin:0 0 4px;font-size:15px;color:var(--text);">❌ Trap 2: "Is Collections.synchronizedList() thread-safe for loops?"</h4>
+        <p style="font-size:13.5px;color:var(--text-dim);margin:0;">
+          <b>Reality: NO!</b> Individual method calls are locked, but a loop consists of multiple calls over time (<code class="inline">hasNext()</code> ➔ lock dropped ➔ <code class="inline">next()</code>). Another thread can sneak in and modify the list in between, causing CME! <i>Fix:</i> You MUST wrap the entire loop in <code class="inline">synchronized(syncList) { for(...) }</code>.
+        </p>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;border-left:4px solid var(--coral);">
+        <h4 style="margin:0 0 4px;font-size:15px;color:var(--text);">❌ Trap 3: "Is LinkedList always faster than ArrayList for insertions?"</h4>
+        <p style="font-size:13.5px;color:var(--text-dim);margin:0;">
+          <b>Reality: NO!</b> LinkedList is <code class="inline">O(1)</code> <i>only if you already hold the node reference</i>. Inserting at index 500 (<code class="inline">list.add(500, x)</code>) requires walking 500 pointers (<code class="inline">O(N)</code> search). ArrayList's hardware-optimized <code class="inline">System.arraycopy</code> beats LinkedList in real benchmarks.
+        </p>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;border-left:4px solid var(--coral);">
+        <h4 style="margin:0 0 4px;font-size:15px;color:var(--text);">❌ Trap 4: "Can you call removeIf() inside an active for-each loop?"</h4>
+        <p style="font-size:13.5px;color:var(--text-dim);margin:0;">
+          <b>Reality: NO!</b> Calling <code class="inline">list.removeIf()</code> while inside an active <code class="inline">for (String s : list)</code> loop modifies the list and increments <code class="inline">modCount</code>, causing the outer loop to fail-fast with CME. Use <code class="inline">removeIf()</code> <i>instead of</i> a loop, never inside one.
+        </p>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;border-left:4px solid var(--amber);">
+        <h4 style="margin:0 0 4px;font-size:15px;color:var(--text);">❌ Trap 5: "Why does removeIf() explicitly set trailing array slots to null?"</h4>
+        <p style="font-size:13.5px;color:var(--text-dim);margin:0;">
+          <b>Reality: To prevent Object Loitering!</b> In Java, if an array slot holds an object reference, the Garbage Collector is forbidden from freeing it. Setting trailing slots to <code class="inline">null</code> releases the references, allowing GC to reclaim memory and preventing silent memory leaks.
+        </p>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;border-left:4px solid var(--cyan);">
+        <h4 style="margin:0 0 4px;font-size:15px;color:var(--text);">❌ Trap 6: "Does CopyOnWriteArrayList have a modCount field?"</h4>
+        <p style="font-size:13.5px;color:var(--text-dim);margin:0;">
+          <b>Reality: NO!</b> Array snapshots in <code class="inline">CopyOnWriteArrayList</code> are completely immutable once published. Writers always create brand-new arrays. Because reader arrays never change under their feet, there is no need for <code class="inline">modCount</code> or fail-fast checks.
+        </p>
+      </div>
+
+      <div class="card" style="margin-bottom:12px;border-left:4px solid var(--violet);">
+        <h4 style="margin:0 0 4px;font-size:15px;color:var(--text);">❌ Trap 7: "Can you remove elements during iteration in CopyOnWriteArrayList?"</h4>
+        <p style="font-size:13.5px;color:var(--text-dim);margin:0;">
+          <b>Reality: NO!</b> Calling <code class="inline">it.remove()</code>, <code class="inline">it.set()</code>, or <code class="inline">it.add()</code> on a COWIterator throws <code class="inline">UnsupportedOperationException</code>. You cannot mutate a frozen past snapshot.
+        </p>
+      </div>
+
+      <!-- Part 4: 10-Second Decision Flowchart -->
+      <h3 style="margin-top:28px;">4. The 10-Second Decision Rules (What to Pick in Production)</h3>
+      <div class="callout warn" style="margin-top:10px;">
+        <div class="k">Quick Decision Flowchart</div>
+        <ul style="margin:6px 0 0;padding-left:20px;font-size:14px;line-height:1.7;">
+          <li><b>Standard Single-Threaded List?</b> ➔ Always choose <code class="inline" style="color:var(--green);font-weight:700;">ArrayList</code> (99% default).</li>
+          <li><b>Multi-Threaded List with 99% Reads / 1% Writes?</b> ➔ Choose <code class="inline" style="color:var(--cyan);font-weight:700;">CopyOnWriteArrayList</code> (Event listeners, whitelist caches).</li>
+          <li><b>Multi-Threaded List with Frequent Writes?</b> ➔ Do NOT use COWList! Choose <code class="inline" style="color:var(--amber);font-weight:700;">ConcurrentLinkedQueue</code> or <code class="inline" style="color:var(--amber);font-weight:700;">ArrayBlockingQueue</code>.</li>
+          <li><b>Need a Stack (LIFO) or Queue (FIFO)?</b> ➔ Choose <code class="inline" style="color:var(--green);font-weight:700;">ArrayDeque</code>. Never use legacy <code class="inline">Stack</code> or <code class="inline">LinkedList</code>.</li>
+          <li><b>High-Performance Primitive Numbers / Byte Buffers?</b> ➔ Choose <code class="inline" style="color:var(--cyan);font-weight:700;">Primitive Arrays (int[], byte[])</code> to avoid object overhead and boxing.</li>
+          <li><b>When should you use LinkedList in modern Java?</b> ➔ Almost never. The only rare exception is constant middle-list insertions while walking with an active <code class="inline">ListIterator</code> and zero index lookups.</li>
+        </ul>
+      </div>
+
+      <!-- Part 5: Complexity Summary Table -->
+      <h3 style="margin-top:28px;">5. Master Complexity &amp; Characteristics Cheat Sheet</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Characteristic</th>
+            <th class="mono">Plain Array</th>
+            <th class="mono">ArrayList</th>
+            <th class="mono">LinkedList</th>
+            <th class="mono">CopyOnWriteArrayList</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Random Index Read (<code class="inline">get(i)</code>)</b></td>
+            <td class="mono choice-good">O(1) Hardware</td>
+            <td class="mono choice-good">O(1) Hardware</td>
+            <td class="mono choice-bad">O(N) Pointer walk</td>
+            <td class="mono choice-good">O(1) Lock-free</td>
+          </tr>
+          <tr>
+            <td><b>Append at End (<code class="inline">add(x)</code>)</b></td>
+            <td class="mono choice-bad">N/A (Fixed)</td>
+            <td class="mono choice-good">O(1) amortized</td>
+            <td class="mono choice-good">O(1)</td>
+            <td class="mono choice-bad">O(N) Full Clone</td>
+          </tr>
+          <tr>
+            <td><b>Insert at Front (<code class="inline">add(0,x)</code>)</b></td>
+            <td class="mono choice-bad">N/A (Fixed)</td>
+            <td class="mono choice-bad">O(N) Shift right</td>
+            <td class="mono choice-good">O(1)</td>
+            <td class="mono choice-bad">O(N) Full Clone</td>
+          </tr>
+          <tr>
+            <td><b>Delete in Loop</b></td>
+            <td class="mono choice-bad">N/A (Fixed)</td>
+            <td class="mono choice-good">O(N) via removeIf</td>
+            <td class="mono choice-good">O(1) via Iterator</td>
+            <td class="mono choice-bad">Unsupported (Throws)</td>
+          </tr>
+          <tr>
+            <td><b>Memory per Item</b></td>
+            <td class="mono choice-good">Raw value (1–8B)</td>
+            <td class="mono choice-good">4–8 bytes</td>
+            <td class="mono choice-bad">24–48 bytes</td>
+            <td class="mono choice-warn">4–8B (+ GC clones)</td>
+          </tr>
+          <tr>
+            <td><b>CPU Cache Friendly</b></td>
+            <td class="mono choice-good">Exceptional</td>
+            <td class="mono choice-good">Exceptional</td>
+            <td class="mono choice-bad">Poor (Cache Misses)</td>
+            <td class="mono choice-good">Exceptional</td>
+          </tr>
+          <tr>
+            <td><b>Thread Safety</b></td>
+            <td class="choice-bad">No</td>
+            <td class="choice-bad">No (Fail-Fast CME)</td>
+            <td class="choice-bad">No (Fail-Fast CME)</td>
+            <td class="choice-good">Yes (Fail-Safe Snapshot)</td>
+          </tr>
+          <tr>
+            <td><b>modCount Tracking</b></td>
+            <td>None</td>
+            <td class="mono choice-warn">Yes (modCount++)</td>
+            <td class="mono choice-warn">Yes (modCount++)</td>
+            <td class="mono choice-good">None (Immutable array)</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================= SECTION 13: INTERVIEW Q&A DEEP DIVE ================= -->
+    <section id="interview-qa">
+      <div class="eyebrow">13 — INTERVIEW PREPARATION CHEATSHEET</div>
+      <h2>Lead-Level Interview Q&amp;A: Lists &amp; Concurrency</h2>
+      <div class="sub">Crisp, battle-tested answers written in elementary English to the most important questions interviewers ask about lists and multi-threading.</div>
+
+      <!-- Q1 -->
+      <div class="card" style="margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span class="badge badge-coral">QUESTION 1</span>
+          <h4 style="margin:0;font-size:16px;color:var(--text);">Why does iterating over Collections.synchronizedList throw ConcurrentModificationException?</h4>
+        </div>
+        <p style="font-size:14.5px;color:var(--text-dim);line-height:1.65;margin:0 0 10px;">
+          <b>Elementary Explanation:</b> Because <code class="inline">Collections.synchronizedList</code> only locks individual method calls (like <code class="inline">add()</code> or <code class="inline">get()</code>). An iteration loop is a <b>multi-step operation</b> across time: it calls <code class="inline">hasNext()</code>, drops the lock, and then calls <code class="inline">next()</code>.
+        </p>
+        <p style="font-size:14.5px;color:var(--text-dim);line-height:1.65;margin:0;">
+          Between those two method calls, the lock is completely free! Another thread can jump in, add or delete an element, and increment <code class="inline">modCount</code>. When the loop thread resumes and calls <code class="inline">next()</code>, it sees that <code class="inline">expectedModCount != modCount</code> and crashes immediately with <code class="inline">ConcurrentModificationException</code>.
+        </p>
+      </div>
+
+      <!-- Q2 -->
+      <div class="card" style="margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span class="badge badge-amber">QUESTION 2</span>
+          <h4 style="margin:0;font-size:16px;color:var(--text);">How do you safely iterate over Collections.synchronizedList?</h4>
+        </div>
+        <p style="font-size:14.5px;color:var(--text-dim);line-height:1.65;margin:0 0 10px;">
+          <b>Elementary Explanation:</b> You must hold a manual <code class="inline">synchronized</code> block locking the wrapper list instance for the <b>entire loop</b>:
+        </p>
+        <pre style="margin:8px 0 10px;"><span class="ty">List</span>&lt;<span class="ty">String</span>&gt; syncList = Collections.synchronizedList(<span class="kw">new</span> ArrayList&lt;&gt;());
+
+<span class="kw">synchronized</span> (syncList) {
+    <span class="kw">for</span> (String item : syncList) {
+        process(item);
+    } <span class="c1">// Lock released ONLY when the entire loop finishes!</span>
+}</pre>
+        <p style="font-size:13.5px;color:var(--coral);margin:0;">
+          ⚠️ <b>Tradeoff:</b> While this prevents crashes, it completely freezes every other thread in your application from reading or writing to the list until your loop finishes.
+        </p>
+      </div>
+
+      <!-- Q3 -->
+      <div class="card" style="margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span class="badge badge-green">QUESTION 3</span>
+          <h4 style="margin:0;font-size:16px;color:var(--text);">How does CopyOnWriteArrayList achieve thread-safe iteration without locks?</h4>
+        </div>
+        <p style="font-size:14.5px;color:var(--text-dim);line-height:1.65;margin:0;">
+          <b>Elementary Explanation:</b> It uses <b>Snapshot Isolation</b>. When you create an iterator, it captures a direct memory reference to the current backing array. Because writers never modify an array in place (they clone the array, update the clone, and swap the volatile reference pointer), the reader's array is completely frozen and immutable. The iterator reads the frozen snapshot with zero locks, zero waiting, and can never throw <code class="inline">ConcurrentModificationException</code>.
+        </p>
+      </div>
+
+      <!-- Q4 -->
+      <div class="card" style="margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span class="badge badge-coral">QUESTION 4</span>
+          <h4 style="margin:0;font-size:16px;color:var(--text);">What is the main drawback of CopyOnWriteArrayList?</h4>
+        </div>
+        <p style="font-size:14.5px;color:var(--text-dim);line-height:1.65;margin:0;">
+          <b>Elementary Explanation:</b> <b>Very high write cost and memory churn.</b> Every single write operation (<code class="inline">add()</code>, <code class="inline">set()</code>, <code class="inline">remove()</code>) must allocate a brand-new array and copy all existing elements in $O(N)$ linear time. If a list contains 100,000 items, adding one item copies 100,000 object references. Frequent writes generate massive garbage collection pressure. Therefore, use it only when reads happen constantly (99%+) and writes happen rarely.
+        </p>
+      </div>
+
+      <!-- Q5 -->
+      <div class="card" style="margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span class="badge badge-violet">QUESTION 5</span>
+          <h4 style="margin:0;font-size:16px;color:var(--text);">Can you remove elements while looping in CopyOnWriteArrayList using iterator.remove()?</h4>
+        </div>
+        <p style="font-size:14.5px;color:var(--text-dim);line-height:1.65;margin:0;">
+          <b>Elementary Explanation:</b> <b>NO.</b> Calling <code class="inline">it.remove()</code>, <code class="inline">it.set()</code>, or <code class="inline">it.add()</code> on a <code class="inline">CopyOnWriteArrayList</code> iterator will immediately throw <code class="inline">UnsupportedOperationException</code>. The iterator is traversing a frozen, read-only snapshot. Mutating a frozen snapshot makes no sense, so mutation methods are intentionally disabled.
+        </p>
+      </div>
+
+      <!-- Q6 -->
+      <div class="card" style="margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <span class="badge badge-cyan">QUESTION 6</span>
+          <h4 style="margin:0;font-size:16px;color:var(--text);">What is the difference between Fail-Fast and Fail-Safe iterators?</h4>
+        </div>
+        <div style="font-size:14.5px;color:var(--text-dim);line-height:1.65;">
+          <ul style="margin:0;padding-left:20px;">
+            <li><b>Fail-Fast (e.g., ArrayList, LinkedList, HashMap):</b> Checks <code class="inline">modCount == expectedModCount</code> on every single element access. If any modification happens during iteration, it fails immediately by throwing <code class="inline">ConcurrentModificationException</code>.</li>
+            <li><b>Fail-Safe / Weakly Consistent (e.g., CopyOnWriteArrayList, ConcurrentHashMap):</b> Operates on a snapshot or cloned view of the underlying data. It allows concurrent writes without throwing exceptions and guarantees safe traversal without requiring read locks.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Module Complete Card -->
+    <div class="chapter-complete-card">
+      <div class="chapter-complete-info">
+        <h4>Completed Module 02?</h4>
+        <p>Mark Lists in Depth as complete to update your progress in the curriculum.</p>
+      </div>
+      <button type="button" class="btn-mark-complete" data-module="02">
+        <span>○</span> Mark as Completed
+      </button>
+    </div>
+
+    <!-- Pagination Footer -->
+    <div class="module-pagination">
+      <a href="01-jvm-memory-and-foundations.html" class="page-btn">← Module 01 · Memory &amp; Foundations</a>
+      <a href="03-maps-and-sets.html" class="page-btn primary">Next: Module 03 · Maps &amp; Sets →</a>
+    </div>
+
+    <footer>Built for lead-level Java interview preparation · every mechanism traced to physical RAM and JVM source behavior</footer>
+  </main>
+</div>
+
+<script>
+  // ---- Interactive Memory Calculator ----
+  const memCalc = (function(){
+    const baseInput = document.getElementById('calc-base');
+    const typeSelect = document.getElementById('calc-type');
+    const idxInput = document.getElementById('calc-idx');
+    const formulaDisplay = document.getElementById('calc-formula-display');
+    const ramStrip = document.getElementById('ram-strip-display');
+
+    function update(){
+      const base = parseInt(baseInput.value) || 0;
+      const size = parseInt(typeSelect.value) || 4;
+      let idx = parseInt(idxInput.value) || 0;
+      if (idx < 0) idx = 0;
+      if (idx > 15) idx = 15;
+      idxInput.value = idx;
+
+      const physicalAddr = base + (idx * size);
+
+      formulaDisplay.innerHTML = `Physical Address = <span class="hl">${base}</span> + (<span class="hl">${idx}</span> × <span class="hl">${size}B</span>) = <span class="res">${physicalAddr}</span>`;
+
+      // Render 8 RAM blocks around the base
+      let blocksHtml = '';
+      const totalRender = 8;
+      for (let i = 0; i < totalRender; i++){
+        const isTarget = (i === idx);
+        const addr = base + (i * size);
+        blocksHtml += `
+          <div class="ram-block ${isTarget ? 'active' : ''}">
+            <div class="rb-idx">arr[${i}]</div>
+            <div class="rb-val">${isTarget ? '★ TARGET' : 'data'}</div>
+            <div class="rb-addr">0x${addr.toString(16).toUpperCase()} (${addr})</div>
+          </div>
+        `;
+      }
+      if (idx >= totalRender) {
+        blocksHtml += `
+          <div class="ram-block active" style="border-left:2px dashed var(--amber);">
+            <div class="rb-idx">arr[${idx}]</div>
+            <div class="rb-val">★ TARGET</div>
+            <div class="rb-addr">0x${physicalAddr.toString(16).toUpperCase()} (${physicalAddr})</div>
+          </div>
+        `;
+      }
+      ramStrip.innerHTML = blocksHtml;
+    }
+
+    baseInput.addEventListener('input', update);
+    typeSelect.addEventListener('change', update);
+    idxInput.addEventListener('input', update);
+
+    update();
+    return { update };
+  })();
+
+  // ---- ArrayList shift demo ----
+  const alDemo = (function(){
+    let data = ['A', 'B', 'C', 'D', 'E'];
+    let flashIdx = [];
+    const el = document.getElementById('al-cells');
+    const caption = document.getElementById('al-caption');
+
+    function render(){
+      el.innerHTML = data.map((v, i) => {
+        const hot = flashIdx.includes(i) ? ' hot' : ' filled';
+        return `<div style="text-align:center;"><div class="cell${hot}">${v}</div><div class="idx">${i}</div></div>`;
+      }).join('');
+    }
+
+    function append(){
+      const nextChar = String.fromCharCode(65 + (data.length % 26)) + (data.length > 25 ? data.length : '');
+      data.push(nextChar);
+      flashIdx = [data.length - 1];
+      caption.innerHTML = `<b>append('${nextChar}'):</b> Wrote directly to the next free slot index <b>${data.length - 1}</b> with zero shifting. Constant time <b>O(1) amortized</b>.`;
+      render();
+    }
+
+    function insertFront(){
+      data.unshift('★');
+      flashIdx = data.map((_, i) => i).slice(1);
+      caption.innerHTML = `<b>insert at index 0:</b> Element inserted at front! All <b>${data.length - 1}</b> existing elements had to shift one slot to the right in memory. Linear time <b>O(n)</b>.`;
+      render();
+    }
+
+    function reset(){
+      data = ['A', 'B', 'C', 'D', 'E'];
+      flashIdx = [];
+      caption.textContent = 'Watch: appending to the end is cheap. Inserting at the front forces every element to shift right by one slot — an O(n) memory shuffle.';
+      render();
+    }
+
+    render();
+    return { append, insertFront, reset };
+  })();
+
+  // ---- CopyOnWriteArrayList Simulator Demo ----
+  const cowDemo = (function(){
+    let arrays = [
+      { id: 0, elements: ['Route_A', 'Route_B', 'Route_C'], isLive: true, reclaimed: false }
+    ];
+    let liveArrayId = 0;
+    let threads = [
+      { id: 'Main-Thread', role: 'idle', snapshotArrayId: 0 }
+    ];
+    let nextReaderNum = 1;
+    let nextItemNum = 'D';
+
+    const threadsDisplay = document.getElementById('cow-threads-display');
+    const arraysDisplay = document.getElementById('cow-arrays-display');
+    const threadCountEl = document.getElementById('cow-thread-count');
+    const pointerStatusEl = document.getElementById('cow-pointer-status');
+    const logBox = document.getElementById('cow-log');
+
+    function render(){
+      if (!threadsDisplay || !arraysDisplay) return;
+
+      // Update thread count
+      threadCountEl.textContent = `${threads.length} Thread${threads.length > 1 ? 's' : ''}`;
+      pointerStatusEl.textContent = `volatile array ➔ Array ${liveArrayId}`;
+
+      // Render Threads
+      threadsDisplay.innerHTML = threads.map(t => {
+        const isWriter = t.role === 'writer';
+        const pillClass = isWriter ? 'cow-thread-writer' : 'cow-thread-reader';
+        const icon = isWriter ? '✍️' : '👓';
+        const desc = isWriter 
+          ? `Cloning &amp; Mutating`
+          : (t.role === 'reader' ? `Snapshot ➔ Array ${t.snapshotArrayId}` : `Holding Array ${t.snapshotArrayId}`);
+        return `
+          <div style="margin-bottom:8px;">
+            <span class="cow-thread-pill ${pillClass}">
+              <span>${icon}</span> <b>${t.id}</b> · ${desc}
+            </span>
+          </div>
+        `;
+      }).join('');
+
+      // Check which arrays have references
+      arrays.forEach(arr => {
+        const hasRef = arr.isLive || threads.some(t => t.snapshotArrayId === arr.id);
+        if (!hasRef) {
+          arr.reclaimed = true;
+        }
+      });
+
+      // Render Arrays
+      arraysDisplay.innerHTML = arrays.map(arr => {
+        let cardClass = 'cow-array-card';
+        let badge = '';
+        if (arr.isLive) {
+          cardClass += ' active-pointer';
+          badge = `<span style="font-family:var(--mono);font-size:10.5px;color:var(--cyan);font-weight:600;">★ LIVE VOLATILE POINTER</span>`;
+        } else if (arr.reclaimed) {
+          cardClass += ' reclaimed';
+          badge = `<span style="font-family:var(--mono);font-size:10.5px;color:var(--coral);">♻️ RECLAIMED BY GC (0 References)</span>`;
+        } else {
+          cardClass += ' stale';
+          badge = `<span style="font-family:var(--mono);font-size:10.5px;color:var(--amber);">📸 PINNED SNAPSHOT (Active Readers)</span>`;
+        }
+
+        const cellsHtml = arr.elements.map((el, i) => {
+          const isNew = arr.id > 0 && i === arr.elements.length - 1;
+          return `
+            <div class="cow-cell ${isNew ? 'new' : ''}">
+              <span style="font-size:10px;color:var(--text-faint);">${i}</span>
+              <span style="font-size:11.5px;">${el}</span>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="${cardClass}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text);">Array @ Heap[0x${(1000 + arr.id * 128).toString(16).toUpperCase()}] (Length: ${arr.elements.length})</span>
+              ${badge}
+            </div>
+            <div class="cow-cells-row">
+              ${cellsHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function spawnReader(){
+      const readerId = `Reader-Thread-${nextReaderNum++}`;
+      threads.push({
+        id: readerId,
+        role: 'reader',
+        snapshotArrayId: liveArrayId
+      });
+      logBox.innerHTML = `👓 <b style="color:var(--green);">${readerId}</b> started iterating: captured snapshot of <b style="color:var(--cyan);">Array ${liveArrayId}</b>. Zero locks held! Will safely read even if writes happen.`;
+      render();
+    }
+
+    function performWrite(){
+      const currentLive = arrays.find(a => a.id === liveArrayId);
+      const newId = arrays.length;
+      const newItems = [...currentLive.elements, `Route_${nextItemNum}`];
+      
+      // Add writer thread momentarily
+      const writerThread = { id: `Writer-Thread`, role: 'writer', snapshotArrayId: newId };
+      threads.push(writerThread);
+
+      // Create new array
+      currentLive.isLive = false;
+      arrays.push({
+        id: newId,
+        elements: newItems,
+        isLive: true,
+        reclaimed: false
+      });
+      liveArrayId = newId;
+
+      logBox.innerHTML = `✍️ <b style="color:var(--amber);">Writer-Thread</b> acquired lock: Cloned Array ${currentLive.id} (${currentLive.elements.length} items) ➔ Array ${newId} (${newItems.length} items). Appended 'Route_${nextItemNum}'. Atomically updated <b style="color:var(--cyan);">volatile array</b> pointer!`;
+      
+      nextItemNum = String.fromCharCode(nextItemNum.charCodeAt(0) + 1);
+
+      // Writer finishes immediately
+      setTimeout(() => {
+        threads = threads.filter(t => t.id !== 'Writer-Thread');
+        render();
+      }, 400);
+
+      render();
+    }
+
+    function finishReader(){
+      const readerIndex = threads.findIndex(t => t.role === 'reader');
+      if (readerIndex !== -1) {
+        const finished = threads.splice(readerIndex, 1)[0];
+        logBox.innerHTML = `✓ <b style="color:var(--green);">${finished.id}</b> completed reading its snapshot (Array ${finished.snapshotArrayId}). Released reference.`;
+      } else {
+        logBox.innerHTML = `No active reader threads running. Click "Spawn Reader Thread" to create one.`;
+      }
+      render();
+    }
+
+    function reset(){
+      arrays = [
+        { id: 0, elements: ['Route_A', 'Route_B', 'Route_C'], isLive: true, reclaimed: false }
+      ];
+      liveArrayId = 0;
+      threads = [
+        { id: 'Main-Thread', role: 'idle', snapshotArrayId: 0 }
+      ];
+      nextReaderNum = 1;
+      nextItemNum = 'D';
+      logBox.innerHTML = `System reset: Backing volatile array restored to initial state (Array 0).`;
+      render();
+    }
+
+    // Initial render
+    render();
+
+    return { spawnReader, performWrite, finishReader, reset };
+  })();
+
+  // ---- removeIf Two-Pointer Compaction Demo ----
+  const twoPointerDemo = (function(){
+    const initialData = [
+      { val: 'Apple', remove: true },
+      { val: 'Banana', remove: false },
+      { val: 'Apricot', remove: true },
+      { val: 'Cherry', remove: false },
+      { val: 'Avocado', remove: true },
+      { val: 'Date', remove: false }
+    ];
+
+    let items = JSON.parse(JSON.stringify(initialData));
+    let readIdx = -1;
+    let writeIdx = 0;
+    let copyCount = 0;
+    let naiveCount = 0;
+    let isCompleted = false;
+    let autoTimer = null;
+
+    const cellsDisplay = document.getElementById('tp-cells-display');
+    const readIdxEl = document.getElementById('tp-read-idx');
+    const writeIdxEl = document.getElementById('tp-write-idx');
+    const copyCountEl = document.getElementById('tp-copy-count');
+    const naiveCountEl = document.getElementById('tp-naive-count');
+    const logBox = document.getElementById('tp-log');
+
+    function render(){
+      if (!cellsDisplay) return;
+
+      readIdxEl.textContent = readIdx >= 0 ? (readIdx < items.length ? `Index ${readIdx}` : 'Done (6/6)') : 'Not Started';
+      writeIdxEl.textContent = `Index ${writeIdx}`;
+      copyCountEl.textContent = copyCount;
+      naiveCountEl.textContent = naiveCount;
+
+      cellsDisplay.innerHTML = items.map((item, idx) => {
+        let cellClass = 'tp-cell';
+        let readBadge = '';
+        let writeBadge = '';
+
+        if (idx === readIdx && !isCompleted) {
+          cellClass += ' reading';
+          readBadge = '<span class="tp-ptr-badge tp-ptr-read">▼ Read (i)</span>';
+        }
+        if (idx === writeIdx && !isCompleted) {
+          cellClass += ' writing';
+          writeBadge = '<span class="tp-ptr-badge tp-ptr-write">▲ Write (j)</span>';
+        }
+
+        if (item.status === 'kept') {
+          cellClass += ' kept';
+        } else if (item.status === 'skipped') {
+          cellClass += ' skipped';
+        } else if (item.status === 'nulled') {
+          cellClass += ' nulled';
+        }
+
+        return `
+          <div class="tp-cell-col">
+            <div class="tp-ptr-slot">${readBadge}</div>
+            <div class="${cellClass}">
+              <b>${item.val}</b>
+            </div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--text-faint);">[${idx}]</div>
+            <div class="tp-ptr-slot">${writeBadge}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function nextStep(){
+      if (isCompleted) {
+        logBox.innerHTML = `🏁 <b>Compaction complete!</b> All 3 survivors packed neatly at front. Trailing slots set to null for Garbage Collection. Click <b>Reset</b> to run again.`;
+        return;
+      }
+
+      readIdx++;
+
+      if (readIdx < items.length) {
+        const curr = items[readIdx];
+        if (curr.remove) {
+          curr.status = 'skipped';
+          // Naive iterator would have shifted all remaining elements left
+          const remaining = items.length - 1 - readIdx;
+          naiveCount += remaining;
+          logBox.innerHTML = `🔍 <b>Read Pointer i=${readIdx}</b>: '${curr.val}' starts with 'A' ➔ <span style="color:var(--coral);font-weight:700;">DISCARD!</span> Skip it. Write Pointer j stays at <b>${writeIdx}</b>. (Naive iterator would shift ${remaining} items left here!)`;
+        } else {
+          // Keep it! Copy into writeIdx
+          items[writeIdx].val = curr.val;
+          items[writeIdx].status = 'kept';
+          copyCount++;
+          logBox.innerHTML = `✅ <b>Read Pointer i=${readIdx}</b>: '${curr.val}' does NOT start with 'A' ➔ <span style="color:var(--green);font-weight:700;">KEEP!</span> Copy into slot <b>j=${writeIdx}</b>. Advance Write Pointer j: ${writeIdx} ➔ <b>${writeIdx + 1}</b>.`;
+          writeIdx++;
+        }
+      } else {
+        // Null out remaining slots from writeIdx to end
+        for (let k = writeIdx; k < items.length; k++) {
+          items[k].val = 'null 🧹';
+          items[k].status = 'nulled';
+        }
+        isCompleted = true;
+        if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+        logBox.innerHTML = `🎉 <b>Finished in 1 pass!</b> New size = <b>${writeIdx}</b>. Slots [${writeIdx}..${items.length - 1}] cleared to <b style="color:var(--text-faint);">null</b> so Garbage Collector frees memory. Total Copies: <b style="color:var(--green);">${copyCount}</b> (vs <b style="color:var(--coral);">${naiveCount}</b> shifts in naive iterator!). <b style="color:var(--cyan);">modCount</b> incremented only ONCE!`;
+      }
+      render();
+    }
+
+    function autoRun(){
+      if (isCompleted) reset();
+      if (autoTimer) return;
+      autoTimer = setInterval(() => {
+        nextStep();
+        if (isCompleted) {
+          clearInterval(autoTimer);
+          autoTimer = null;
+        }
+      }, 750);
+    }
+
+    function reset(){
+      if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+      items = JSON.parse(JSON.stringify(initialData));
+      readIdx = -1;
+      writeIdx = 0;
+      copyCount = 0;
+      naiveCount = 0;
+      isCompleted = false;
+      logBox.innerHTML = `System reset: 6 elements loaded. Filter condition: remove words starting with "A". Click "Step Forward" or "Auto Play".`;
+      render();
+    }
+
+    // Initial render
+    render();
+
+    return { nextStep, autoRun, reset };
+  })();
+</script>
+
+</body>
+</html>

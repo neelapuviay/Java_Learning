@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Top 50 Curated Coding Interview Questions</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --easy: #22c55e;
+      --medium: #f59e0b;
+      --hard: #ef4444;
+      --tag-bg: #334155;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 32px 16px;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+      padding: 24px;
+      background: linear-gradient(180deg, rgba(56, 189, 248, 0.08) 0%, transparent 100%);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+    }
+
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      margin-bottom: 12px;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 1rem;
+      max-width: 650px;
+      margin: 0 auto 20px;
+    }
+
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .stat-pill {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .search-box {
+      flex: 1;
+      min-width: 250px;
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 10px 16px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-box input:focus {
+      border-color: var(--accent);
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .filter-btn.active, .filter-btn:hover {
+      background: var(--tag-bg);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .progress-bar-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      padding: 16px 20px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .progress-info {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      min-width: 160px;
+    }
+
+    .progress-info span {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+
+    .progress-track {
+      flex: 1;
+      min-width: 200px;
+      height: 10px;
+      background: #334155;
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #38bdf8, #22c55e);
+      border-radius: 9999px;
+      transition: width 0.3s ease;
+    }
+
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow-x: auto;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    thead th {
+      background: rgba(15, 23, 42, 0.6);
+      padding: 14px 16px;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody tr {
+      border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+      transition: background 0.15s ease;
+    }
+
+    tbody tr:hover {
+      background: rgba(56, 189, 248, 0.04);
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    td {
+      padding: 14px 16px;
+      font-size: 0.925rem;
+      vertical-align: middle;
+    }
+
+    .checkbox-col {
+      width: 40px;
+      text-align: center;
+    }
+
+    .checkbox-col input[type="checkbox"] {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+    }
+
+    .id-col {
+      width: 50px;
+      color: var(--text-muted);
+      font-weight: 500;
+      text-align: center;
+    }
+
+    .title-col a {
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 0.2s;
+    }
+
+    .title-col a:hover {
+      color: var(--accent);
+    }
+
+    .completed-text {
+      text-decoration: line-through;
+      color: var(--text-muted) !important;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .badge-easy { background: rgba(34, 197, 94, 0.15); color: var(--easy); border: 1px solid rgba(34, 197, 94, 0.3); }
+    .badge-medium { background: rgba(245, 158, 11, 0.15); color: var(--medium); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge-hard { background: rgba(239, 68, 68, 0.15); color: var(--hard); border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .category-badge {
+      background: var(--tag-bg);
+      color: #e2e8f0;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+    }
+
+    .concept-text {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    .link-btn {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.85rem;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      padding: 4px 10px;
+      border-radius: 6px;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .link-btn:hover {
+      background: var(--accent);
+      color: #0f172a;
+    }
+
+    /* Doc Reference Styles */
+    .doc-col {
+      white-space: nowrap;
+    }
+
+    .doc-btn-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .doc-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-decoration: none;
+      padding: 5px 10px;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .doc-btn.html-guide {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(129, 140, 248, 0.15));
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+
+    .doc-btn.html-guide:hover {
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      color: #0b1120;
+      border-color: transparent;
+      box-shadow: 0 2px 10px rgba(56, 189, 248, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .doc-btn.md-guide {
+      background: rgba(148, 163, 184, 0.1);
+      color: var(--text-muted);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      font-size: 0.75rem;
+      padding: 4px 7px;
+    }
+
+    .doc-btn.md-guide:hover {
+      background: rgba(148, 163, 184, 0.22);
+      color: #ffffff;
+      border-color: rgba(148, 163, 184, 0.45);
+    }
+
+    .doc-placeholder {
+      color: #475569;
+      font-size: 0.95rem;
+      padding-left: 14px;
+    }
+
+    /* Revision Spotlight Section */
+    .revision-spotlight {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(129, 140, 248, 0.05) 100%);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .revision-spotlight-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .spotlight-icon {
+      font-size: 1.5rem;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .spotlight-text h3 {
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 2px;
+    }
+
+    .spotlight-text p {
+      font-size: 0.84rem;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 40px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>Top 50 Interview Problem Blueprint</h1>
+      <p class="subtitle">50 high-yield LeetCode problems covering all fundamental data structure and algorithm patterns across Google, Meta, Amazon, and enterprise interviews.</p>
+      
+      <div class="stats">
+        <span class="stat-pill"><span style="color: var(--easy)">●</span> 12 Easy</span>
+        <span class="stat-pill"><span style="color: var(--medium)">●</span> 32 Medium</span>
+        <span class="stat-pill"><span style="color: var(--hard)">●</span> 6 Hard</span>
+        <span class="stat-pill">⚡ 12 Essential Patterns</span>
+        <span class="stat-pill" style="border-color: rgba(56, 189, 248, 0.4);"><span style="color: var(--accent)">📘</span> <span id="doc-count">1</span> Revision Guide Ready</span>
+      </div>
+    </header>
+
+    <div class="progress-bar-container">
+      <div class="progress-info">
+        Completed: <span id="completed-count">0</span> / 50 (<span id="completed-percentage">0%</span>)
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+    </div>
+
+    <!-- Doc Reference & Revision Spotlight Section -->
+    <div class="revision-spotlight">
+      <div class="revision-spotlight-left">
+        <div class="spotlight-icon">🧠</div>
+        <div class="spotlight-text">
+          <h3>Developer Mental Models & Revision Notes</h3>
+          <p>Deep-dive guides bridging human intuition to optimal single-pass algorithms with step-by-step traces.</p>
+        </div>
+      </div>
+      <div>
+        <a href="../documents/two_sum_developer_guide.html" target="_blank" class="doc-btn html-guide" style="padding: 7px 14px; font-size: 0.85rem;">
+          <span>📘</span> Open Two Sum (#1) Guide →
+        </a>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Search problems, patterns, categories, or guides...">
+      </div>
+      <div class="filter-group">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="hasDoc">📘 With Guides (1)</button>
+        <button class="filter-btn" data-filter="Easy">Easy</button>
+        <button class="filter-btn" data-filter="Medium">Medium</button>
+        <button class="filter-btn" data-filter="Hard">Hard</button>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <table id="problems-table">
+        <thead>
+          <tr>
+            <th class="checkbox-col">Done</th>
+            <th class="id-col">#</th>
+            <th>Problem Name</th>
+            <th>Category</th>
+            <th>Difficulty</th>
+            <th>Core Pattern / Concept</th>
+            <th class="doc-col">Doc Reference</th>
+            <th>Solve</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <!-- Rows injected via JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <footer>
+      Master pattern intuition and edge-case handling over memorization.
+    </footer>
+  </div>
+
+  <script>
+    const problems = [
+      { 
+        id: 1, 
+        name: "Two Sum", 
+        number: 1, 
+        cat: "Arrays & Two Pointers", 
+        diff: "Easy", 
+        concept: "Hash map complement lookup", 
+        url: "https://leetcode.com/problems/two-sum/",
+        docUrl: "../documents/two_sum_developer_guide.html",
+        docMd: "../documents/two_sum_develoepr_guide.md",
+        docTitle: "Two Sum Mental Model & Developer Guide"
+      },
+      { id: 2, name: "3Sum", number: 15, cat: "Arrays & Two Pointers", diff: "Medium", concept: "Two pointers with sorted order & duplicate pruning", url: "https://leetcode.com/problems/3sum/" },
+      { id: 3, name: "Container With Most Water", number: 11, cat: "Arrays & Two Pointers", diff: "Medium", concept: "Greedy inward two pointers moving lower boundary", url: "https://leetcode.com/problems/container-with-most-water/" },
+      { id: 4, name: "Trapping Rain Water", number: 42, cat: "Arrays & Two Pointers", diff: "Hard", concept: "Two pointers / precomputed boundary tracking", url: "https://leetcode.com/problems/trapping-rain-water/" },
+      { id: 5, name: "Product of Array Except Self", number: 238, cat: "Arrays & Two Pointers", diff: "Medium", concept: "Prefix and suffix product passes (O(1) auxiliary space)", url: "https://leetcode.com/problems/product-of-array-except-self/" },
+      
+      { id: 6, name: "Longest Substring Without Repeating Characters", number: 3, cat: "Sliding Window & Strings", diff: "Medium", concept: "Dynamic sliding window with frequency set/map", url: "https://leetcode.com/problems/longest-substring-without-repeating-characters/" },
+      { id: 7, name: "Minimum Window Substring", number: 76, cat: "Sliding Window & Strings", diff: "Hard", concept: "Sliding window with target character frequency counting", url: "https://leetcode.com/problems/minimum-window-substring/" },
+      { id: 8, name: "Group Anagrams", number: 49, cat: "Sliding Window & Strings", diff: "Medium", concept: "Categorization via character count tuple or sorted string key", url: "https://leetcode.com/problems/group-anagrams/" },
+      { id: 9, name: "Longest Palindromic Substring", number: 5, cat: "Sliding Window & Strings", diff: "Medium", concept: "Expand around center (odd/even) or 2D DP table", url: "https://leetcode.com/problems/longest-palindromic-substring/" },
+      { id: 10, name: "Valid Palindrome", number: 125, cat: "Sliding Window & Strings", diff: "Easy", concept: "Inward two pointers with character filtering", url: "https://leetcode.com/problems/valid-palindrome/" },
+
+      { id: 11, name: "Binary Search", number: 704, cat: "Binary Search", diff: "Easy", concept: "Standard binary search boundaries and midpoint safety", url: "https://leetcode.com/problems/binary-search/" },
+      { id: 12, name: "Search in Rotated Sorted Array", number: 33, cat: "Binary Search", diff: "Medium", concept: "Segment detection to identify sorted vs rotated half", url: "https://leetcode.com/problems/search-in-rotated-sorted-array/" },
+      { id: 13, name: "Find Minimum in Rotated Sorted Array", number: 153, cat: "Binary Search", diff: "Medium", concept: "Binary search targeting the inflection / pivot point", url: "https://leetcode.com/problems/find-minimum-in-rotated-sorted-array/" },
+      { id: 14, name: "Koko Eating Bananas", number: 875, cat: "Binary Search", diff: "Medium", concept: "Binary search on discrete answer space / feasibility check", url: "https://leetcode.com/problems/koko-eating-bananas/" },
+
+      { id: 15, name: "Reverse Linked List", number: 206, cat: "Linked Lists", diff: "Easy", concept: "Iterative 3-pointer state reversal / recursion", url: "https://leetcode.com/problems/reverse-linked-list/" },
+      { id: 16, name: "Merge Two Sorted Lists", number: 21, cat: "Linked Lists", diff: "Easy", concept: "Dummy head pointer & iterative splicing", url: "https://leetcode.com/problems/merge-two-sorted-lists/" },
+      { id: 17, name: "Linked List Cycle", number: 141, cat: "Linked Lists", diff: "Easy", concept: "Floyd's tortoise and hare fast/slow pointer", url: "https://leetcode.com/problems/linked-list-cycle/" },
+      { id: 18, name: "Remove Nth Node From End of List", number: 19, cat: "Linked Lists", diff: "Medium", concept: "Two-pointer gap offset traversal with dummy node", url: "https://leetcode.com/problems/remove-nth-node-from-end-of-list/" },
+      { id: 19, name: "Merge k Sorted Lists", number: 23, cat: "Linked Lists", diff: "Hard", concept: "Min-heap priority queue or divide-and-conquer merge", url: "https://leetcode.com/problems/merge-k-sorted-lists/" },
+
+      { id: 20, name: "Valid Parentheses", number: 20, cat: "Stacks & Queues", diff: "Easy", concept: "LIFO stack character matching with hash map", url: "https://leetcode.com/problems/valid-parentheses/" },
+      { id: 21, name: "Daily Temperatures", number: 739, cat: "Stacks & Queues", diff: "Medium", concept: "Monotonic decreasing stack storing indices", url: "https://leetcode.com/problems/daily-temperatures/" },
+      { id: 22, name: "Largest Rectangle in Histogram", number: 84, cat: "Stacks & Queues", diff: "Hard", concept: "Monotonic increasing stack tracking width boundaries", url: "https://leetcode.com/problems/largest-rectangle-in-histogram/" },
+      { id: 23, name: "Sliding Window Maximum", number: 239, cat: "Stacks & Queues", diff: "Hard", concept: "Monotonic deque maintaining decreasing candidates in window", url: "https://leetcode.com/problems/sliding-window-maximum/" },
+
+      { id: 24, name: "Maximum Depth of Binary Tree", number: 104, cat: "Trees & Tries", diff: "Easy", concept: "Tree DFS post-order traversal / height calculation", url: "https://leetcode.com/problems/maximum-depth-of-binary-tree/" },
+      { id: 25, name: "Invert Binary Tree", number: 226, cat: "Trees & Tries", diff: "Easy", concept: "Recursive child node swapping", url: "https://leetcode.com/problems/invert-binary-tree/" },
+      { id: 26, name: "Binary Tree Level Order Traversal", number: 102, cat: "Trees & Tries", diff: "Medium", concept: "Queue-based BFS level snapshot iteration", url: "https://leetcode.com/problems/binary-tree-level-order-traversal/" },
+      { id: 27, name: "Validate Binary Search Tree", number: 98, cat: "Trees & Tries", diff: "Medium", concept: "In-order traversal or recursive min/max bound propagation", url: "https://leetcode.com/problems/validate-binary-search-tree/" },
+      { id: 28, name: "Lowest Common Ancestor of a BST", number: 235, cat: "Trees & Tries", diff: "Medium", concept: "BST value property directed search", url: "https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-search-tree/" },
+      { id: 29, name: "Binary Tree Maximum Path Sum", number: 124, cat: "Trees & Tries", diff: "Hard", concept: "Post-order DFS comparing path extension vs inverted V sum", url: "https://leetcode.com/problems/binary-tree-maximum-path-sum/" },
+      { id: 30, name: "Implement Trie (Prefix Tree)", number: 208, cat: "Trees & Tries", diff: "Medium", concept: "N-ary tree structure for prefix lookup and completion", url: "https://leetcode.com/problems/implement-trie-prefix-tree/" },
+
+      { id: 31, name: "Kth Largest Element in an Array", number: 215, cat: "Heaps & Priority Queues", diff: "Medium", concept: "Min-heap of size K or Quickselect algorithm", url: "https://leetcode.com/problems/kth-largest-element-in-an-array/" },
+      { id: 32, name: "Top K Frequent Elements", number: 347, cat: "Heaps & Priority Queues", diff: "Medium", concept: "Bucket sort by frequencies or min-heap", url: "https://leetcode.com/problems/top-k-frequent-elements/" },
+      { id: 33, name: "Find Median from Data Stream", number: 295, cat: "Heaps & Priority Queues", diff: "Hard", concept: "Two heaps (Max-heap lower half, Min-heap upper half)", url: "https://leetcode.com/problems/find-median-from-data-stream/" },
+
+      { id: 34, name: "Subsets", number: 78, cat: "Backtracking", diff: "Medium", concept: "Power set generation via cascading recursion / decision tree", url: "https://leetcode.com/problems/subsets/" },
+      { id: 35, name: "Combination Sum", number: 39, cat: "Backtracking", diff: "Medium", concept: "Backtracking with reusable candidate choices & target reduction", url: "https://leetcode.com/problems/combination-sum/" },
+      { id: 36, name: "Word Search", number: 79, cat: "Backtracking", diff: "Medium", concept: "Grid DFS backtracking with in-place visited marking", url: "https://leetcode.com/problems/word-search/" },
+
+      { id: 37, name: "Number of Islands", number: 200, cat: "Graphs", diff: "Medium", concept: "Connected components via 2D Grid DFS/BFS flood fill", url: "https://leetcode.com/problems/number-of-islands/" },
+      { id: 38, name: "Rotting Oranges", number: 994, cat: "Graphs", diff: "Medium", concept: "Multi-source BFS frontier level traversal", url: "https://leetcode.com/problems/rotting-oranges/" },
+      { id: 39, name: "Clone Graph", number: 133, cat: "Graphs", diff: "Medium", concept: "Graph traversal with hash map tracking cloned references", url: "https://leetcode.com/problems/clone-graph/" },
+      { id: 40, name: "Course Schedule", number: 207, cat: "Graphs", diff: "Medium", concept: "Topological sort (Kahn's algorithm in-degree queue / cycle check)", url: "https://leetcode.com/problems/course-schedule/" },
+      { id: 41, name: "Pacific Atlantic Water Flow", number: 417, cat: "Graphs", diff: "Medium", concept: "Reverse reachability BFS/DFS starting from ocean boundaries", url: "https://leetcode.com/problems/pacific-atlantic-water-flow/" },
+
+      { id: 42, name: "Climbing Stairs", number: 70, cat: "Dynamic Programming", diff: "Easy", concept: "1D Dynamic Programming / Fibonacci sequence recurrence", url: "https://leetcode.com/problems/climbing-stairs/" },
+      { id: 43, name: "Coin Change", number: 322, cat: "Dynamic Programming", diff: "Medium", concept: "Unbounded knapsack / minimum state transition", url: "https://leetcode.com/problems/coin-change/" },
+      { id: 44, name: "Longest Increasing Subsequence", number: 300, cat: "Dynamic Programming", diff: "Medium", concept: "DP O(n^2) optimized to O(n log n) with patience sorting", url: "https://leetcode.com/problems/longest-increasing-subsequence/" },
+      { id: 45, name: "Longest Common Subsequence", number: 1143, cat: "Dynamic Programming", diff: "Medium", concept: "2D grid dynamic programming string comparison", url: "https://leetcode.com/problems/longest-common-subsequence/" },
+      { id: 46, name: "Word Break", number: 139, cat: "Dynamic Programming", diff: "Medium", concept: "1D DP with dictionary prefix matching", url: "https://leetcode.com/problems/word-break/" },
+      { id: 47, name: "Maximum Subarray", number: 53, cat: "Dynamic Programming", diff: "Medium", concept: "Kadane's algorithm for contiguous subarray sum", url: "https://leetcode.com/problems/maximum-subarray/" },
+      
+      { id: 48, name: "Merge Intervals", number: 56, cat: "Intervals", diff: "Medium", concept: "Sorting by start time and greedy interval merging", url: "https://leetcode.com/problems/merge-intervals/" },
+      { id: 49, name: "Non-overlapping Intervals", number: 435, cat: "Intervals", diff: "Medium", concept: "Greedy interval scheduling sorted by end time", url: "https://leetcode.com/problems/non-overlapping-intervals/" },
+
+      { id: 50, name: "LRU Cache", number: 146, cat: "Advanced Design", diff: "Medium", concept: "Hash map combined with Doubly Linked List for O(1) operations", url: "https://leetcode.com/problems/lru-cache/" }
+    ];
+
+    const tableBody = document.getElementById("table-body");
+    const searchInput = document.getElementById("search-input");
+    const filterButtons = document.querySelectorAll(".filter-btn");
+    const completedCountEl = document.getElementById("completed-count");
+    const completedPercentageEl = document.getElementById("completed-percentage");
+    const progressFill = document.getElementById("progress-fill");
+
+    let currentFilter = "all";
+    let completedSet = new Set(JSON.parse(localStorage.getItem("completed_problems") || "[]"));
+
+    function renderTable() {
+      const searchTerm = searchInput.value.toLowerCase();
+      tableBody.innerHTML = "";
+
+      const filtered = problems.filter(p => {
+        let matchesFilter = true;
+        if (currentFilter === "hasDoc") {
+          matchesFilter = Boolean(p.docUrl);
+        } else if (currentFilter !== "all") {
+          matchesFilter = p.diff === currentFilter;
+        }
+
+        const matchesSearch = p.name.toLowerCase().includes(searchTerm) ||
+                              p.cat.toLowerCase().includes(searchTerm) ||
+                              p.concept.toLowerCase().includes(searchTerm) ||
+                              p.number.toString().includes(searchTerm) ||
+                              (p.docTitle && p.docTitle.toLowerCase().includes(searchTerm));
+        return matchesFilter && matchesSearch;
+      });
+
+      filtered.forEach(p => {
+        const tr = document.createElement("tr");
+        const isDone = completedSet.has(p.id);
+
+        tr.innerHTML = `
+          <td class="checkbox-col">
+            <input type="checkbox" data-id="${p.id}" ${isDone ? "checked" : ""}>
+          </td>
+          <td class="id-col">${p.id}</td>
+          <td class="title-col">
+            <a href="${p.url}" target="_blank" rel="noopener noreferrer" class="${isDone ? "completed-text" : ""}">
+              #${p.number} ${p.name}
+            </a>
+          </td>
+          <td><span class="category-badge">${p.cat}</span></td>
+          <td><span class="badge badge-${p.diff.toLowerCase()}">${p.diff}</span></td>
+          <td><span class="concept-text">${p.concept}</span></td>
+          <td class="doc-col">
+            ${p.docUrl ? `
+              <div class="doc-btn-group">
+                <a href="${p.docUrl}" target="_blank" rel="noopener noreferrer" class="doc-btn html-guide" title="Open Developer Mental Model Guide (HTML)">
+                  <span>📘</span> Guide
+                </a>
+                ${p.docMd ? `
+                  <a href="${p.docMd}" target="_blank" rel="noopener noreferrer" class="doc-btn md-guide" title="View Source Markdown">
+                    MD
+                  </a>
+                ` : ''}
+              </div>
+            ` : `<span class="doc-placeholder" title="Guide pending creation">—</span>`}
+          </td>
+          <td><a href="${p.url}" target="_blank" rel="noopener noreferrer" class="link-btn">Solve ↗</a></td>
+        `;
+        tableBody.appendChild(tr);
+      });
+
+      updateProgress();
+    }
+
+    function updateProgress() {
+      const count = completedSet.size;
+      const percentage = Math.round((count / 50) * 100);
+      completedCountEl.textContent = count;
+      completedPercentageEl.textContent = `${percentage}%`;
+      progressFill.style.width = `${percentage}%`;
+
+      const docCountEl = document.getElementById("doc-count");
+      if (docCountEl) {
+        docCountEl.textContent = problems.filter(p => p.docUrl).length;
+      }
+    }
+
+    tableBody.addEventListener("change", (e) => {
+      if (e.target.matches("input[type='checkbox']")) {
+        const id = parseInt(e.target.getAttribute("data-id"));
+        if (e.target.checked) {
+          completedSet.add(id);
+        } else {
+          completedSet.delete(id);
+        }
+        localStorage.setItem("completed_problems", JSON.stringify(Array.from(completedSet)));
+        renderTable();
+      }
+    });
+
+    searchInput.addEventListener("input", renderTable);
+
+    filterButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        filterButtons.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentFilter = btn.getAttribute("data-filter");
+        renderTable();
+      });
+    });
+
+    renderTable();
+  </script>
+</body>
+</html>
